@@ -96,6 +96,14 @@ jobs:
       - name: Symlink YouTubeHeader
         run: ln -sf $THEOS/include/YouTubeHeader ${{ github.workspace }}/YouTubeHeader
 
+      - name: Clone protobuf headers
+        run: |
+          cd ${{ github.workspace }}
+          git clone --quiet -n --depth=1 --filter=tree:0 -b v3.21.12 https://github.com/protocolbuffers/protobuf.git protobuf
+          cd protobuf
+          git sparse-checkout set --no-cone objectivec
+          git checkout
+
       - name: Build YouTube Plus from source
         run: |
           cd YTLite && make clean package DEBUG=0 FINALPACKAGE=1
