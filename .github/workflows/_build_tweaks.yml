@@ -92,6 +92,10 @@ jobs:
             cp -r "$THEOS/include/YouTubeHeader" "$THEOS/include/YTHeaders"
           fi
 
+      # Symlink YouTubeHeader next to YTLite checkout (for ../YouTubeHeader imports)
+      - name: Symlink YouTubeHeader
+        run: ln -sf $THEOS/include/YouTubeHeader ${{ github.workspace }}/YouTubeHeader
+
       - name: Build YouTube Plus from source
         run: |
           cd YTLite && make clean package DEBUG=0 FINALPACKAGE=1
