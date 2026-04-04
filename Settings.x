@@ -23,36 +23,8 @@ static NSString *GetCacheSize() {
     return [formatter stringFromByteCount:folderSize];
 }
 
-// Settings - register YTLite section as its own group
-@interface YTSettingsGroupData : NSObject
-- (instancetype)initWithGroupType:(NSInteger)type;
-- (NSString *)titleForSettingGroupType:(NSUInteger)type;
-- (NSArray *)orderedCategoriesForGroupType:(NSUInteger)type;
-@end
-
-%hook YTAppSettingsGroupPresentationData
-+ (NSArray *)orderedGroups {
-    NSArray *groups = %orig;
-    NSMutableArray *mutableGroups = [groups mutableCopy];
-    YTSettingsGroupData *ytlGroup = [[%c(YTSettingsGroupData) alloc] initWithGroupType:YTLiteSection];
-    // Insert after the first group (Tweaks if present, or at position 1)
-    NSUInteger insertIndex = mutableGroups.count > 1 ? 1 : mutableGroups.count;
-    [mutableGroups insertObject:ytlGroup atIndex:insertIndex];
-    return mutableGroups;
-}
-%end
-
-%hook YTSettingsGroupData
-- (NSString *)titleForSettingGroupType:(NSUInteger)type {
-    if (type == YTLiteSection) return @"YouTube Plus";
-    return %orig;
-}
-
-- (NSArray *)orderedCategoriesForGroupType:(NSUInteger)type {
-    if (type == YTLiteSection) return @[@(YTLiteSection)];
-    return %orig;
-}
-%end
+// Settings
+// Category registration is handled in YTLite.x %ctor via YouGroupSettings
 
 %hook YTSettingsSectionController
 - (void)setSelectedItem:(NSUInteger)selectedItem {
