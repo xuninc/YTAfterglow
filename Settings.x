@@ -23,18 +23,34 @@ static NSString *GetCacheSize() {
     return [formatter stringFromByteCount:folderSize];
 }
 
-// Settings
-%hook YTAppSettingsPresentationData
-+ (NSArray *)settingsCategoryOrder {
-    NSArray *order = %orig;
-    NSLog(@"[YTLite] settingsCategoryOrder FIRED! original: %@", order);
-    NSMutableArray *mutableOrder = [order mutableCopy];
-    NSUInteger insertIndex = [order indexOfObject:@(1)];
-    NSLog(@"[YTLite] indexOfObject:@(1) = %lu", (unsigned long)insertIndex);
-    if (insertIndex != NSNotFound)
-        [mutableOrder insertObject:@(YTLiteSection) atIndex:insertIndex + 1];
-    NSLog(@"[YTLite] final order: %@", mutableOrder);
-    return mutableOrder;
+// Settings - register YTLite section as its own group
+@interface YTSettingsGroupData : NSObject
+- (instancetype)initWithGroupType:(NSInteger)type;
+- (NSString *)titleForSettingGroupType:(NSUInteger)type;
+- (NSArray *)orderedCategoriesForGroupType:(NSUInteger)type;
+@end
+
+%hook YTAppSettingsGroupPresentationData
++ (NSArray *)orderedGroups {
+    NSArray *groups = %orig;
+    NSMutableArray *mutableGroups = [groups mutableCopy];
+    YTSettingsGroupData *ytlGroup = [[%c(YTSettingsGroupData) alloc] initWithGroupType:YTLiteSection];
+    // Insert after the first group (Tweaks if present, or at position 1)
+    NSUInteger insertIndex = mutableGroups.count > 1 ? 1 : mutableGroups.count;
+    [mutableGroups insertObject:ytlGroup atIndex:insertIndex];
+    return mutableGroups;
+}
+%end
+
+%hook YTSettingsGroupData
+- (NSString *)titleForSettingGroupType:(NSUInteger)type {
+    if (type == YTLiteSection) return @"YouTube Plus";
+    return %orig;
+}
+
+- (NSArray *)orderedCategoriesForGroupType:(NSUInteger)type {
+    if (type == YTLiteSection) return @[@(YTLiteSection)];
+    return %orig;
 }
 %end
 
