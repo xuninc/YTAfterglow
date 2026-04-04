@@ -1,4 +1,5 @@
 #import "YTLite.h"
+#import <objc/runtime.h>
 
 @interface YTSettingsSectionItemManager (YTLite)
 - (void)updateYTLiteSectionWithEntry:(id)entry;
@@ -24,7 +25,26 @@ static NSString *GetCacheSize() {
 }
 
 // Settings
-// Category registration is handled in YTLite.x %ctor via YouGroupSettings
+// Debug: add a %ctor to confirm Settings.x loads
+%ctor {
+    NSLog(@"[YTLite-Settings] constructor fired");
+    NSLog(@"[YTLite-Settings] YTAppSettingsPresentationData = %@", objc_getClass("YTAppSettingsPresentationData"));
+    NSLog(@"[YTLite-Settings] YTAppSettingsGroupPresentationData = %@", objc_getClass("YTAppSettingsGroupPresentationData"));
+    NSLog(@"[YTLite-Settings] YTSettingsGroupData = %@", objc_getClass("YTSettingsGroupData"));
+    NSLog(@"[YTLite-Settings] YTSettingsSectionItemManager = %@", objc_getClass("YTSettingsSectionItemManager"));
+}
+
+%hook YTAppSettingsPresentationData
++ (NSArray *)settingsCategoryOrder {
+    NSArray *order = %orig;
+    NSLog(@"[YTLite-Settings] settingsCategoryOrder FIRED! count=%lu", (unsigned long)order.count);
+    NSMutableArray *mutableOrder = [order mutableCopy];
+    NSUInteger insertIndex = [order indexOfObject:@(1)];
+    if (insertIndex != NSNotFound)
+        [mutableOrder insertObject:@(YTLiteSection) atIndex:insertIndex + 1];
+    return mutableOrder;
+}
+%end
 
 %hook YTSettingsSectionController
 - (void)setSelectedItem:(NSUInteger)selectedItem {

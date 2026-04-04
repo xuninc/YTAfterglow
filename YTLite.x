@@ -1381,14 +1381,7 @@ static NSURL *newCoverURL(NSURL *originalURL) {
 // %end
 
 %ctor {
-    // Register YTLite settings in the Tweaks group (via YouGroupSettings)
-    Class groupData = %c(YTSettingsGroupData);
-    if ([groupData respondsToSelector:@selector(tweaks)]) {
-        NSMutableArray *tweaks = [groupData performSelector:@selector(tweaks)];
-        if (tweaks && ![tweaks containsObject:@(789)]) {
-            [tweaks addObject:@(789)];
-        }
-    }
+    NSLog(@"[YTLite-Main] constructor fired - this hook is KNOWN to work");
 
     if (ytlBool(@"shortsOnlyMode") && (ytlBool(@"removeShorts") || ytlBool(@"reExplore"))) {
         ytlSetBool(NO, @"removeShorts");
