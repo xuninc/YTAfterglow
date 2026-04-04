@@ -27,10 +27,13 @@ static NSString *GetCacheSize() {
 %hook YTAppSettingsPresentationData
 + (NSArray *)settingsCategoryOrder {
     NSArray *order = %orig;
+    NSLog(@"[YTLite] settingsCategoryOrder FIRED! original: %@", order);
     NSMutableArray *mutableOrder = [order mutableCopy];
     NSUInteger insertIndex = [order indexOfObject:@(1)];
+    NSLog(@"[YTLite] indexOfObject:@(1) = %lu", (unsigned long)insertIndex);
     if (insertIndex != NSNotFound)
         [mutableOrder insertObject:@(YTLiteSection) atIndex:insertIndex + 1];
+    NSLog(@"[YTLite] final order: %@", mutableOrder);
     return mutableOrder;
 }
 %end
