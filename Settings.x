@@ -299,8 +299,8 @@ static NSString *GetCacheSize() {
             @"FEsubscriptions": @(66),   // TAB_SUBSCRIPTIONS
             @"FElibrary": @(68),         // TAB_LIBRARY
             @"FEexplore": @(67),         // TAB_TRENDING
-            @"FEhistory": @(2),          // WATCH_HISTORY
-            @"VLWL": @(333),             // WATCH_LATER (using PLAYLIST_PLAY icon)
+            @"FEhistory": @(59),          // WATCH_HISTORY
+            @"VLWL": @(117),             // WATCH_LATER (using UNLIMITED icon)
             @"FEpost_home": @(267),      // CHAT_BUBBLE
             @"FEuploads": @(1136)        // ADD_BOLD
         };
@@ -326,7 +326,7 @@ static NSString *GetCacheSize() {
                 [current removeObject:tabId];
                 [[YTLUserDefaults standardUserDefaults] setObject:current forKey:@"activeTabs"];
                 [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
-                [settingsViewController reloadData];
+                [settingsViewController popViewControllerAnimated:YES];
                 return YES;
             }];
 
@@ -353,6 +353,7 @@ static NSString *GetCacheSize() {
             YTSettingsSectionItem *item = [%c(YTSettingsSectionItem) itemWithTitle:name accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
                 NSMutableArray *current = [[[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"] mutableCopy];
                 if (!current) current = [@[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"] mutableCopy];
+                if ([current containsObject:tabId]) return NO;
                 if (current.count >= 6) {
                     YTAlertView *alert = [%c(YTAlertView) infoDialog];
                     alert.title = LOC(@"Warning");
@@ -363,7 +364,7 @@ static NSString *GetCacheSize() {
                 [current addObject:tabId];
                 [[YTLUserDefaults standardUserDefaults] setObject:current forKey:@"activeTabs"];
                 [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
-                [settingsViewController reloadData];
+                [settingsViewController popViewControllerAnimated:YES];
                 return YES;
             }];
 

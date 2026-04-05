@@ -1209,7 +1209,7 @@ static NSArray *ytlDefaultTabs() {
             if ([ytlPivotId(item) isEqualToString:@"FEhistory"]) { found = YES; break; }
         }
         if (!found) {
-            YTIPivotBarSupportedRenderers *historyTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"FEhistory" title:LOC(@"FEhistory") iconType:876];
+            YTIPivotBarSupportedRenderers *historyTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"FEhistory" title:LOC(@"FEhistory") iconType:59];
             [items addObject:historyTab];
         }
     }
@@ -1221,7 +1221,7 @@ static NSArray *ytlDefaultTabs() {
             if ([ytlPivotId(item) isEqualToString:@"VLWL"]) { found = YES; break; }
         }
         if (!found) {
-            YTIPivotBarSupportedRenderers *vlwlTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"VLWL" title:LOC(@"VLWL") iconType:877];
+            YTIPivotBarSupportedRenderers *vlwlTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"VLWL" title:LOC(@"VLWL") iconType:117];
             [items addObject:vlwlTab];
         }
     }
