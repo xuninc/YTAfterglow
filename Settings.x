@@ -384,6 +384,28 @@ static NSString *GetCacheSize() {
 
     [sectionItems addObject:tabbar];
 
+    // Debug: Icon Browser - remove after finding correct icon types
+    YTSettingsSectionItem *iconBrowser = [YTSettingsSectionItemClass itemWithTitle:@"🔍 Icon Browser"
+    accessibilityIdentifier:@"YTLiteSectionItem"
+    detailTextBlock:^NSString *() { return @"1-1500"; }
+    selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+        NSMutableArray *rows = [NSMutableArray array];
+        for (int i = 1; i <= 1500; i++) {
+            YTSettingsSectionItem *item = [%c(YTSettingsSectionItem) itemWithTitle:[NSString stringWithFormat:@"Icon #%d", i]
+                accessibilityIdentifier:@"YTLiteSectionItem"
+                detailTextBlock:nil
+                selectBlock:nil];
+            YTIIcon *icon = [%c(YTIIcon) new];
+            icon.iconType = i;
+            item.settingIcon = icon;
+            [rows addObject:item];
+        }
+        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Icon Browser" pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+        [settingsViewController pushViewController:picker];
+        return YES;
+    }];
+    [sectionItems addObject:iconBrowser];
+
     if (ytlBool(@"advancedMode")) {
         YTSettingsSectionItem *other = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Other")
         accessibilityIdentifier:@"YTLiteSectionItem"
