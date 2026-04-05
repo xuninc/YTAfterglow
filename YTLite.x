@@ -1271,22 +1271,21 @@ static NSArray *ytlDefaultTabs() {
     YTQTMButton *button = %orig;
 
     // Custom icons for History, Watch Later, Posts tabs
-    NSInteger iconType = [self.renderer.icon iconType];
+    NSString *pid = self.renderer.pivotIdentifier;
     NSBundle *bundle = [NSBundle ytl_defaultBundle];
 
-    if (iconType == 876) { // History
-        UIImage *normal = [[UIImage imageNamed:@"FEhistory" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-        UIImage *selected = [[UIImage imageNamed:@"FEhistory_selected" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-        if (normal) [button setImage:normal forState:UIControlStateNormal];
-        if (selected) [button setImage:selected forState:UIControlStateSelected];
-    } else if (iconType == 877) { // Watch Later
-        UIImage *normal = [[UIImage imageNamed:@"VLWL" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-        UIImage *selected = [[UIImage imageNamed:@"VLWL_selected" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-        if (normal) [button setImage:normal forState:UIControlStateNormal];
-        if (selected) [button setImage:selected forState:UIControlStateSelected];
-    } else if (iconType == 878) { // Posts
-        UIImage *normal = [[UIImage imageNamed:@"FEpost_home" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-        UIImage *selected = [[UIImage imageNamed:@"FEpost_home_selected" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    NSDictionary *tabImages = @{
+        @"FEhistory": @[@"FEhistory", @"FEhistory_selected"],
+        @"VLWL": @[@"VLWL", @"VLWL_selected"],
+        @"FEpost_home": @[@"FEpost_home", @"FEpost_home_selected"]
+    };
+
+    NSArray *images = tabImages[pid];
+    if (images) {
+        NSString *normalPath = [bundle pathForResource:images[0] ofType:@"png"];
+        NSString *selectedPath = [bundle pathForResource:images[1] ofType:@"png"];
+        UIImage *normal = normalPath ? [[UIImage imageWithContentsOfFile:normalPath] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] : nil;
+        UIImage *selected = selectedPath ? [[UIImage imageWithContentsOfFile:selectedPath] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] : nil;
         if (normal) [button setImage:normal forState:UIControlStateNormal];
         if (selected) [button setImage:selected forState:UIControlStateSelected];
     }
