@@ -8,10 +8,10 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v6
 
-      - name: Validate input file
+      - name: Validate Assets.car path
         shell: bash
         run: |
           set -euo pipefail
@@ -20,25 +20,40 @@ jobs:
 
           echo "Looking for: $CAR"
           if [[ ! -f "$CAR" ]]; then
-            echo "ERROR: Assets.car not found at:"
-            echo "  $CAR"
+            echo "ERROR: Assets.car not found"
             echo
             echo "Nearby files:"
-            find layout -maxdepth 6 -type f 2>/dev/null | sed 's/^/  /' || true
+            find layout -maxdepth 6 -type f 2>/dev/null | sort
             exit 1
           fi
 
           ls -l "$CAR"
           file "$CAR" || true
 
-      - name: Install cartool
+      - name: Build cartool directly
         shell: bash
         run: |
           set -euo pipefail
-          brew tap 0xxd0/tap
-          brew install cartool
-          which cartool
-          cartool || true
+
+          git clone https://github.com/steventroughtonsmith/cartool.git
+          cd cartool
+
+          xcodebuild \
+            -project cartool.xcodeproj \
+            -scheme cartool \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+          BIN="$(find ~/Library/Developer/Xcode/DerivedData -type f -path '*/Build/Products/Release/cartool' | head -n 1)"
+
+          if [[ -z "${BIN:-}" || ! -x "$BIN" ]]; then
+            echo "ERROR: cartool binary not found after build"
+            exit 1
+          fi
+
+          echo "CARTOOL_BIN=$BIN" >> "$GITHUB_ENV"
+          "$BIN" || true
 
       - name: Extract assets
         shell: bash
@@ -51,26 +66,25 @@ jobs:
           mkdir -p "$OUT/raw"
 
           echo "=== Running cartool ==="
-          cartool "$CAR" "$OUT/raw"
+          "$CARTOOL_BIN" "$CAR" "$OUT/raw"
 
           echo "=== Dumping metadata JSON ==="
           xcrun assetutil --info "$CAR" > "$OUT/asset_info.json"
 
-          echo "=== Output tree ==="
+          echo "=== Output files ==="
           find "$OUT" -type f | sort | tee "$OUT/file-list.txt"
 
           PNG_COUNT=$(find "$OUT" -type f -iname '*.png' | wc -l | tr -d ' ')
-          PDF_COUNT=$(find "$OUT" -type f -iname '*.pdf' | wc -l | tr -d ' ')
+          echo "PNG files extracted: $PNG_COUNT"
 
           {
             echo "## Extraction summary"
             echo
             echo "- PNG files: $PNG_COUNT"
-            echo "- PDF files: $PDF_COUNT"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [[ "$PNG_COUNT" -eq 0 && "$PDF_COUNT" -eq 0 ]]; then
-            echo "No extracted image files found." | tee -a "$GITHUB_STEP_SUMMARY"
+          if [[ "$PNG_COUNT" -eq 0 ]]; then
+            echo "No PNG files were extracted." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 
