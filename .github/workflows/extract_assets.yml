@@ -23,37 +23,24 @@ jobs:
             echo "ERROR: Assets.car not found at:"
             echo "  $CAR"
             echo
-            echo "Repo files near the target path:"
-            find layout -maxdepth 5 -type f 2>/dev/null | sed 's/^/  /' || true
+            echo "Nearby files:"
+            find layout -maxdepth 6 -type f 2>/dev/null | sed 's/^/  /' || true
             exit 1
           fi
 
           ls -l "$CAR"
           file "$CAR" || true
 
-      - name: Build acextract
+      - name: Install cartool
         shell: bash
         run: |
           set -euo pipefail
+          brew tap 0xxd0/tap
+          brew install cartool
+          which cartool
+          cartool || true
 
-          git clone --recursive https://github.com/bartoszj/acextract.git
-          cd acextract
-          xcodebuild \
-            -project acextract.xcodeproj \
-            -scheme acextract \
-            -configuration Release \
-            build
-
-          BIN="$(find ~/Library/Developer/Xcode/DerivedData -type f -path '*/Build/Products/Release/acextract' | head -n 1)"
-          if [[ -z "${BIN:-}" || ! -x "$BIN" ]]; then
-            echo "ERROR: acextract binary not found after build"
-            exit 1
-          fi
-
-          echo "ACEXTRACT_BIN=$BIN" >> "$GITHUB_ENV"
-          "$BIN" -h
-
-      - name: Extract Assets.car
+      - name: Extract assets
         shell: bash
         run: |
           set -euo pipefail
@@ -63,24 +50,28 @@ jobs:
 
           mkdir -p "$OUT/raw"
 
-          echo "=== Listing CAR contents ==="
-          "$ACEXTRACT_BIN" -i "$CAR" -l | tee "$OUT/acextract-list.txt"
+          echo "=== Running cartool ==="
+          cartool "$CAR" "$OUT/raw"
 
-          echo "=== Extracting assets ==="
-          "$ACEXTRACT_BIN" -i "$CAR" -o "$OUT/raw"
-
-          echo "=== Dumping asset metadata JSON ==="
+          echo "=== Dumping metadata JSON ==="
           xcrun assetutil --info "$CAR" > "$OUT/asset_info.json"
 
-          echo "=== Full output tree ==="
+          echo "=== Output tree ==="
           find "$OUT" -type f | sort | tee "$OUT/file-list.txt"
 
           PNG_COUNT=$(find "$OUT" -type f -iname '*.png' | wc -l | tr -d ' ')
-          echo "PNG_COUNT=$PNG_COUNT" | tee -a "$GITHUB_STEP_SUMMARY"
+          PDF_COUNT=$(find "$OUT" -type f -iname '*.pdf' | wc -l | tr -d ' ')
 
-          if [[ "$PNG_COUNT" -eq 0 ]]; then
-            echo "WARNING: No PNG files were extracted." | tee -a "$GITHUB_STEP_SUMMARY"
-            echo "This can mean the catalog contains non-raster assets, unsupported variants, or extraction failed."
+          {
+            echo "## Extraction summary"
+            echo
+            echo "- PNG files: $PNG_COUNT"
+            echo "- PDF files: $PDF_COUNT"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$PNG_COUNT" -eq 0 && "$PDF_COUNT" -eq 0 ]]; then
+            echo "No extracted image files found." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
 
       - name: Upload extracted assets
