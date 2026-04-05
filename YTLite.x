@@ -1374,15 +1374,7 @@ static NSURL *newCoverURL(NSURL *originalURL) {
 }
 %end
 
-// %hook ELMImageDownloader
-// - (id)downloadImageWithURL:(id)arg1 targetSize:(CGSize)arg2 callbackQueue:(id)arg3 downloadProgress:(id)arg4 completion:(id)arg5 {
-//     return %orig(newCoverURL(arg1), arg2, arg3, arg4, arg5);
-// }
-// %end
-
 %ctor {
-    NSLog(@"[YTLite-Main] constructor fired - this hook is KNOWN to work");
-
     if (ytlBool(@"shortsOnlyMode") && (ytlBool(@"removeShorts") || ytlBool(@"reExplore"))) {
         ytlSetBool(NO, @"removeShorts");
         ytlSetBool(NO, @"reExplore");

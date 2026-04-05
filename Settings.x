@@ -25,27 +25,6 @@ static NSString *GetCacheSize() {
 }
 
 // Settings
-// Debug: add a %ctor to confirm Settings.x loads
-%ctor {
-    NSLog(@"[YTLite-Settings] constructor fired");
-    NSLog(@"[YTLite-Settings] YTAppSettingsPresentationData = %@", objc_getClass("YTAppSettingsPresentationData"));
-    NSLog(@"[YTLite-Settings] YTAppSettingsGroupPresentationData = %@", objc_getClass("YTAppSettingsGroupPresentationData"));
-    NSLog(@"[YTLite-Settings] YTSettingsGroupData = %@", objc_getClass("YTSettingsGroupData"));
-    NSLog(@"[YTLite-Settings] YTSettingsSectionItemManager = %@", objc_getClass("YTSettingsSectionItemManager"));
-}
-
-%hook YTAppSettingsPresentationData
-+ (NSArray *)settingsCategoryOrder {
-    NSArray *order = %orig;
-    NSLog(@"[YTLite-Settings] settingsCategoryOrder FIRED! count=%lu", (unsigned long)order.count);
-    NSMutableArray *mutableOrder = [order mutableCopy];
-    NSUInteger insertIndex = [order indexOfObject:@(1)];
-    if (insertIndex != NSNotFound)
-        [mutableOrder insertObject:@(YTLiteSection) atIndex:insertIndex + 1];
-    return mutableOrder;
-}
-%end
-
 %hook YTSettingsSectionController
 - (void)setSelectedItem:(NSUInteger)selectedItem {
     if (selectedItem != NSNotFound) %orig;
@@ -632,8 +611,8 @@ static NSString *GetCacheSize() {
     [sectionItems addObject:version];
 
     BOOL isNew = [settingsViewController respondsToSelector:@selector(setSectionItems:forCategory:title:icon:titleDescription:headerHidden:)];
-    isNew ? [settingsViewController setSectionItems:sectionItems forCategory:YTLiteSection title:@"YTLite" icon:nil titleDescription:nil headerHidden:NO]
-          : [settingsViewController setSectionItems:sectionItems forCategory:YTLiteSection title:@"YTLite" titleDescription:nil headerHidden:NO];
+    isNew ? [settingsViewController setSectionItems:sectionItems forCategory:YTLiteSection title:@"YouTube Plus" icon:nil titleDescription:nil headerHidden:NO]
+          : [settingsViewController setSectionItems:sectionItems forCategory:YTLiteSection title:@"YouTube Plus" titleDescription:nil headerHidden:NO];
 
 }
 
