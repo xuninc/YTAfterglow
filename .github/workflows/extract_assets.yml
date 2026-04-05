@@ -1,0 +1,43 @@
+name: Extract Assets.car
+
+on:
+  workflow_dispatch:
+
+jobs:
+  extract:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Extract Assets.car
+        run: |
+          CAR="layout/Library/Application Support/YTLite.bundle/Assets.car"
+          OUT="extracted_assets"
+          mkdir -p "$OUT"
+
+          # List all assets
+          xcrun --sdk iphoneos assetutil --info "$CAR" > "$OUT/asset_info.json" 2>/dev/null || true
+
+          # Extract using actool
+          xcrun --sdk iphoneos actool --export-dependency-info /dev/null \
+            --output-format human-readable-text \
+            --output-partial-info-plist /dev/null \
+            --platform iphoneos \
+            --minimum-deployment-target 13.0 \
+            --compile "$OUT" "$CAR" 2>/dev/null || true
+
+          # Also try direct extraction with assetutil
+          cd "$OUT"
+          xcrun --sdk iphoneos assetutil --extract . "../$CAR" 2>/dev/null || true
+
+          # List what we got
+          echo "=== Extracted files ==="
+          find . -type f | sort
+
+      - name: Upload extracted assets
+        uses: actions/upload-artifact@v6
+        with:
+          name: extracted-assets
+          path: extracted_assets/
+          retention-days: 30
