@@ -1209,7 +1209,7 @@ static NSArray *ytlDefaultTabs() {
             if ([ytlPivotId(item) isEqualToString:@"FEhistory"]) { found = YES; break; }
         }
         if (!found) {
-            YTIPivotBarSupportedRenderers *historyTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"FEhistory" title:LOC(@"FEhistory") iconType:59];
+            YTIPivotBarSupportedRenderers *historyTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"FEhistory" title:LOC(@"FEhistory") iconType:876];
             [items addObject:historyTab];
         }
     }
@@ -1221,7 +1221,7 @@ static NSArray *ytlDefaultTabs() {
             if ([ytlPivotId(item) isEqualToString:@"VLWL"]) { found = YES; break; }
         }
         if (!found) {
-            YTIPivotBarSupportedRenderers *vlwlTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"VLWL" title:LOC(@"VLWL") iconType:117];
+            YTIPivotBarSupportedRenderers *vlwlTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"VLWL" title:LOC(@"VLWL") iconType:877];
             [items addObject:vlwlTab];
         }
     }
@@ -1265,6 +1265,33 @@ static NSArray *ytlDefaultTabs() {
         [self.navigationButton setTitle:@"" forState:UIControlStateNormal];
         [self.navigationButton setSizeWithPaddingAndInsets:NO];
     }
+}
+
+- (YTQTMButton *)navigationButton {
+    YTQTMButton *button = %orig;
+
+    // Custom icons for History, Watch Later, Posts tabs
+    NSInteger iconType = [self.renderer.icon iconType];
+    NSBundle *bundle = [NSBundle ytl_defaultBundle];
+
+    if (iconType == 876) { // History
+        UIImage *normal = [[UIImage imageNamed:@"FEhistory" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        UIImage *selected = [[UIImage imageNamed:@"FEhistory_selected" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        if (normal) [button setImage:normal forState:UIControlStateNormal];
+        if (selected) [button setImage:selected forState:UIControlStateSelected];
+    } else if (iconType == 877) { // Watch Later
+        UIImage *normal = [[UIImage imageNamed:@"VLWL" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        UIImage *selected = [[UIImage imageNamed:@"VLWL_selected" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        if (normal) [button setImage:normal forState:UIControlStateNormal];
+        if (selected) [button setImage:selected forState:UIControlStateSelected];
+    } else if (iconType == 878) { // Posts
+        UIImage *normal = [[UIImage imageNamed:@"FEpost_home" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        UIImage *selected = [[UIImage imageNamed:@"FEpost_home_selected" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        if (normal) [button setImage:normal forState:UIControlStateNormal];
+        if (selected) [button setImage:selected forState:UIControlStateSelected];
+    }
+
+    return button;
 }
 %end
 
