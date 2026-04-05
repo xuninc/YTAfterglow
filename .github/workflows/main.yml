@@ -118,14 +118,62 @@ jobs:
           done
           cyan -i youtube.ipa -o YouTubePlus.ipa -uwef $tweaks -n "${{ github.event.inputs.display_name }}" -b ${{ github.event.inputs.bundle_id }}
 
+      - name: Generate OTA manifest
+        run: |
+          IPA_URL="https://github.com/${{ github.repository }}/releases/download/ytp-${{ github.run_number }}/YouTubePlus.ipa"
+          BUNDLE_ID="${{ github.event.inputs.bundle_id }}"
+          DISPLAY_NAME="${{ github.event.inputs.display_name }}"
+
+          cat > manifest.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>items</key>
+              <array>
+                  <dict>
+                      <key>assets</key>
+                      <array>
+                          <dict>
+                              <key>kind</key>
+                              <string>software-package</string>
+                              <key>url</key>
+                              <string>${IPA_URL}</string>
+                          </dict>
+                      </array>
+                      <key>metadata</key>
+                      <dict>
+                          <key>bundle-identifier</key>
+                          <string>${BUNDLE_ID}</string>
+                          <key>bundle-version</key>
+                          <string>1.0</string>
+                          <key>kind</key>
+                          <string>software</string>
+                          <key>title</key>
+                          <string>${DISPLAY_NAME}</string>
+                      </dict>
+                  </dict>
+              </array>
+          </dict>
+          </plist>
+          PLIST
+
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2.5.0
         with:
           tag_name: ytp-${{ github.run_number }}
           name: YouTubePlus (${{ github.run_number }})
-          files: YouTubePlus.ipa
-          draft: true
+          files: |
+            YouTubePlus.ipa
+            manifest.plist
 
-      - name: Output Release URL
+      - name: Output Install Links
         run: |
-          echo "::notice::Release available at: https://github.com/${{ github.repository }}/releases"
+          MANIFEST_URL="https://github.com/${{ github.repository }}/releases/download/ytp-${{ github.run_number }}/manifest.plist"
+          OTA_LINK="itms-services://?action=download-manifest&url=${MANIFEST_URL}"
+          echo "::notice::Release: https://github.com/${{ github.repository }}/releases"
+          echo "::notice::OTA Install: ${OTA_LINK}"
+          echo "## OTA Install" >> $GITHUB_STEP_SUMMARY
+          echo "Tap this link on your iPhone to install:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[Install YouTubePlus](${OTA_LINK})" >> $GITHUB_STEP_SUMMARY
