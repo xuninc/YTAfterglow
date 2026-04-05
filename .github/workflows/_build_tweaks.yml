@@ -150,6 +150,9 @@ jobs:
         if: ${{ inputs.enable_demc }}
         run: git clone --quiet --depth=1 https://github.com/therealFoxster/DontEatMyContent.git
 
+      - name: Clone YTIcons
+        run: git clone --quiet --depth=1 https://github.com/PoomSmart/YTIcons.git
+
       - name: Build YouPiP
         if: ${{ inputs.enable_youpip }}
         run: |
@@ -197,6 +200,11 @@ jobs:
         run: |
           cd DontEatMyContent && make clean package DEBUG=0 FINALPACKAGE=1
           mv packages/*.deb ../demc.deb
+
+      - name: Build YTIcons
+        run: |
+          cd YTIcons && make clean package DEBUG=0 FINALPACKAGE=1
+          mv packages/*.deb ../yticons.deb
 
       - name: Clone Open in YouTube (Safari extension)
         run: |
