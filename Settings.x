@@ -75,7 +75,7 @@ static NSString *GetCacheSize() {
         else {
             ytlSetBool(enabled, key);
 
-            NSArray *keys = @[@"removeLabels", @"removeIndicators", @"reExplore", @"addExplore", @"removeShorts", @"removeSubscriptions", @"removeUploads", @"removeLibrary"];
+            NSArray *keys = @[@"removeLabels", @"removeIndicators", @"frostedPivot"];
             if ([keys containsObject:key]) {
                 [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
             }
@@ -269,16 +269,62 @@ static NSString *GetCacheSize() {
         return @"‣";
     }
     selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-        NSArray <YTSettingsSectionItem *> *rows = @[
-            [self switchWithTitle:@"RemoveLabels" key:@"removeLabels"],
-            [self switchWithTitle:@"RemoveIndicators" key:@"removeIndicators"],
-            [self switchWithTitle:@"ReExplore" key:@"reExplore"],
-            [self switchWithTitle:@"AddExplore" key:@"addExplore"],
-            [self switchWithTitle:@"HideShortsTab" key:@"removeShorts"],
-            [self switchWithTitle:@"HideSubscriptionsTab" key:@"removeSubscriptions"],
-            [self switchWithTitle:@"HideUploadButton" key:@"removeUploads"],
-            [self switchWithTitle:@"HideLibraryTab" key:@"removeLibrary"]
-        ];
+        NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
+
+        [rows addObject:[self switchWithTitle:@"TranslucentBar" key:@"frostedPivot"]];
+        [rows addObject:[self switchWithTitle:@"RemoveLabels" key:@"removeLabels"]];
+        [rows addObject:[self switchWithTitle:@"RemoveIndicators" key:@"removeIndicators"]];
+
+        // Active/Inactive tabs
+        NSArray *allTabs = @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEexplore", @"FEhistory", @"VLWL"];
+        NSArray *tabNames = @[LOC(@"FEwhat_to_watch"), LOC(@"FEshorts"), LOC(@"FEsubscriptions"), LOC(@"FElibrary"), LOC(@"FEexplore"), LOC(@"FEhistory"), LOC(@"VLWL")];
+        NSMutableArray *activeTabs = [[[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"] mutableCopy];
+        if (!activeTabs) activeTabs = [@[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"] mutableCopy];
+
+        // Active tabs header
+        [rows addObject:[%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ActiveTabs") accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:nil]];
+
+        for (NSString *tabId in activeTabs) {
+            NSUInteger idx = [allTabs indexOfObject:tabId];
+            NSString *name = (idx != NSNotFound) ? tabNames[idx] : tabId;
+
+            YTSettingsSectionItem *item = [%c(YTSettingsSectionItem) itemWithTitle:name accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
+                NSMutableArray *current = [[[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"] mutableCopy];
+                if (!current) current = [@[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"] mutableCopy];
+                if (current.count <= 2) {
+                    YTAlertView *alert = [%c(YTAlertView) infoDialog];
+                    alert.title = LOC(@"Warning");
+                    alert.subtitle = LOC(@"AtLeastOneTab");
+                    [alert show];
+                    return NO;
+                }
+                [current removeObject:tabId];
+                [[YTLUserDefaults standardUserDefaults] setObject:current forKey:@"activeTabs"];
+                [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
+                [settingsViewController reloadData];
+                return YES;
+            }];
+            [rows addObject:item];
+        }
+
+        // Inactive tabs header
+        [rows addObject:[%c(YTSettingsSectionItem) itemWithTitle:LOC(@"InactiveTabs") accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:nil]];
+
+        for (NSUInteger i = 0; i < allTabs.count; i++) {
+            NSString *tabId = allTabs[i];
+            if ([activeTabs containsObject:tabId]) continue;
+
+            YTSettingsSectionItem *item = [%c(YTSettingsSectionItem) itemWithTitle:tabNames[i] accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
+                NSMutableArray *current = [[[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"] mutableCopy];
+                if (!current) current = [@[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"] mutableCopy];
+                [current addObject:tabId];
+                [[YTLUserDefaults standardUserDefaults] setObject:current forKey:@"activeTabs"];
+                [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
+                [settingsViewController reloadData];
+                return YES;
+            }];
+            [rows addObject:item];
+        }
 
         YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Tabbar") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
         [settingsViewController pushViewController:picker];
@@ -441,36 +487,35 @@ static NSString *GetCacheSize() {
         YTSettingsSectionItem *startup = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Startup")
         accessibilityIdentifier:@"YTLiteSectionItem"
         detailTextBlock:^NSString *() {
-            NSArray *tabLabels = @[LOC(@"Home"), LOC(@"Explore"), LOC(@"ShortsTab"), LOC(@"Subscriptions"), LOC(@"Library")];
-            return tabLabels[ytlInt(@"pivotIndex")];
+            NSString *tab = [[YTLUserDefaults standardUserDefaults] objectForKey:@"startupTab"];
+            if (!tab) tab = @"FEwhat_to_watch";
+            NSDictionary *names = @{@"FEwhat_to_watch": LOC(@"FEwhat_to_watch"), @"FEshorts": LOC(@"FEshorts"), @"FEsubscriptions": LOC(@"FEsubscriptions"), @"FElibrary": LOC(@"FElibrary"), @"FEexplore": LOC(@"FEexplore"), @"FEhistory": LOC(@"FEhistory"), @"VLWL": LOC(@"VLWL")};
+            return names[tab] ?: tab;
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+            NSArray *activeTabs = [[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"];
+            if (!activeTabs) activeTabs = @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"];
+            NSDictionary *names = @{@"FEwhat_to_watch": LOC(@"FEwhat_to_watch"), @"FEshorts": LOC(@"FEshorts"), @"FEsubscriptions": LOC(@"FEsubscriptions"), @"FElibrary": LOC(@"FElibrary"), @"FEexplore": LOC(@"FEexplore"), @"FEhistory": LOC(@"FEhistory"), @"VLWL": LOC(@"VLWL")};
+            NSString *currentTab = [[YTLUserDefaults standardUserDefaults] objectForKey:@"startupTab"];
+            if (!currentTab) currentTab = @"FEwhat_to_watch";
+
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
-            NSArray *tabLabels = @[LOC(@"Home"), LOC(@"Explore"), LOC(@"ShortsTab"), LOC(@"Subscriptions"), LOC(@"Library")];
+            NSInteger selectedIdx = 0;
 
-            for (NSUInteger i = 0; i < tabLabels.count; i++) {
-                NSString *title = tabLabels[i];
-                YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-                    if (([title isEqualToString:LOC(@"Explore")] && !ytlBool(@"reExplore") && !ytlBool(@"addExplore")) ||
-                        ([title isEqualToString:LOC(@"ShortsTab")] && ytlBool(@"removeShorts")) ||
-                        ([title isEqualToString:LOC(@"Subscriptions")] && ytlBool(@"removeSubscriptions")) ||
-                        ([title isEqualToString:LOC(@"Library")] && ytlBool(@"removeLibrary"))) {
-                            YTAlertView *alertView = [%c(YTAlertView) infoDialog];
-                            alertView.title = LOC(@"Warning");
-                            alertView.subtitle = LOC(@"TabIsHidden");
-                            [alertView show];
-                            return NO;
-                    } else {
-                        [settingsViewController reloadData];
-                        ytlSetInt((int)arg1, @"pivotIndex");
-                        return YES;
-                    }
+            for (NSUInteger i = 0; i < activeTabs.count; i++) {
+                NSString *tabId = activeTabs[i];
+                NSString *title = names[tabId] ?: tabId;
+                if ([tabId isEqualToString:currentTab]) selectedIdx = i;
+
+                YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *c, NSUInteger a) {
+                    [[YTLUserDefaults standardUserDefaults] setObject:tabId forKey:@"startupTab"];
+                    [settingsViewController reloadData];
+                    return YES;
                 }];
-
                 [rows addObject:item];
             }
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Startup") pickerSectionTitle:nil rows:rows selectedItemIndex:ytlInt(@"pivotIndex") parentResponder:[self parentResponder]];
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Startup") pickerSectionTitle:nil rows:rows selectedItemIndex:selectedIdx parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
