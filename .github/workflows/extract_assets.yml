@@ -6,79 +6,82 @@ on:
 jobs:
   extract:
     runs-on: macos-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Extract Assets.car
+      - name: Validate input file
+        shell: bash
         run: |
+          set -euo pipefail
+
+          CAR="layout/Library/Application Support/YTLite.bundle/Assets.car"
+
+          echo "Looking for: $CAR"
+          if [[ ! -f "$CAR" ]]; then
+            echo "ERROR: Assets.car not found at:"
+            echo "  $CAR"
+            echo
+            echo "Repo files near the target path:"
+            find layout -maxdepth 5 -type f 2>/dev/null | sed 's/^/  /' || true
+            exit 1
+          fi
+
+          ls -l "$CAR"
+          file "$CAR" || true
+
+      - name: Build acextract
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git clone --recursive https://github.com/bartoszj/acextract.git
+          cd acextract
+          xcodebuild \
+            -project acextract.xcodeproj \
+            -scheme acextract \
+            -configuration Release \
+            build
+
+          BIN="$(find ~/Library/Developer/Xcode/DerivedData -type f -path '*/Build/Products/Release/acextract' | head -n 1)"
+          if [[ -z "${BIN:-}" || ! -x "$BIN" ]]; then
+            echo "ERROR: acextract binary not found after build"
+            exit 1
+          fi
+
+          echo "ACEXTRACT_BIN=$BIN" >> "$GITHUB_ENV"
+          "$BIN" -h
+
+      - name: Extract Assets.car
+        shell: bash
+        run: |
+          set -euo pipefail
+
           CAR="layout/Library/Application Support/YTLite.bundle/Assets.car"
           OUT="extracted_assets"
-          mkdir -p "$OUT"
 
-          cat > extract.swift << 'SWIFT'
-          import Foundation
-          import AppKit
+          mkdir -p "$OUT/raw"
 
-          @objc class CUICatalog: NSObject {
-              @objc init(url: URL, error: UnsafeMutablePointer<NSError?>?)
-              @objc func allImageNames() -> [String]
-              @objc func imageWithName(_ name: String, scaleFactor: CGFloat, deviceIdiom: Int) -> CGImage?
-          }
+          echo "=== Listing CAR contents ==="
+          "$ACEXTRACT_BIN" -i "$CAR" -l | tee "$OUT/acextract-list.txt"
 
-          let handle = dlopen("/System/Library/PrivateFrameworks/CoreUI.framework/CoreUI", RTLD_NOW)
-          let catalogClass: AnyClass = NSClassFromString("CUICatalog")!
+          echo "=== Extracting assets ==="
+          "$ACEXTRACT_BIN" -i "$CAR" -o "$OUT/raw"
 
-          let carPath = CommandLine.arguments[1]
-          let outDir = CommandLine.arguments[2]
+          echo "=== Dumping asset metadata JSON ==="
+          xcrun assetutil --info "$CAR" > "$OUT/asset_info.json"
 
-          let url = URL(fileURLWithPath: carPath)
-          var err: NSError?
-          let catalog = (catalogClass as! CUICatalog.Type).init(url: url, error: &err)
+          echo "=== Full output tree ==="
+          find "$OUT" -type f | sort | tee "$OUT/file-list.txt"
 
-          if let e = err { print("Error: \(e)"); exit(1) }
+          PNG_COUNT=$(find "$OUT" -type f -iname '*.png' | wc -l | tr -d ' ')
+          echo "PNG_COUNT=$PNG_COUNT" | tee -a "$GITHUB_STEP_SUMMARY"
 
-          let names = catalog.allImageNames()
-          print("Found \(names.count) images")
-
-          let fm = FileManager.default
-          try? fm.createDirectory(atPath: outDir, withIntermediateDirectories: true)
-
-          for name in names {
-              for scale in [1, 2, 3] as [CGFloat] {
-                  if let img = catalog.imageWithName(name, scaleFactor: scale, deviceIdiom: 0) {
-                      let rep = NSBitmapImageRep(cgImage: img)
-                      if let data = rep.representation(using: .png, properties: [:]) {
-                          let suffix = scale > 1 ? "@\(Int(scale))x" : ""
-                          let filename = "\(outDir)/\(name)\(suffix).png"
-                          try? data.write(to: URL(fileURLWithPath: filename))
-                          print("Extracted: \(name)\(suffix).png")
-                      }
-                  }
-              }
-          }
-          SWIFT
-
-          # Try Swift approach first
-          swift extract.swift "$CAR" "$OUT" 2>&1 || true
-
-          # Fallback: try actool thinning
-          xcrun --sdk iphoneos actool \
-            --output-format human-readable-text \
-            --notices --warnings \
-            --export-dependency-info /dev/null \
-            --output-partial-info-plist "$OUT/partial.plist" \
-            --platform iphoneos \
-            --minimum-deployment-target 13.0 \
-            --target-device iphone \
-            --compress-pngs \
-            --compile "$OUT/compiled" "$CAR" 2>&1 || true
-
-          # Also dump JSON info
-          xcrun --sdk iphoneos assetutil --info "$CAR" > "$OUT/asset_info.json" 2>/dev/null || true
-
-          echo "=== All extracted files ==="
-          find "$OUT" -type f -name "*.png" | sort
+          if [[ "$PNG_COUNT" -eq 0 ]]; then
+            echo "WARNING: No PNG files were extracted." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "This can mean the catalog contains non-raster assets, unsupported variants, or extraction failed."
+          fi
 
       - name: Upload extracted assets
         uses: actions/upload-artifact@v6
@@ -86,3 +89,4 @@ jobs:
           name: extracted-assets
           path: extracted_assets/
           retention-days: 30
+          if-no-files-found: error
