@@ -326,7 +326,7 @@ static NSString *GetCacheSize() {
                 [current removeObject:tabId];
                 [[YTLUserDefaults standardUserDefaults] setObject:current forKey:@"activeTabs"];
                 [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
-                [settingsViewController popViewControllerAnimated:YES];
+                [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
                 return YES;
             }];
 
@@ -364,7 +364,7 @@ static NSString *GetCacheSize() {
                 [current addObject:tabId];
                 [[YTLUserDefaults standardUserDefaults] setObject:current forKey:@"activeTabs"];
                 [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
-                [settingsViewController popViewControllerAnimated:YES];
+                [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
                 return YES;
             }];
 
