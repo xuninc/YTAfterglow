@@ -388,6 +388,7 @@
 "FEnotifications_inbox" = "Notifications";
 
 "TranslucentBar" = "Translucent tab bar";
+"TranslucentBarDesc" = "Makes the tab bar translucent with a blur effect.";
 "RemoveLabels" = "Remove tab labels";
 "RemoveLabelsDesc" = "Removes text labels from the Tab bar buttons.";
 "RemoveIndicators" = "Remove tab indicators";
