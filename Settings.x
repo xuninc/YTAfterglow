@@ -292,14 +292,17 @@ static NSString *GetCacheSize() {
         if (!activeTabs) activeTabs = [@[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"] mutableCopy];
 
         // Icon types for tabs
-        // YouTube icon types for tabs (only include ones that render correctly)
+        // YouTube icon types for tabs (from YTIcons browser)
         NSDictionary *tabIconTypes = @{
-            @"FEwhat_to_watch": @(65),  // YT_TAB_HOME
-            @"FEsubscriptions": @(66),  // YT_TAB_SUBSCRIPTIONS
-            @"FElibrary": @(68),        // YT_TAB_LIBRARY
-            @"FEexplore": @(67),        // YT_TAB_TRENDING
-            @"VLWL": @(565),            // YT_BOOKMARK
-            @"FEpost_home": @(897)      // YT_TEXT
+            @"FEwhat_to_watch": @(65),   // TAB_HOME
+            @"FEshorts": @(772),         // YOUTUBE_SHORTS_FILL_24
+            @"FEsubscriptions": @(66),   // TAB_SUBSCRIPTIONS
+            @"FElibrary": @(68),         // TAB_LIBRARY
+            @"FEexplore": @(67),         // TAB_TRENDING
+            @"FEhistory": @(2),          // WATCH_HISTORY
+            @"VLWL": @(333),             // WATCH_LATER (using PLAYLIST_PLAY icon)
+            @"FEpost_home": @(267),      // CHAT_BUBBLE
+            @"FEuploads": @(1136)        // ADD_BOLD
         };
 
         // Active tabs header
