@@ -8,90 +8,62 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
 
-      - name: Validate Assets.car path
-        shell: bash
+      - name: Validate Assets.car
         run: |
           set -euo pipefail
 
           CAR="layout/Library/Application Support/YTLite.bundle/Assets.car"
 
-          echo "Looking for: $CAR"
           if [[ ! -f "$CAR" ]]; then
             echo "ERROR: Assets.car not found"
-            echo
-            echo "Nearby files:"
-            find layout -maxdepth 6 -type f 2>/dev/null | sort
+            find layout -type f | sort
             exit 1
           fi
 
           ls -l "$CAR"
-          file "$CAR" || true
 
-      - name: Build cartool directly
-        shell: bash
+      - name: Install Rust toolchain
         run: |
-          set -euo pipefail
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
+          rustc --version
 
-          git clone https://github.com/steventroughtonsmith/cartool.git
-          cd cartool
-
-          xcodebuild \
-            -project cartool.xcodeproj \
-            -scheme cartool \
-            -configuration Release \
-            CODE_SIGNING_ALLOWED=NO \
-            build
-
-          BIN="$(find ~/Library/Developer/Xcode/DerivedData -type f -path '*/Build/Products/Release/cartool' | head -n 1)"
-
-          if [[ -z "${BIN:-}" || ! -x "$BIN" ]]; then
-            echo "ERROR: cartool binary not found after build"
-            exit 1
-          fi
-
-          echo "CARTOOL_BIN=$BIN" >> "$GITHUB_ENV"
-          "$BIN" || true
+      - name: Install carutil
+        run: |
+          source $HOME/.cargo/env
+          cargo install carutil
 
       - name: Extract assets
-        shell: bash
         run: |
           set -euo pipefail
+          source $HOME/.cargo/env
 
           CAR="layout/Library/Application Support/YTLite.bundle/Assets.car"
           OUT="extracted_assets"
 
-          mkdir -p "$OUT/raw"
+          mkdir -p "$OUT"
 
-          echo "=== Running cartool ==="
-          "$CARTOOL_BIN" "$CAR" "$OUT/raw"
+          echo "=== Extracting with carutil ==="
+          carutil extract "$CAR" "$OUT"
 
-          echo "=== Dumping metadata JSON ==="
+          echo "=== Dump metadata ==="
           xcrun assetutil --info "$CAR" > "$OUT/asset_info.json"
 
           echo "=== Output files ==="
-          find "$OUT" -type f | sort | tee "$OUT/file-list.txt"
+          find "$OUT" -type f | sort
 
-          PNG_COUNT=$(find "$OUT" -type f -iname '*.png' | wc -l | tr -d ' ')
-          echo "PNG files extracted: $PNG_COUNT"
+          COUNT=$(find "$OUT" -type f | wc -l | tr -d ' ')
+          echo "Extracted files: $COUNT"
 
-          {
-            echo "## Extraction summary"
-            echo
-            echo "- PNG files: $PNG_COUNT"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          if [[ "$PNG_COUNT" -eq 0 ]]; then
-            echo "No PNG files were extracted." | tee -a "$GITHUB_STEP_SUMMARY"
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "Nothing extracted"
             exit 1
           fi
 
-      - name: Upload extracted assets
+      - name: Upload
         uses: actions/upload-artifact@v6
         with:
           name: extracted-assets
           path: extracted_assets/
-          retention-days: 30
-          if-no-files-found: error
