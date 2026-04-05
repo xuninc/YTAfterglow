@@ -1282,12 +1282,10 @@ static NSArray *ytlDefaultTabs() {
 
     NSArray *images = tabImages[pid];
     if (images) {
-        NSString *normalPath = [bundle pathForResource:images[0] ofType:@"png"];
-        NSString *selectedPath = [bundle pathForResource:images[1] ofType:@"png"];
-        UIImage *normal = normalPath ? [[UIImage imageWithContentsOfFile:normalPath] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] : nil;
-        UIImage *selected = selectedPath ? [[UIImage imageWithContentsOfFile:selectedPath] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] : nil;
-        if (normal) [button setImage:normal forState:UIControlStateNormal];
-        if (selected) [button setImage:selected forState:UIControlStateSelected];
+        UIImage *normal = [UIImage imageNamed:images[0] inBundle:bundle compatibleWithTraitCollection:nil];
+        UIImage *selected = [UIImage imageNamed:images[1] inBundle:bundle compatibleWithTraitCollection:nil];
+        if (normal) [button setImage:[normal imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] forState:UIControlStateNormal];
+        if (selected) [button setImage:[selected imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] forState:UIControlStateSelected];
     }
 
     return button;
