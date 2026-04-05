@@ -16,24 +16,69 @@ jobs:
           OUT="extracted_assets"
           mkdir -p "$OUT"
 
-          # List all assets
-          xcrun --sdk iphoneos assetutil --info "$CAR" > "$OUT/asset_info.json" 2>/dev/null || true
+          cat > extract.swift << 'SWIFT'
+          import Foundation
+          import AppKit
 
-          # Extract using actool
-          xcrun --sdk iphoneos actool --export-dependency-info /dev/null \
+          @objc class CUICatalog: NSObject {
+              @objc init(url: URL, error: UnsafeMutablePointer<NSError?>?)
+              @objc func allImageNames() -> [String]
+              @objc func imageWithName(_ name: String, scaleFactor: CGFloat, deviceIdiom: Int) -> CGImage?
+          }
+
+          let handle = dlopen("/System/Library/PrivateFrameworks/CoreUI.framework/CoreUI", RTLD_NOW)
+          let catalogClass: AnyClass = NSClassFromString("CUICatalog")!
+
+          let carPath = CommandLine.arguments[1]
+          let outDir = CommandLine.arguments[2]
+
+          let url = URL(fileURLWithPath: carPath)
+          var err: NSError?
+          let catalog = (catalogClass as! CUICatalog.Type).init(url: url, error: &err)
+
+          if let e = err { print("Error: \(e)"); exit(1) }
+
+          let names = catalog.allImageNames()
+          print("Found \(names.count) images")
+
+          let fm = FileManager.default
+          try? fm.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+
+          for name in names {
+              for scale in [1, 2, 3] as [CGFloat] {
+                  if let img = catalog.imageWithName(name, scaleFactor: scale, deviceIdiom: 0) {
+                      let rep = NSBitmapImageRep(cgImage: img)
+                      if let data = rep.representation(using: .png, properties: [:]) {
+                          let suffix = scale > 1 ? "@\(Int(scale))x" : ""
+                          let filename = "\(outDir)/\(name)\(suffix).png"
+                          try? data.write(to: URL(fileURLWithPath: filename))
+                          print("Extracted: \(name)\(suffix).png")
+                      }
+                  }
+              }
+          }
+          SWIFT
+
+          # Try Swift approach first
+          swift extract.swift "$CAR" "$OUT" 2>&1 || true
+
+          # Fallback: try actool thinning
+          xcrun --sdk iphoneos actool \
             --output-format human-readable-text \
-            --output-partial-info-plist /dev/null \
+            --notices --warnings \
+            --export-dependency-info /dev/null \
+            --output-partial-info-plist "$OUT/partial.plist" \
             --platform iphoneos \
             --minimum-deployment-target 13.0 \
-            --compile "$OUT" "$CAR" 2>/dev/null || true
+            --target-device iphone \
+            --compress-pngs \
+            --compile "$OUT/compiled" "$CAR" 2>&1 || true
 
-          # Also try direct extraction with assetutil
-          cd "$OUT"
-          xcrun --sdk iphoneos assetutil --extract . "../$CAR" 2>/dev/null || true
+          # Also dump JSON info
+          xcrun --sdk iphoneos assetutil --info "$CAR" > "$OUT/asset_info.json" 2>/dev/null || true
 
-          # List what we got
-          echo "=== Extracted files ==="
-          find . -type f | sort
+          echo "=== All extracted files ==="
+          find "$OUT" -type f -name "*.png" | sort
 
       - name: Upload extracted assets
         uses: actions/upload-artifact@v6
