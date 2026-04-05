@@ -65,6 +65,10 @@
 "LogoImage" = "Logo image";
 "LogoImageDesc" = "Replaces the YouTube logo with the one selected in the navigation bar.";
 "NoLogo" = "Remove logo";
+"NoYTLogo" = "Hide YouTube logo";
+"NoYTLogoDesc" = "Hides the YouTube logo from the Navigation bar.";
+"PremiumYTLogo" = "Premium YouTube logo";
+"PremiumYTLogoDesc" = "Replaces the YouTube logo with the Premium logo.";
 
 /* Feed options */
 "Feed" = "Feed";
@@ -145,6 +149,8 @@
 "NoFullscreenActionsDesc" = "Disables actions panel in fullscreen mode.";
 "NoHudMsgs" = "Disable snackbars";
 "NoHudMsgsDesc" = "Prevents YouTube from showing on-screen HUD messages.";
+"NoHUDMsgs" = "Hide HUD messages";
+"NoHUDMsgsDesc" = "Hides HUD overlay messages in the player.";
 "PersistentProgressBar" = "Persistent progress bar";
 "PersistentProgressBarDesc" = "Always shows progress bar in the player.";
 "RedProgressBar" = "Red progress bar";
@@ -263,6 +269,14 @@
 "NoFreeZoomDesc" = "Disables new free zoom gestures.";
 "NoDoubleTap2Seek" = "Disable double tap to seek";
 "NoDoubleTap2SeekDesc" = "Disables double tap to seek gesture.";
+"ExtraSpeedOptions" = "Extra speed options";
+"ExtraSpeedOptionsDesc" = "Adds extra playback speed options (2.5x, 3x, 3.5x, 4x, 5x).";
+"NoPlayerRemixButton" = "Hide Remix button";
+"NoPlayerRemixButtonDesc" = "Hides the Remix button from the player.";
+"NoPlayerClipButton" = "Hide Clip button";
+"NoPlayerClipButtonDesc" = "Hides the Clip button from the player.";
+"NoPlayerDownloadButton" = "Hide Download button";
+"NoPlayerDownloadButtonDesc" = "Hides the Download button from the player.";
 
 /* Shorts options */
 "Shorts" = "Shorts";
@@ -271,6 +285,9 @@
 "ScrollToNext" = "Scroll to next";
 "Stop" = "Stop";
 "AutoSkipShorts" = "Auto-skip Shorts";
+"AutoSkipShortsDesc" = "Automatically skips to the next Short.";
+"ResumeShorts" = "Disable resume Shorts";
+"ResumeShortsDesc" = "Prevents YouTube from resuming to Shorts on startup.";
 "ForceBestQuality" = "Force quality";
 "ForceBestQualityDesc" = "Disables Shorts quality selection, allowing the player to automatically pick the most suitable quality.";
 "ShortsOnlyMode" = "Shorts only mode";
@@ -340,6 +357,16 @@
 "HideShortsAudioDesc" = "Removes the line indicating the audio used in the Shorts.";
 "HideShortsCommentBar" = "No comment bar";
 "HideShortsCommentBarDesc" = "Removes the comment bar in Shorts played from a user's profile.";
+"HideShortsSubscriptions" = "Hide Subscriptions carousel";
+"HideShortsSubscriptionsDesc" = "Hides the Subscriptions carousel in Shorts.";
+"HideShortsAvatars" = "Hide avatars";
+"HideShortsAvatarsDesc" = "Hides channel avatars from the Shorts overlay.";
+"HideShortsThanks" = "Hide Thanks badge";
+"HideShortsThanksDesc" = "Hides the Thanks badge from Shorts.";
+"HideShortsChannelName" = "Hide channel name";
+"HideShortsChannelNameDesc" = "Hides the channel name from Shorts.";
+"HideShortsAudioTrack" = "Hide audio track";
+"HideShortsAudioTrackDesc" = "Hides the audio track info from Shorts.";
 
 /* Tab bar options */
 "Tabbar" = "Tab bar";
@@ -362,7 +389,21 @@
 
 "TranslucentBar" = "Translucent tab bar";
 "RemoveLabels" = "Remove tab labels";
+"RemoveLabelsDesc" = "Removes text labels from the Tab bar buttons.";
 "RemoveIndicators" = "Remove tab indicators";
+"RemoveIndicatorsDesc" = "Removes notification indicators from the Tab bar.";
+"ReExplore" = "Restore Explore tab";
+"ReExploreDesc" = "Replaces the Shorts tab with the Explore tab.";
+"AddExplore" = "Add Explore tab";
+"AddExploreDesc" = "Adds the Explore tab to the Tab bar.";
+"HideShortsTab" = "Hide Shorts tab";
+"HideShortsTabDesc" = "Hides the Shorts tab from the Tab bar.";
+"HideSubscriptionsTab" = "Hide Subscriptions tab";
+"HideSubscriptionsTabDesc" = "Hides the Subscriptions tab from the Tab bar.";
+"HideUploadButton" = "Hide Upload button";
+"HideUploadButtonDesc" = "Hides the Upload/Create button from the Tab bar.";
+"HideLibraryTab" = "Hide Library tab";
+"HideLibraryTabDesc" = "Hides the Library tab from the Tab bar.";
 
 "ActiveTabs" = "Active tabs";
 "InactiveTabs" = "Inactive tabs";
@@ -402,6 +443,10 @@
 "Floating" = "Floating";
 
 "Other" = "Other";
+"CopyVideoInfo" = "Copy video info";
+"CopyVideoInfoDesc" = "Allows copying video information from the description.";
+"NoContinueWatching" = "Hide \"Continue watching\"";
+"NoContinueWatchingDesc" = "Hides the \"Continue watching\" section from the Home feed.";
 "NoLinkTracking" = "Disable link tracking";
 "NoLinkTrackingDesc" = "Prevents tracking information from being sent when tapping links. Opens links directly instead of going through Google redirects.";
 "NoShareChunk" = "Remove share identifier";
@@ -586,6 +631,8 @@
 "ImportPreferences" = "Import preferences";
 "PreImportMessage" = "This action will replace the current preferences with those from the selected file.\n\nAre you sure you want to continue?";
 "ExportPreferences" = "Export preferences";
+"Advanced" = "Advanced mode";
+"AdvancedDesc" = "Enables advanced settings and additional options.";
 "ResetSettings" = "Restore default settings";
 "ResetMessage" = "This action will reset YTPlus settings to default and close YouTube.\n\nAre you sure you want to continue?";
 
