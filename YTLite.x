@@ -17,19 +17,39 @@ static UIImage *YTImageNamed(NSString *imageName) {
 // Disable Ads
 %hook YTIPlayerResponse
 - (BOOL)isMonetized { return ytlBool(@"noAds") ? NO : YES; }
+- (id)playerAdsArray { return ytlBool(@"noAds") ? @[] : %orig; }
+- (id)adSlotsArray { return ytlBool(@"noAds") ? @[] : %orig; }
+%end
+
+%hook YTLocalPlaybackController
+- (id)createAdsPlaybackCoordinator { return ytlBool(@"noAds") ? nil : %orig; }
+%end
+
+%hook YTGlobalConfig
+- (BOOL)shouldBlockUpgradeDialog { return ytlBool(@"noAds") ? YES : %orig; }
 %end
 
 %hook YTDataUtils
-+ (id)spamSignalsDictionary { return ytlBool(@"noAds") ? nil : %orig; }
-+ (id)spamSignalsDictionaryWithoutIDFA { return ytlBool(@"noAds") ? nil : %orig; }
++ (id)spamSignalsDictionary { return ytlBool(@"noAds") ? @{} : %orig; }
++ (id)spamSignalsDictionaryWithoutIDFA { return ytlBool(@"noAds") ? @{} : %orig; }
+%end
+
+// Also hook YTAdShieldUtils (YouTube may have renamed YTDataUtils)
+%hook YTAdShieldUtils
++ (id)spamSignalsDictionary { return ytlBool(@"noAds") ? @{} : %orig; }
++ (id)spamSignalsDictionaryWithoutIDFA { return ytlBool(@"noAds") ? @{} : %orig; }
 %end
 
 %hook YTAdsInnerTubeContextDecorator
-- (void)decorateContext:(id)context { if (!ytlBool(@"noAds")) %orig; }
+- (void)decorateContext:(id)context { ytlBool(@"noAds") ? %orig(nil) : %orig; }
 %end
 
 %hook YTAccountScopedAdsInnerTubeContextDecorator
-- (void)decorateContext:(id)context { if (!ytlBool(@"noAds")) %orig; }
+- (void)decorateContext:(id)context { ytlBool(@"noAds") ? %orig(nil) : %orig; }
+%end
+
+%hook MDXSession
+- (void)adPlaying:(id)ad { if (!ytlBool(@"noAds")) %orig; }
 %end
 
 %hook YTIElementRenderer
