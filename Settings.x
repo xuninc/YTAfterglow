@@ -292,16 +292,14 @@ static NSString *GetCacheSize() {
         if (!activeTabs) activeTabs = [@[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"] mutableCopy];
 
         // Icon types for tabs
+        // YouTube icon types for tabs (only include ones that render correctly)
         NSDictionary *tabIconTypes = @{
             @"FEwhat_to_watch": @(65),  // YT_TAB_HOME
-            @"FEshorts": @(776),        // YT_TAB_SHORTS
             @"FEsubscriptions": @(66),  // YT_TAB_SUBSCRIPTIONS
             @"FElibrary": @(68),        // YT_TAB_LIBRARY
             @"FEexplore": @(67),        // YT_TAB_TRENDING
-            @"FEhistory": @(355),       // YT_TAB_ACTIVITY
             @"VLWL": @(565),            // YT_BOOKMARK
-            @"FEpost_home": @(897),     // YT_TEXT
-            @"FEuploads": @(734)        // YT_CREATION_TAB_LARGE
+            @"FEpost_home": @(897)      // YT_TEXT
         };
 
         // Active tabs header
@@ -329,7 +327,6 @@ static NSString *GetCacheSize() {
                 return YES;
             }];
 
-            // Set tab icon
             NSNumber *iconType = tabIconTypes[tabId];
             if (iconType) {
                 YTIIcon *icon = [%c(YTIIcon) new];
@@ -367,7 +364,6 @@ static NSString *GetCacheSize() {
                 return YES;
             }];
 
-            // Set tab icon
             NSNumber *iconType = tabIconTypes[tabId];
             if (iconType) {
                 YTIIcon *icon = [%c(YTIIcon) new];
