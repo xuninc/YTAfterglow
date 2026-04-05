@@ -1157,43 +1157,94 @@ static void genImageFromLayer(CALayer *layer, UIColor *backgroundColor, void (^c
 }
 %end
 
-// Remove Tabs
+// Tab Management - Helper to get pivot identifier from a renderer
+static NSString *ytlPivotId(YTIPivotBarSupportedRenderers *r) {
+    NSString *pid = [[r pivotBarItemRenderer] pivotIdentifier];
+    if (!pid) pid = [[r pivotBarIconOnlyItemRenderer] pivotIdentifier];
+    return pid;
+}
+
+// Tab Management - Get default active tabs
+static NSArray *ytlDefaultTabs() {
+    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"];
+}
+
+// Tab Management - Filter and reorder pivot bar items based on activeTabs
 %hook YTPivotBarView
 - (void)setRenderer:(YTIPivotBarRenderer *)renderer {
     NSMutableArray <YTIPivotBarSupportedRenderers *> *items = [renderer itemsArray];
+    NSArray *activeTabs = [[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"];
+    if (!activeTabs) activeTabs = ytlDefaultTabs();
 
-    NSDictionary *identifiersToRemove = @{
-        @"FEshorts": @[@(ytlBool(@"removeShorts")), @(ytlBool(@"reExplore"))],
-        @"FEsubscriptions": @[@(ytlBool(@"removeSubscriptions"))],
-        @"FEuploads": @[@(ytlBool(@"removeUploads"))],
-        @"FElibrary": @[@(ytlBool(@"removeLibrary"))]
-    };
-
-    for (NSString *identifier in identifiersToRemove) {
-        NSArray *removeValues = identifiersToRemove[identifier];
-        BOOL shouldRemoveItem = [removeValues containsObject:@(YES)];
-
-        NSUInteger index = [items indexOfObjectPassingTest:^BOOL(YTIPivotBarSupportedRenderers *renderer, NSUInteger idx, BOOL *stop) {
-            if ([identifier isEqualToString:@"FEuploads"]) {
-                return shouldRemoveItem && [[[renderer pivotBarIconOnlyItemRenderer] pivotIdentifier] isEqualToString:identifier];
-            } else {
-                return shouldRemoveItem && [[[renderer pivotBarItemRenderer] pivotIdentifier] isEqualToString:identifier];
-            }
-        }];
-
-        if (index != NSNotFound) {
-            [items removeObjectAtIndex:index];
+    // Remove tabs not in activeTabs
+    NSMutableArray *toRemove = [NSMutableArray array];
+    for (YTIPivotBarSupportedRenderers *item in items) {
+        NSString *pid = ytlPivotId(item);
+        if (pid && ![activeTabs containsObject:pid]) {
+            [toRemove addObject:item];
         }
     }
-    
-    NSUInteger exploreIndex = [items indexOfObjectPassingTest:^BOOL(YTIPivotBarSupportedRenderers *renderers, NSUInteger idx, BOOL *stop) {
-        return [[[renderers pivotBarItemRenderer] pivotIdentifier] isEqualToString:[%c(YTIBrowseRequest) browseIDForExploreTab]];
-    }];
+    [items removeObjectsInArray:toRemove];
 
-    if (exploreIndex == NSNotFound && (ytlBool(@"reExplore") || ytlBool(@"addExplore"))) {
-        YTIPivotBarSupportedRenderers *exploreTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:[%c(YTIBrowseRequest) browseIDForExploreTab] title:LOC(@"Explore") iconType:292];
-        [items insertObject:exploreTab atIndex:1];
+    // Add Explore tab if in activeTabs but not in items
+    if ([activeTabs containsObject:@"FEexplore"]) {
+        BOOL found = NO;
+        for (YTIPivotBarSupportedRenderers *item in items) {
+            if ([ytlPivotId(item) isEqualToString:@"FEexplore"] ||
+                [ytlPivotId(item) isEqualToString:[%c(YTIBrowseRequest) browseIDForExploreTab]]) {
+                found = YES;
+                break;
+            }
+        }
+        if (!found) {
+            YTIPivotBarSupportedRenderers *exploreTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:[%c(YTIBrowseRequest) browseIDForExploreTab] title:LOC(@"FEexplore") iconType:292];
+            [items addObject:exploreTab];
+        }
     }
+
+    // Add History tab if in activeTabs but not in items
+    if ([activeTabs containsObject:@"FEhistory"]) {
+        BOOL found = NO;
+        for (YTIPivotBarSupportedRenderers *item in items) {
+            if ([ytlPivotId(item) isEqualToString:@"FEhistory"]) { found = YES; break; }
+        }
+        if (!found) {
+            YTIPivotBarSupportedRenderers *historyTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"FEhistory" title:LOC(@"FEhistory") iconType:876];
+            [items addObject:historyTab];
+        }
+    }
+
+    // Add Watch Later tab if in activeTabs but not in items
+    if ([activeTabs containsObject:@"VLWL"]) {
+        BOOL found = NO;
+        for (YTIPivotBarSupportedRenderers *item in items) {
+            if ([ytlPivotId(item) isEqualToString:@"VLWL"]) { found = YES; break; }
+        }
+        if (!found) {
+            YTIPivotBarSupportedRenderers *vlwlTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"VLWL" title:LOC(@"VLWL") iconType:877];
+            [items addObject:vlwlTab];
+        }
+    }
+
+    // Reorder items to match activeTabs order
+    NSMutableArray *ordered = [NSMutableArray array];
+    for (NSString *tabId in activeTabs) {
+        for (YTIPivotBarSupportedRenderers *item in items) {
+            NSString *pid = ytlPivotId(item);
+            if ([pid isEqualToString:tabId] ||
+                ([tabId isEqualToString:@"FEexplore"] && [pid isEqualToString:[%c(YTIBrowseRequest) browseIDForExploreTab]])) {
+                [ordered addObject:item];
+                break;
+            }
+        }
+    }
+    // Add any remaining items not in activeTabs (shouldn't happen but safety)
+    for (YTIPivotBarSupportedRenderers *item in items) {
+        if (![ordered containsObject:item]) [ordered addObject:item];
+    }
+
+    [items removeAllObjects];
+    [items addObjectsFromArray:ordered];
 
     %orig;
 }
@@ -1205,7 +1256,7 @@ static void genImageFromLayer(CALayer *layer, UIColor *backgroundColor, void (^c
 - (void)setBorderColor:(id)arg1 { %orig(ytlBool(@"removeIndicators") ? [UIColor clearColor] : arg1); }
 %end
 
-// Hide Tab Labels
+// Hide Tab Labels + Custom Tab Icons
 %hook YTPivotBarItemView
 - (void)setRenderer:(YTIPivotBarRenderer *)renderer {
     %orig;
@@ -1214,31 +1265,22 @@ static void genImageFromLayer(CALayer *layer, UIColor *backgroundColor, void (^c
         [self.navigationButton setTitle:@"" forState:UIControlStateNormal];
         [self.navigationButton setSizeWithPaddingAndInsets:NO];
     }
-
-    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(manageTab:)];
-    longPress.minimumPressDuration = 0.3;
-    if ([self.renderer.pivotIdentifier isEqualToString:@"FEwhat_to_watch"]) [self addGestureRecognizer:longPress];
-}
-
-%new
-- (void)manageTab:(UILongPressGestureRecognizer *)gesture {
-    if (gesture.state == UIGestureRecognizerStateBegan) {
-        ytlBool(@"removeLibrary") ? ytlSetBool(NO, @"removeLibrary") : ytlSetBool(YES, @"removeLibrary");
-        [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
-        [[%c(YTToastResponderEvent) eventWithMessage:ytlBool(@"removeLibrary") ? LOC(@"LibraryRemoved") : LOC(@"LibraryAdded") firstResponder:self.delegate] send];
-    }
 }
 %end
 
-// Startup Tab
+// Startup Tab + Frosted Pivot Bar
 BOOL isTabSelected = NO;
 %hook YTPivotBarViewController
+- (BOOL)isFrostedPivotBarPermitted {
+    return ytlBool(@"frostedPivot") ? YES : %orig;
+}
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
 
     if (!isTabSelected && !ytlBool(@"shortsOnlyMode")) {
-        NSArray *pivotIdentifiers = @[@"FEwhat_to_watch", @"FEexplore", @"FEshorts", @"FEsubscriptions", @"FElibrary"];
-        [self selectItemWithPivotIdentifier:pivotIdentifiers[ytlInt(@"pivotIndex")]];
+        NSString *startupTab = [[YTLUserDefaults standardUserDefaults] objectForKey:@"startupTab"];
+        if (!startupTab) startupTab = @"FEwhat_to_watch";
+        [self selectItemWithPivotIdentifier:startupTab];
         isTabSelected = YES;
     }
 
@@ -1395,9 +1437,13 @@ static NSURL *newCoverURL(NSURL *originalURL) {
 %end
 
 %ctor {
-    if (ytlBool(@"shortsOnlyMode") && (ytlBool(@"removeShorts") || ytlBool(@"reExplore"))) {
-        ytlSetBool(NO, @"removeShorts");
-        ytlSetBool(NO, @"reExplore");
+    // Ensure Shorts tab is active if shortsOnlyMode is enabled
+    if (ytlBool(@"shortsOnlyMode")) {
+        NSMutableArray *tabs = [[[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"] mutableCopy];
+        if (tabs && ![tabs containsObject:@"FEshorts"]) {
+            [tabs addObject:@"FEshorts"];
+            [[YTLUserDefaults standardUserDefaults] setObject:tabs forKey:@"activeTabs"];
+        }
     }
 
     if (!ytlBool(@"advancedMode") && !ytlBool(@"advancedModeReminder")) {

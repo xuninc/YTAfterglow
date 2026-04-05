@@ -24,12 +24,12 @@ static NSString *const kDefaultsSuiteName = @"com.dvntm.ytlite";
     [self registerDefaults:@{
         @"noAds": @YES,
         @"backgroundPlayback": @YES,
-        @"removeUploads": @YES,
         @"speedIndex": @1,
         @"autoSpeedIndex": @3,
         @"wiFiQualityIndex": @0,
         @"cellQualityIndex": @0,
-        @"pivotIndex": @0
+        @"startupTab": @"FEwhat_to_watch",
+        @"frostedPivot": @YES
     }];
 }
 
