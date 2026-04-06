@@ -1265,37 +1265,30 @@ static NSArray *ytlDefaultTabs() {
         [self.navigationButton setTitle:@"" forState:UIControlStateNormal];
         [self.navigationButton setSizeWithPaddingAndInsets:NO];
     }
-}
 
-- (YTQTMButton *)navigationButton {
-    YTQTMButton *button = %orig;
-
+    // Load custom tab icons from bundle
     NSInteger iconType = self.renderer.icon.iconType;
-    NSBundle *bundle = [NSBundle ytl_defaultBundle];
-    NSLog(@"[YTLite] navButton: iconType=%ld bundle=%@ pid=%@", (long)iconType, bundle.bundlePath, self.renderer.pivotIdentifier);
+    NSString *normalName = nil;
+    NSString *selectedName = nil;
 
-    if (iconType == 876) {
-        UIImage *normal = [[UIImage imageNamed:@"FEhistory" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-        UIImage *selected = [[UIImage imageNamed:@"FEhistory_selected" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    if (iconType == 876) { normalName = @"FEhistory"; selectedName = @"FEhistory_selected"; }
+    else if (iconType == 877) { normalName = @"VLWL"; selectedName = @"VLWL_selected"; }
+    else if (iconType == 878) { normalName = @"FEpost_home"; selectedName = @"FEpost_home_selected"; }
+
+    if (normalName) {
+        NSBundle *bundle = [NSBundle ytl_defaultBundle];
+        NSString *normalPath = [bundle pathForResource:[normalName stringByAppendingString:@"@3x"] ofType:@"png"]
+                            ?: [bundle pathForResource:[normalName stringByAppendingString:@"@2x"] ofType:@"png"];
+        NSString *selectedPath = [bundle pathForResource:[selectedName stringByAppendingString:@"@3x"] ofType:@"png"]
+                              ?: [bundle pathForResource:[selectedName stringByAppendingString:@"@2x"] ofType:@"png"];
+
+        UIImage *normal = normalPath ? [[UIImage imageWithContentsOfFile:normalPath] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] : nil;
+        UIImage *selected = selectedPath ? [[UIImage imageWithContentsOfFile:selectedPath] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] : nil;
+
+        YTQTMButton *button = self.navigationButton;
         if (normal) [button setImage:normal forState:UIControlStateNormal];
         if (selected) [button setImage:selected forState:UIControlStateSelected];
     }
-
-    if (iconType == 877) {
-        UIImage *normal = [[UIImage imageNamed:@"VLWL" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-        UIImage *selected = [[UIImage imageNamed:@"VLWL_selected" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-        if (normal) [button setImage:normal forState:UIControlStateNormal];
-        if (selected) [button setImage:selected forState:UIControlStateSelected];
-    }
-
-    if (iconType == 878) {
-        UIImage *normal = [[UIImage imageNamed:@"FEpost_home" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-        UIImage *selected = [[UIImage imageNamed:@"FEpost_home_selected" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-        if (normal) [button setImage:normal forState:UIControlStateNormal];
-        if (selected) [button setImage:selected forState:UIControlStateSelected];
-    }
-
-    return button;
 }
 %end
 
