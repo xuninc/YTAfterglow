@@ -299,9 +299,9 @@ static NSString *GetCacheSize() {
             @"FEsubscriptions": @(66),   // TAB_SUBSCRIPTIONS
             @"FElibrary": @(68),         // TAB_LIBRARY
             @"FEexplore": @(67),         // TAB_TRENDING
-            @"FEhistory": @(876),         // Custom PNG (FEhistory)
-            @"VLWL": @(877),             // Custom PNG (VLWL)
-            @"FEpost_home": @(878),      // Custom PNG (FEpost_home)
+            @"FEhistory": @(2),           // WATCH_HISTORY
+            @"VLWL": @(3),               // WATCH_LATER
+            @"FEpost_home": @(267),      // CHAT_BUBBLE
             @"FEuploads": @(1136)        // ADD_BOLD
         };
 
