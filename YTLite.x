@@ -1274,6 +1274,8 @@ static NSArray *ytlDefaultTabs() {
     NSString *pid = self.renderer.pivotIdentifier;
     NSBundle *bundle = [NSBundle ytl_defaultBundle];
 
+    NSLog(@"[YTLite] navigationButton called for pid=%@ bundle=%@ bundlePath=%@", pid, bundle, bundle.bundlePath);
+
     NSDictionary *tabImages = @{
         @"FEhistory": @[@"FEhistory", @"FEhistory_selected"],
         @"VLWL": @[@"VLWL", @"VLWL_selected"],
@@ -1284,8 +1286,31 @@ static NSArray *ytlDefaultTabs() {
     if (images) {
         UIImage *normal = [UIImage imageNamed:images[0] inBundle:bundle compatibleWithTraitCollection:nil];
         UIImage *selected = [UIImage imageNamed:images[1] inBundle:bundle compatibleWithTraitCollection:nil];
-        if (normal) [button setImage:[normal imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] forState:UIControlStateNormal];
-        if (selected) [button setImage:[selected imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] forState:UIControlStateSelected];
+        NSLog(@"[YTLite] pid=%@ normal=%@ selected=%@ button=%@", pid, normal, selected, button);
+
+        // Also try loading from bundle path directly as fallback
+        if (!normal) {
+            NSString *path2x = [bundle pathForResource:[NSString stringWithFormat:@"%@@2x", images[0]] ofType:@"png"];
+            NSString *path3x = [bundle pathForResource:[NSString stringWithFormat:@"%@@3x", images[0]] ofType:@"png"];
+            NSLog(@"[YTLite] fallback paths: 2x=%@ 3x=%@", path2x, path3x);
+            NSString *path = path3x ?: path2x;
+            if (path) {
+                normal = [[UIImage imageWithContentsOfFile:path] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+                NSLog(@"[YTLite] fallback loaded: %@", normal);
+            }
+        }
+        if (!selected) {
+            NSString *path2x = [bundle pathForResource:[NSString stringWithFormat:@"%@@2x", images[1]] ofType:@"png"];
+            NSString *path3x = [bundle pathForResource:[NSString stringWithFormat:@"%@@3x", images[1]] ofType:@"png"];
+            NSString *path = path3x ?: path2x;
+            if (path) {
+                selected = [[UIImage imageWithContentsOfFile:path] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+            }
+        }
+
+        if (normal) [button setImage:normal forState:UIControlStateNormal];
+        if (selected) [button setImage:selected forState:UIControlStateSelected];
+        NSLog(@"[YTLite] final result: normal=%@ selected=%@", normal, selected);
     }
 
     return button;
