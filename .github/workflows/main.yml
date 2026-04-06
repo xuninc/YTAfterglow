@@ -153,12 +153,18 @@ jobs:
 
           cp profile.mobileprovision "$APP_DIR/embedded.mobileprovision"
 
+          # Extract entitlements from provisioning profile
+          security cms -D -i profile.mobileprovision > profile_full.plist
+          /usr/libexec/PlistBuddy -x -c "Print :Entitlements" profile_full.plist > entitlements.plist
+          echo "Entitlements:"
+          cat entitlements.plist
+
           # Sign frameworks and plugins first, then the app itself
           find "$APP_DIR" -name "*.framework" -o -name "*.appex" -o -name "*.dylib" | while read item; do
-            codesign --force --sign "$SIGNING_IDENTITY" --timestamp=none --generate-entitlement-der "$item" || true
+            codesign --force --sign "$SIGNING_IDENTITY" --timestamp=none "$item" || true
           done
 
-          codesign --force --sign "$SIGNING_IDENTITY" --timestamp=none --generate-entitlement-der "$APP_DIR"
+          codesign --force --sign "$SIGNING_IDENTITY" --timestamp=none --entitlements entitlements.plist "$APP_DIR"
 
           cd ipa_contents
           zip -qr ../YouTubePlus.ipa Payload
