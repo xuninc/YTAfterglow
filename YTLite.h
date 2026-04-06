@@ -81,15 +81,6 @@
 - (void)selectItemWithPivotIdentifier:(id)pivotIndentifier;
 @end
 
-@interface YTIIcon : NSObject
-@property (nonatomic, assign, readwrite) NSInteger iconType;
-@end
-
-@interface YTIPivotBarItemRenderer : NSObject
-@property (nonatomic, strong, readwrite) YTIIcon *icon;
-@property (nonatomic, copy, readwrite) NSString *pivotIdentifier;
-@end
-
 @interface YTPivotBarItemView : UIView
 @property (nonatomic, strong, readwrite) YTIPivotBarItemRenderer *renderer;
 @property (nonatomic, weak, readwrite) YTPivotBarViewController *delegate;

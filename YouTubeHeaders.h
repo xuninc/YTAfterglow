@@ -3,6 +3,8 @@
 #import "../YouTubeHeader/YTIGuideResponseSupportedRenderers.h"
 #import "../YouTubeHeader/YTIPivotBarSupportedRenderers.h"
 #import "../YouTubeHeader/YTIPivotBarRenderer.h"
+#import "../YouTubeHeader/YTIPivotBarItemRenderer.h"
+#import "../YouTubeHeader/YTIIcon.h"
 #import "../YouTubeHeader/YTIBrowseRequest.h"
 #import "../YouTubeHeader/YTISectionListRenderer.h"
 #import "../YouTubeHeader/YTQTMButton.h"
