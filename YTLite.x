@@ -1272,6 +1272,7 @@ static NSArray *ytlDefaultTabs() {
 
     NSInteger iconType = self.renderer.icon.iconType;
     NSBundle *bundle = [NSBundle ytl_defaultBundle];
+    NSLog(@"[YTLite] navButton: iconType=%ld bundle=%@ pid=%@", (long)iconType, bundle.bundlePath, self.renderer.pivotIdentifier);
 
     if (iconType == 876) {
         UIImage *normal = [[UIImage imageNamed:@"FEhistory" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
