@@ -1289,11 +1289,8 @@ static NSArray *ytlDefaultTabs() {
     }
 
     if (iconType == 878) {
-        BOOL isCairo = [[[(id)[self performSelector:@selector(_viewControllerForAncestor)] renderer] description] containsString:@"_CAIRO"];
-        NSString *normalName = isCairo ? @"FEpost_home_cairo" : @"FEpost_home";
-        NSString *selectedName = isCairo ? @"FEpost_home_cairo_selected" : @"FEpost_home_selected";
-        UIImage *normal = [[UIImage imageNamed:normalName inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-        UIImage *selected = [[UIImage imageNamed:selectedName inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        UIImage *normal = [[UIImage imageNamed:@"FEpost_home" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+        UIImage *selected = [[UIImage imageNamed:@"FEpost_home_selected" inBundle:bundle compatibleWithTraitCollection:nil] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
         if (normal) [button setImage:normal forState:UIControlStateNormal];
         if (selected) [button setImage:selected forState:UIControlStateSelected];
     }
