@@ -132,8 +132,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "$P12_BASE64" | base64 --decode > cert.p12
-          echo "$MOBILEPROVISION_BASE64" | base64 --decode > profile.mobileprovision
+          printf '%s' "$P12_BASE64" | base64 --decode > cert.p12
+          printf '%s' "$MOBILEPROVISION_BASE64" | base64 --decode > profile.mobileprovision
 
           KEYCHAIN="build.keychain"
           KEYCHAIN_PASSWORD="actions"
