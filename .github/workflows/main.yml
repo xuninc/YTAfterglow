@@ -118,6 +118,12 @@ jobs:
           done
           cyan -i youtube.ipa -o YouTubePlus_unsigned.ipa -uwef $tweaks -n "${{ github.event.inputs.display_name }}" -b ${{ github.event.inputs.bundle_id }}
 
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: YouTubePlus-unsigned
+          path: YouTubePlus_unsigned.ipa
+
       - name: Sign IPA
         env:
           P12_BASE64: ${{ secrets.P12_BASE64 }}
