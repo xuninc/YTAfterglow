@@ -150,7 +150,7 @@ jobs:
         run: git clone --quiet --depth=1 https://github.com/therealFoxster/DontEatMyContent.git
 
       - name: Clone YTIcons
-        run: git clone --quiet --depth=1 https://github.com/PoomSmart/YTIcons.git
+        run: git clone --quiet --depth=1 https://github.com/xuninc/YTIcons.git
 
       - name: Build YouPiP
         if: ${{ inputs.enable_youpip }}
