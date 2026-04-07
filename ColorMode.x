@@ -1,6 +1,6 @@
 #import "YTLite.h"
 #import <objc/runtime.h>
-#import <substrate.h>
+#import <objc/message.h>
 
 // Theme color keys
 static NSString *const kThemeOverlayButtons = @"theme_overlayButtons";
@@ -151,11 +151,12 @@ static inline UIColor *themed(NSString *key, CGFloat alpha) {
 
 #pragma mark - View background overrides
 
-// Use MSHookMessageEx directly for views not in YouTubeHeader
-static void (*orig_setBackgroundColor)(id, SEL, UIColor *);
-static void hook_setBackgroundColor(id self, SEL _cmd, UIColor *color) {
+// Swizzle setBackgroundColor: on YouTube view classes to apply theme background.
+// Uses objc_msgSendSuper to call UIView's original — avoids per-class orig pointer issues.
+static void ytl_themed_setBackgroundColor(id self, SEL _cmd, UIColor *color) {
     UIColor *c = themeColor(kThemeBackground);
-    orig_setBackgroundColor(self, _cmd, c ?: color);
+    struct objc_super sup = { self, class_getSuperclass(object_getClass(self)) };
+    ((void(*)(struct objc_super *, SEL, UIColor *))objc_msgSendSuper)(&sup, _cmd, c ?: color);
 }
 
 %ctor {
@@ -169,7 +170,7 @@ static void hook_setBackgroundColor(id self, SEL _cmd, UIColor *color) {
     for (NSString *name in bgClasses) {
         Class cls = objc_getClass(name.UTF8String);
         if (cls) {
-            MSHookMessageEx(cls, bgSel, (IMP)hook_setBackgroundColor, (IMP *)&orig_setBackgroundColor);
+            class_replaceMethod(cls, bgSel, (IMP)ytl_themed_setBackgroundColor, "v@:@");
         }
     }
 }

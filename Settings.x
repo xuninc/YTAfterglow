@@ -7,8 +7,7 @@ extern void ytl_clearThemeCache(void);
 - (void)updateYTLiteSectionWithEntry:(id)entry;
 @end
 
-// Color picker delegate that properly retains itself until dismissed
-API_AVAILABLE(ios(14.0))
+// Color picker delegate — guarded by @available(iOS 14.0, *) at call sites
 @interface YTLColorPickerDelegate : NSObject <UIColorPickerViewControllerDelegate>
 @property (nonatomic, copy) NSString *themeKey;
 @property (nonatomic, weak) YTSettingsViewController *settingsVC;
