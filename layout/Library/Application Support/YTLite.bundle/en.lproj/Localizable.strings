@@ -391,6 +391,12 @@
 "TranslucentBarDesc" = "Makes the tab bar translucent with a blur effect.";
 "OpaqueBar" = "Opaque tab bar";
 "OpaqueBarDesc" = "Makes the tab bar solid with no transparency.";
+"Appearance" = "Appearance";
+"Default" = "Default";
+"LowContrast" = "Low Contrast";
+"CustomColor" = "Custom Color";
+"PickColor" = "Pick Color";
+"NotSet" = "Not set";
 "RemoveLabels" = "Remove tab labels";
 "RemoveLabelsDesc" = "Removes text labels from the Tab bar buttons.";
 "RemoveIndicators" = "Remove tab indicators";
