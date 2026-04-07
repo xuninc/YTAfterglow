@@ -2,7 +2,11 @@
 
 // Color Configuration
 static UIColor *customContrastColor = nil;
-static UIColor *const kLowContrastColor = [UIColor colorWithRed:0.56 green:0.56 blue:0.56 alpha:1.0];
+static UIColor *kLowContrastColor = nil;
+
+__attribute__((constructor)) static void initColors() {
+    kLowContrastColor = [UIColor colorWithRed:0.56 green:0.56 blue:0.56 alpha:1.0];
+}
 
 static inline NSInteger contrastMode() {
     return [[YTLUserDefaults standardUserDefaults] integerForKey:@"contrastMode"];
