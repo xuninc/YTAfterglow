@@ -271,7 +271,7 @@ static NSString *GetCacheSize() {
     selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
         NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
 
-        [rows addObject:[self switchWithTitle:@"TranslucentBar" key:@"frostedPivot"]];
+        [rows addObject:[self switchWithTitle:@"OpaqueBar" key:@"frostedPivot"]];
         [rows addObject:[self switchWithTitle:@"RemoveLabels" key:@"removeLabels"]];
         [rows addObject:[self switchWithTitle:@"RemoveIndicators" key:@"removeIndicators"]];
 
