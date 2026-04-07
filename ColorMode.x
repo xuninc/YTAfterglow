@@ -20,6 +20,8 @@ __attribute__((constructor)) static void initCacheQueue() {
 }
 
 static UIColor *themeColor(NSString *key) {
+    if (!cacheQueue || !colorCache) return nil;
+
     __block id cached = nil;
     __block BOOL found = NO;
     dispatch_sync(cacheQueue, ^{
@@ -43,7 +45,8 @@ static UIColor *themeColor(NSString *key) {
 }
 
 void ytl_clearThemeCache(void) {
-    dispatch_barrier_async(cacheQueue, ^{ [colorCache removeAllObjects]; });
+    if (cacheQueue && colorCache)
+        dispatch_barrier_async(cacheQueue, ^{ [colorCache removeAllObjects]; });
 }
 
 // Helper: return custom color with alpha variant, or original
