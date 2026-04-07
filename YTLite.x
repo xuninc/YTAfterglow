@@ -248,6 +248,10 @@ static UIImage *YTImageNamed(NSString *imageName) {
 // Replace Next & Previous with Fast Forward & Rewind buttons
 - (BOOL)replaceNextPaddleWithFastForwardButtonForSingletonVods { return ytlBool(@"replacePrevNext") ? YES : %orig; }
 - (BOOL)replacePreviousPaddleWithRewindButtonForSingletonVods { return ytlBool(@"replacePrevNext") ? YES : %orig; }
+// Opaque Tab Bar
+- (BOOL)mainAppCoreClientEnableModernIaFrostedBottomBar { return ytlBool(@"frostedPivot") ? NO : %orig; }
+- (BOOL)mainAppCoreClientEnableModernIaFrostedPivotBar { return ytlBool(@"frostedPivot") ? NO : %orig; }
+- (BOOL)mainAppCoreClientEnableModernIaFrostedPivotBarUpdatedBackdrop { return ytlBool(@"frostedPivot") ? NO : %orig; }
 // Disable Free Zoom
 - (BOOL)videoZoomFreeZoomEnabledGlobalConfig { return ytlBool(@"noFreeZoom") ? NO : %orig; }
 // Stick Sort Buttons in Comments Section
@@ -1297,18 +1301,6 @@ BOOL isTabSelected = NO;
 %hook YTPivotBarViewController
 - (BOOL)isFrostedPivotBarPermitted {
     return ytlBool(@"frostedPivot") ? NO : %orig;
-}
-- (void)viewDidLayoutSubviews {
-    %orig;
-    if (ytlBool(@"frostedPivot")) {
-        YTPivotBarView *pivotBarView = [self pivotBarView];
-        for (UIView *subview in pivotBarView.subviews) {
-            if ([subview isKindOfClass:[UIVisualEffectView class]]) {
-                subview.hidden = YES;
-            }
-        }
-        pivotBarView.backgroundColor = [UIColor systemBackgroundColor];
-    }
 }
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
