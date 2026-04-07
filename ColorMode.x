@@ -20,15 +20,15 @@ __attribute__((constructor)) static void initCacheQueue() {
 }
 
 static UIColor *themeColor(NSString *key) {
-    __block UIColor *result = nil;
+    __block id cached = nil;
+    __block BOOL found = NO;
     dispatch_sync(cacheQueue, ^{
-        id cached = colorCache[key];
-        if (cached == [NSNull null]) { result = nil; return; }
-        if (cached) { result = cached; return; }
+        cached = colorCache[key];
+        found = (cached != nil);
     });
-    if (result) return result;
+    if (found) return (cached == [NSNull null]) ? nil : (UIColor *)cached;
 
-    // Cache miss — decode
+    // Cache miss — decode from user defaults
     NSData *data = [[YTLUserDefaults standardUserDefaults] objectForKey:key];
     if (!data) {
         dispatch_barrier_async(cacheQueue, ^{ colorCache[key] = [NSNull null]; });
@@ -117,7 +117,7 @@ static inline UIColor *themed(NSString *key, CGFloat alpha) {
 - (void)setBufferedProgressBarColor:(id)color {
     if (themeColor(kThemeSeekBar) || ytlBool(@"redProgressBar"))
         %orig([UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:0.60]);
-    else %orig;
+    else %orig(color);
 }
 %end
 
