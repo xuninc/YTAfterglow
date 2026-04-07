@@ -237,47 +237,25 @@ static NSString *GetCacheSize() {
                         return c ? hexFromColor(c) : LOC(@"Default");
                     }
                     selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
-                        UIColor *existing = loadColor(themeKey);
-
-                        UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(title)
-                            message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-
-                        [alert addAction:[UIAlertAction actionWithTitle:existing ? LOC(@"ChangeColor") : LOC(@"PickColor")
-                            style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-                                // Delay to let action sheet dismiss first
-                                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                                    presentPicker(themeKey, existing);
-                                });
-                            }]];
-
-                        if (existing) {
-                            [alert addAction:[UIAlertAction actionWithTitle:LOC(@"ResetDefault")
-                                style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
-                                    [[YTLUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
-                                    ytl_clearThemeCache();
-                                    [settingsViewController reloadData];
-                                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                                        UIAlertController *resetAlert = [UIAlertController alertControllerWithTitle:@"Color Reset"
-                                            message:@"Restart the app to fully apply."
-                                            preferredStyle:UIAlertControllerStyleAlert];
-                                        [resetAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-                                        [settingsViewController presentViewController:resetAlert animated:YES completion:nil];
-                                    });
-                                }]];
-                        }
-
-                        [alert addAction:[UIAlertAction actionWithTitle:LOC(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
-
-                        // iPad popover anchor
-                        if (alert.popoverPresentationController) {
-                            alert.popoverPresentationController.sourceView = settingsViewController.view;
-                            alert.popoverPresentationController.sourceRect = CGRectMake(settingsViewController.view.bounds.size.width / 2, settingsViewController.view.bounds.size.height / 2, 0, 0);
-                        }
-
-                        [settingsViewController presentViewController:alert animated:YES completion:nil];
+                        // Tap → open color picker directly
+                        presentPicker(themeKey, loadColor(themeKey));
                         return YES;
                     }];
                 [rows addObject:item];
+
+                // Add reset row underneath if color is set
+                if (loadColor(themeKey)) {
+                    YTSettingsSectionItem *reset = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"    ↺ %@ %@", LOC(@"Reset"), LOC(title)]
+                        accessibilityIdentifier:nil
+                        detailTextBlock:nil
+                        selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
+                            [[YTLUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
+                            ytl_clearThemeCache();
+                            [settingsViewController reloadData];
+                            return YES;
+                        }];
+                    [rows addObject:reset];
+                }
             };
 
             addColorRow(@"OverlayButtons", @"theme_overlayButtons");
