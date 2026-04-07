@@ -7,6 +7,9 @@ extern void ytl_clearThemeCache(void);
 - (void)updateYTLiteSectionWithEntry:(id)entry;
 @end
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
+
 // Color picker delegate — guarded by @available(iOS 14.0, *) at call sites
 @interface YTLColorPickerDelegate : NSObject <UIColorPickerViewControllerDelegate>
 @property (nonatomic, copy) NSString *themeKey;
@@ -57,6 +60,8 @@ extern void ytl_clearThemeCache(void);
     });
 }
 @end
+
+#pragma clang diagnostic pop
 
 static const NSInteger YTLiteSection = 789;
 static YTLColorPickerDelegate *_colorPickerDelegate = nil;
