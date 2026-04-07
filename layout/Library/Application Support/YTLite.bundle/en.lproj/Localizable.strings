@@ -409,6 +409,9 @@
 "Cancel" = "Cancel";
 "ColorSaved" = "Color Saved";
 "ColorSavedDesc" = "Restart the app to fully apply the new color.";
+"RestartNow" = "Restart Now";
+"Later" = "Later";
+"ResetAndRestart" = "Reset & Restart";
 "RemoveLabels" = "Remove tab labels";
 "RemoveLabelsDesc" = "Removes text labels from the Tab bar buttons.";
 "RemoveIndicators" = "Remove tab indicators";

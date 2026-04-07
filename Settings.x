@@ -41,7 +41,10 @@ API_AVAILABLE(ios(14.0))
             UIAlertController *saved = [UIAlertController alertControllerWithTitle:LOC(@"ColorSaved")
                 message:LOC(@"ColorSavedDesc")
                 preferredStyle:UIAlertControllerStyleAlert];
-            [saved addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+            [saved addAction:[UIAlertAction actionWithTitle:LOC(@"RestartNow") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+                exit(0);
+            }]];
+            [saved addAction:[UIAlertAction actionWithTitle:LOC(@"Later") style:UIAlertActionStyleCancel handler:nil]];
             UIViewController *presenter = self.settingsVC.navigationController.topViewController ?: self.settingsVC;
             [presenter presentViewController:saved animated:YES completion:nil];
         }
@@ -292,7 +295,7 @@ static NSString *GetCacheSize() {
                 selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
                     UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"ResetAllColors")
                         message:LOC(@"ResetAllColorsConfirm") preferredStyle:UIAlertControllerStyleAlert];
-                    [alert addAction:[UIAlertAction actionWithTitle:LOC(@"Reset") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+                    [alert addAction:[UIAlertAction actionWithTitle:LOC(@"ResetAndRestart") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
                         NSArray *keys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar",
                                           @"theme_background", @"theme_textPrimary", @"theme_textSecondary",
                                           @"theme_navBar", @"theme_accent"];
@@ -300,7 +303,7 @@ static NSString *GetCacheSize() {
                             [[YTLUserDefaults standardUserDefaults] removeObjectForKey:key];
                         }
                         ytl_clearThemeCache();
-                        [settingsViewController reloadData];
+                        exit(0);
                     }]];
                     [alert addAction:[UIAlertAction actionWithTitle:LOC(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
                     [settingsViewController presentViewController:alert animated:YES completion:nil];
