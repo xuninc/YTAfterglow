@@ -22,6 +22,15 @@ API_AVAILABLE(ios(14.0))
         [[YTLUserDefaults standardUserDefaults] setObject:data forKey:self.themeKey];
         ytl_clearThemeCache();
         [self.settingsVC reloadData];
+
+        // Show confirmation toast
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            UIAlertController *saved = [UIAlertController alertControllerWithTitle:@"Color Saved"
+                message:@"Restart the app to fully apply the new color."
+                preferredStyle:UIAlertControllerStyleAlert];
+            [saved addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+            [self.settingsVC presentViewController:saved animated:YES completion:nil];
+        });
     }
 }
 @end
@@ -247,6 +256,13 @@ static NSString *GetCacheSize() {
                                     [[YTLUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
                                     ytl_clearThemeCache();
                                     [settingsViewController reloadData];
+                                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                                        UIAlertController *resetAlert = [UIAlertController alertControllerWithTitle:@"Color Reset"
+                                            message:@"Restart the app to fully apply."
+                                            preferredStyle:UIAlertControllerStyleAlert];
+                                        [resetAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                                        [settingsViewController presentViewController:resetAlert animated:YES completion:nil];
+                                    });
                                 }]];
                         }
 
