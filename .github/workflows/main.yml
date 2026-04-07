@@ -1,4 +1,4 @@
-name: Create YouTube Plus app
+name: Create YouTube Afterglow app
 
 on:
   workflow_dispatch:
@@ -47,13 +47,13 @@ on:
 
       display_name:
         description: "App Name (Optional)"
-        default: "YouTube"
+        default: "YouTube Afterglow"
         required: true
         type: string
 
       bundle_id:
         description: "BundleID (Optional)"
-        default: "i.am.kain.youtubeplus"
+        default: "i.am.kain.ytag"
         required: true
         type: string
 
@@ -116,13 +116,13 @@ jobs:
           for f in *.deb; do
             [ -f "$f" ] && tweaks="$tweaks $f"
           done
-          cyan -i youtube.ipa -o YouTubePlus_unsigned.ipa -uwef $tweaks -n "${{ github.event.inputs.display_name }}" -b ${{ github.event.inputs.bundle_id }}
+          cyan -i youtube.ipa -o YTAfterglow_unsigned.ipa -uwef $tweaks -n "${{ github.event.inputs.display_name }}" -b ${{ github.event.inputs.bundle_id }}
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: YouTubePlus-unsigned
-          path: YouTubePlus_unsigned.ipa
+          name: YTAfterglow-unsigned
+          path: YTAfterglow_unsigned.ipa
 
       - name: Sign IPA
         env:
@@ -148,7 +148,7 @@ jobs:
           echo "Signing with: $SIGNING_IDENTITY"
 
           mkdir -p Payload
-          unzip -q YouTubePlus_unsigned.ipa -d ipa_contents
+          unzip -q YTAfterglow_unsigned.ipa -d ipa_contents
           APP_DIR=$(find ipa_contents/Payload -maxdepth 1 -name "*.app" -type d | head -1)
 
           cp profile.mobileprovision "$APP_DIR/embedded.mobileprovision"
@@ -167,15 +167,15 @@ jobs:
           codesign --force --sign "$SIGNING_IDENTITY" --timestamp=none --entitlements entitlements.plist "$APP_DIR"
 
           cd ipa_contents
-          zip -qr ../YouTubePlus.ipa Payload
+          zip -qr ../YTAfterglow.ipa Payload
           cd ..
 
-          rm -rf ipa_contents cert.p12 profile.mobileprovision YouTubePlus_unsigned.ipa
+          rm -rf ipa_contents cert.p12 profile.mobileprovision YTAfterglow_unsigned.ipa
           echo "Signed IPA ready"
 
       - name: Generate OTA manifest
         run: |
-          IPA_URL="https://github.com/${{ github.repository }}/releases/download/ytp-${{ github.run_number }}/YouTubePlus.ipa"
+          IPA_URL="https://github.com/${{ github.repository }}/releases/download/ytp-${{ github.run_number }}/YTAfterglow.ipa"
           BUNDLE_ID="${{ github.event.inputs.bundle_id }}"
           DISPLAY_NAME="${{ github.event.inputs.display_name }}"
 
@@ -217,9 +217,9 @@ jobs:
         uses: softprops/action-gh-release@v2.5.0
         with:
           tag_name: ytp-${{ github.run_number }}
-          name: YouTubePlus (${{ github.run_number }})
+          name: YTAfterglow (${{ github.run_number }})
           files: |
-            YouTubePlus.ipa
+            YTAfterglow.ipa
             manifest.plist
 
       - name: Output Install Links
@@ -231,4 +231,4 @@ jobs:
           echo "## OTA Install" >> $GITHUB_STEP_SUMMARY
           echo "Tap this link on your iPhone to install:" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[Install YouTubePlus](${OTA_LINK})" >> $GITHUB_STEP_SUMMARY
+          echo "[Install YTAfterglow](${OTA_LINK})" >> $GITHUB_STEP_SUMMARY
