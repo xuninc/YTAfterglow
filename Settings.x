@@ -178,7 +178,6 @@ static NSString *GetCacheSize() {
                         [settingsViewController reloadData];
                         return YES;
                     }];
-                if ((NSInteger)i == currentMode) item.selectedByDefault = YES;
                 [rows addObject:item];
             }
 
