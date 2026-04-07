@@ -10,157 +10,92 @@ static NSString *const kThemeTextSecondary  = @"theme_textSecondary";
 static NSString *const kThemeNavBar         = @"theme_navBar";
 static NSString *const kThemeAccent         = @"theme_accent";
 
-// Cache for decoded colors — avoids NSKeyedUnarchiver on every hook call
+// Thread-safe color cache
 static NSMutableDictionary *colorCache = nil;
+static dispatch_queue_t cacheQueue = nil;
+
+__attribute__((constructor)) static void initCacheQueue() {
+    cacheQueue = dispatch_queue_create("com.ytafterglow.colorcache", DISPATCH_QUEUE_CONCURRENT);
+    colorCache = [NSMutableDictionary dictionary];
+}
 
 static UIColor *themeColor(NSString *key) {
-    if (!colorCache) colorCache = [NSMutableDictionary dictionary];
+    __block UIColor *result = nil;
+    dispatch_sync(cacheQueue, ^{
+        id cached = colorCache[key];
+        if (cached == [NSNull null]) { result = nil; return; }
+        if (cached) { result = cached; return; }
+    });
+    if (result) return result;
 
-    id cached = colorCache[key];
-    if (cached == [NSNull null]) return nil;
-    if (cached) return cached;
-
+    // Cache miss — decode
     NSData *data = [[YTLUserDefaults standardUserDefaults] objectForKey:key];
     if (!data) {
-        colorCache[key] = [NSNull null];
+        dispatch_barrier_async(cacheQueue, ^{ colorCache[key] = [NSNull null]; });
         return nil;
     }
     NSKeyedUnarchiver *u = [[NSKeyedUnarchiver alloc] initForReadingFromData:data error:nil];
     [u setRequiresSecureCoding:NO];
     UIColor *color = [u decodeObjectForKey:NSKeyedArchiveRootObjectKey];
-    colorCache[key] = color ?: [NSNull null];
+
+    dispatch_barrier_async(cacheQueue, ^{ colorCache[key] = color ?: [NSNull null]; });
     return color;
 }
 
 void ytl_clearThemeCache(void) {
-    [colorCache removeAllObjects];
+    dispatch_barrier_async(cacheQueue, ^{ [colorCache removeAllObjects]; });
 }
 
-#pragma mark - YTCommonColorPalette: text, icons, overlays, backgrounds, accents
+// Helper: return custom color with alpha variant, or original
+static inline UIColor *themed(NSString *key, CGFloat alpha) {
+    UIColor *c = themeColor(key);
+    if (!c) return nil;
+    return alpha < 1.0 ? [c colorWithAlphaComponent:alpha] : c;
+}
+
+#pragma mark - YTCommonColorPalette
 
 %hook YTCommonColorPalette
 
-// Primary text
-- (UIColor *)textPrimary {
-    UIColor *c = themeColor(kThemeTextPrimary);
-    return c ?: %orig;
-}
-- (UIColor *)textSecondary {
-    UIColor *c = themeColor(kThemeTextSecondary);
-    return c ?: %orig;
-}
-- (UIColor *)textDisabled {
-    UIColor *c = themeColor(kThemeTextSecondary);
-    return c ? [c colorWithAlphaComponent:0.4] : %orig;
-}
+// --- Text ---
+- (UIColor *)textPrimary          { return themed(kThemeTextPrimary, 1.0) ?: %orig; }
+- (UIColor *)textSecondary        { return themed(kThemeTextSecondary, 1.0) ?: %orig; }
+- (UIColor *)textDisabled         { return themed(kThemeTextSecondary, 0.4) ?: %orig; }
+- (UIColor *)textPrimaryInverse   { return themed(kThemeTextPrimary, 1.0) ?: %orig; }
 
-// Overlay (player controls)
-- (UIColor *)overlayTextPrimary {
-    UIColor *c = themeColor(kThemeOverlayButtons);
-    return c ?: %orig;
-}
-- (UIColor *)overlayTextSecondary {
-    UIColor *c = themeColor(kThemeOverlayButtons);
-    return c ? [c colorWithAlphaComponent:0.8] : %orig;
-}
-- (UIColor *)overlayIconActiveOther {
-    UIColor *c = themeColor(kThemeOverlayButtons);
-    return c ?: %orig;
-}
-- (UIColor *)overlayIconInactive {
-    UIColor *c = themeColor(kThemeOverlayButtons);
-    return c ? [c colorWithAlphaComponent:0.7] : %orig;
-}
-- (UIColor *)overlayIconDisabled {
-    UIColor *c = themeColor(kThemeOverlayButtons);
-    return c ? [c colorWithAlphaComponent:0.3] : %orig;
-}
-- (UIColor *)overlayFilledButtonActive {
-    UIColor *c = themeColor(kThemeOverlayButtons);
-    return c ? [c colorWithAlphaComponent:0.2] : %orig;
-}
+// --- Overlay (player controls) ---
+- (UIColor *)overlayTextPrimary      { return themed(kThemeOverlayButtons, 1.0) ?: %orig; }
+- (UIColor *)overlayTextSecondary    { return themed(kThemeOverlayButtons, 0.8) ?: %orig; }
+- (UIColor *)overlayIconActiveOther  { return themed(kThemeOverlayButtons, 1.0) ?: %orig; }
+- (UIColor *)overlayIconInactive     { return themed(kThemeOverlayButtons, 0.7) ?: %orig; }
+- (UIColor *)overlayIconDisabled     { return themed(kThemeOverlayButtons, 0.3) ?: %orig; }
+- (UIColor *)overlayFilledButtonActive { return themed(kThemeOverlayButtons, 0.2) ?: %orig; }
 
-// Tab bar / general icons
-- (UIColor *)iconActive {
-    UIColor *c = themeColor(kThemeTabBarIcons);
-    return c ?: %orig;
-}
-- (UIColor *)iconActiveOther {
-    UIColor *c = themeColor(kThemeTabBarIcons);
-    return c ?: %orig;
-}
-- (UIColor *)iconInactive {
-    UIColor *c = themeColor(kThemeTabBarIcons);
-    return c ? [c colorWithAlphaComponent:0.5] : %orig;
-}
-- (UIColor *)iconDisabled {
-    UIColor *c = themeColor(kThemeTabBarIcons);
-    return c ? [c colorWithAlphaComponent:0.3] : %orig;
-}
-- (UIColor *)brandIconActive {
-    UIColor *c = themeColor(kThemeTabBarIcons);
-    return c ?: %orig;
-}
-- (UIColor *)brandIconInactive {
-    UIColor *c = themeColor(kThemeTabBarIcons);
-    return c ? [c colorWithAlphaComponent:0.5] : %orig;
-}
+// --- Icons (tab bar + general) ---
+- (UIColor *)iconActive          { return themed(kThemeTabBarIcons, 1.0) ?: %orig; }
+- (UIColor *)iconActiveOther     { return themed(kThemeTabBarIcons, 1.0) ?: %orig; }
+- (UIColor *)iconInactive        { return themed(kThemeTabBarIcons, 0.5) ?: %orig; }
+- (UIColor *)iconDisabled        { return themed(kThemeTabBarIcons, 0.3) ?: %orig; }
+- (UIColor *)brandIconActive     { return themed(kThemeTabBarIcons, 1.0) ?: %orig; }
+- (UIColor *)brandIconInactive   { return themed(kThemeTabBarIcons, 0.5) ?: %orig; }
 
-// Backgrounds
-- (UIColor *)background1 {
-    UIColor *c = themeColor(kThemeBackground);
-    return c ?: %orig;
-}
-- (UIColor *)background2 {
-    UIColor *c = themeColor(kThemeBackground);
-    return c ?: %orig;
-}
-- (UIColor *)background3 {
-    UIColor *c = themeColor(kThemeBackground);
-    return c ?: %orig;
-}
-- (UIColor *)baseBackground {
-    UIColor *c = themeColor(kThemeBackground);
-    return c ?: %orig;
-}
-- (UIColor *)raisedBackground {
-    UIColor *c = themeColor(kThemeBackground);
-    return c ?: %orig;
-}
-- (UIColor *)menuBackground {
-    UIColor *c = themeColor(kThemeBackground);
-    return c ?: %orig;
-}
-- (UIColor *)generalBackgroundA {
-    UIColor *c = themeColor(kThemeBackground);
-    return c ?: %orig;
-}
-- (UIColor *)generalBackgroundB {
-    UIColor *c = themeColor(kThemeBackground);
-    return c ?: %orig;
-}
-- (UIColor *)brandBackgroundSolid {
-    UIColor *c = themeColor(kThemeBackground);
-    return c ?: %orig;
-}
-- (UIColor *)brandBackgroundPrimary {
-    UIColor *c = themeColor(kThemeBackground);
-    return c ?: %orig;
-}
-- (UIColor *)brandBackgroundSecondary {
-    UIColor *c = themeColor(kThemeBackground);
-    return c ?: %orig;
-}
+// --- Backgrounds ---
+- (UIColor *)background1             { return themed(kThemeBackground, 1.0) ?: %orig; }
+- (UIColor *)background2             { return themed(kThemeBackground, 1.0) ?: %orig; }
+- (UIColor *)background3             { return themed(kThemeBackground, 1.0) ?: %orig; }
+- (UIColor *)baseBackground          { return themed(kThemeBackground, 1.0) ?: %orig; }
+- (UIColor *)raisedBackground        { return themed(kThemeBackground, 1.0) ?: %orig; }
+- (UIColor *)menuBackground          { return themed(kThemeBackground, 1.0) ?: %orig; }
+- (UIColor *)generalBackgroundA      { return themed(kThemeBackground, 1.0) ?: %orig; }
+- (UIColor *)generalBackgroundB      { return themed(kThemeBackground, 1.0) ?: %orig; }
+- (UIColor *)brandBackgroundSolid    { return themed(kThemeBackground, 1.0) ?: %orig; }
+- (UIColor *)brandBackgroundPrimary  { return themed(kThemeBackground, 1.0) ?: %orig; }
+- (UIColor *)brandBackgroundSecondary { return themed(kThemeBackground, 1.0) ?: %orig; }
 
-// Accent
-- (UIColor *)callToAction {
-    UIColor *c = themeColor(kThemeAccent);
-    return c ?: %orig;
-}
-- (UIColor *)callToActionInverse {
-    UIColor *c = themeColor(kThemeAccent);
-    return c ?: %orig;
-}
+// --- Accent ---
+- (UIColor *)callToAction        { return themed(kThemeAccent, 1.0) ?: %orig; }
+- (UIColor *)callToActionInverse { return themed(kThemeAccent, 1.0) ?: %orig; }
+
 %end
 
 #pragma mark - Seek/Progress Bar
@@ -180,7 +115,7 @@ void ytl_clearThemeCache(void) {
     %orig(c ?: color);
 }
 - (void)setBufferedProgressBarColor:(id)color {
-    if (ytlBool(@"redProgressBar") || themeColor(kThemeSeekBar))
+    if (themeColor(kThemeSeekBar) || ytlBool(@"redProgressBar"))
         %orig([UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:0.60]);
     else %orig;
 }
@@ -199,51 +134,35 @@ void ytl_clearThemeCache(void) {
 }
 %end
 
-#pragma mark - Tab Bar Background
-
-%hook YTPivotBarView
-- (void)setBackgroundColor:(UIColor *)color {
-    UIColor *c = themeColor(kThemeBackground);
-    %orig(c ?: color);
-}
-%end
-
-#pragma mark - Accent on Material Design buttons
+#pragma mark - Material Design
 
 %hook QTMColorGroup
-- (UIColor *)accentColor {
-    UIColor *c = themeColor(kThemeAccent);
-    return c ?: %orig;
-}
-- (UIColor *)brightAccentColor {
-    UIColor *c = themeColor(kThemeAccent);
-    return c ?: %orig;
-}
-- (UIColor *)buttonBackgroundColor {
-    UIColor *c = themeColor(kThemeAccent);
-    return c ? [c colorWithAlphaComponent:0.15] : %orig;
-}
+- (UIColor *)accentColor          { return themed(kThemeAccent, 1.0) ?: %orig; }
+- (UIColor *)brightAccentColor    { return themed(kThemeAccent, 1.0) ?: %orig; }
+- (UIColor *)buttonBackgroundColor { return themed(kThemeAccent, 0.15) ?: %orig; }
+- (UIColor *)bodyTextColor        { return themed(kThemeTextPrimary, 1.0) ?: %orig; }
+- (UIColor *)lightBodyTextColor   { return themed(kThemeTextSecondary, 1.0) ?: %orig; }
 %end
 
-#pragma mark - Background on key view classes
+#pragma mark - View background overrides (only when theme background is set)
 
-%hook YTAsyncCollectionView
-- (void)setBackgroundColor:(UIColor *)color {
-    UIColor *c = themeColor(kThemeBackground);
-    %orig(c ?: color);
-}
+// Macro to avoid repeating the same hook pattern
+#define HOOK_BG(cls) \
+%hook cls \
+- (void)setBackgroundColor:(UIColor *)color { \
+    UIColor *c = themeColor(kThemeBackground); \
+    %orig(c ?: color); \
+} \
 %end
 
-%hook YTSearchView
-- (void)setBackgroundColor:(UIColor *)color {
-    UIColor *c = themeColor(kThemeBackground);
-    %orig(c ?: color);
-}
-%end
-
-%hook YTSearchBoxView
-- (void)setBackgroundColor:(UIColor *)color {
-    UIColor *c = themeColor(kThemeBackground);
-    %orig(c ?: color);
-}
-%end
+HOOK_BG(YTAsyncCollectionView)
+HOOK_BG(YTSearchView)
+HOOK_BG(YTSearchBoxView)
+HOOK_BG(YTHeaderView)
+HOOK_BG(YTSubheaderContainerView)
+HOOK_BG(YTAppView)
+HOOK_BG(YTCollectionView)
+HOOK_BG(YTCommentView)
+HOOK_BG(YTCreateCommentTextView)
+HOOK_BG(YTCreateCommentAccessoryView)
+HOOK_BG(YTEngagementPanelView)

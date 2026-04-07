@@ -12,26 +12,40 @@ API_AVAILABLE(ios(14.0))
 @interface YTLColorPickerDelegate : NSObject <UIColorPickerViewControllerDelegate>
 @property (nonatomic, copy) NSString *themeKey;
 @property (nonatomic, weak) YTSettingsViewController *settingsVC;
+@property (nonatomic, assign) BOOL didSelect;
 @end
 
 @implementation YTLColorPickerDelegate
+- (void)colorPickerViewController:(UIColorPickerViewController *)vc didSelectColor:(UIColor *)color continuously:(BOOL)continuously {
+    // Live save as user picks — immediate feedback
+    if (color && self.themeKey) {
+        self.didSelect = YES;
+        NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
+        [[YTLUserDefaults standardUserDefaults] setObject:data forKey:self.themeKey];
+        ytl_clearThemeCache();
+    }
+}
 - (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)vc {
+    // Final save + UI update on dismiss
     UIColor *color = vc.selectedColor;
     if (color && self.themeKey) {
         NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
         [[YTLUserDefaults standardUserDefaults] setObject:data forKey:self.themeKey];
         ytl_clearThemeCache();
-        [self.settingsVC reloadData];
+    }
 
-        // Show confirmation toast
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            UIAlertController *saved = [UIAlertController alertControllerWithTitle:@"Color Saved"
-                message:@"Restart the app to fully apply the new color."
+    // Reload settings to update hex labels
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self.settingsVC reloadData];
+        if (self.didSelect) {
+            UIAlertController *saved = [UIAlertController alertControllerWithTitle:LOC(@"ColorSaved")
+                message:LOC(@"ColorSavedDesc")
                 preferredStyle:UIAlertControllerStyleAlert];
             [saved addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-            [self.settingsVC presentViewController:saved animated:YES completion:nil];
-        });
-    }
+            UIViewController *presenter = self.settingsVC.navigationController.topViewController ?: self.settingsVC;
+            [presenter presentViewController:saved animated:YES completion:nil];
+        }
+    });
 }
 @end
 
@@ -222,9 +236,13 @@ static NSString *GetCacheSize() {
                     YTLColorPickerDelegate *delegate = [[YTLColorPickerDelegate alloc] init];
                     delegate.themeKey = themeKey;
                     delegate.settingsVC = settingsViewController;
+                    delegate.didSelect = NO;
                     picker.delegate = delegate;
                     _colorPickerDelegate = delegate;
-                    [settingsViewController presentViewController:picker animated:YES completion:nil];
+                    // Present from the topmost visible VC to avoid conflicts
+                    UIViewController *presenter = settingsViewController.navigationController.topViewController ?: settingsViewController;
+                    while (presenter.presentedViewController) presenter = presenter.presentedViewController;
+                    [presenter presentViewController:picker animated:YES completion:nil];
                 }
             };
 
