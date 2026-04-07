@@ -1,4 +1,6 @@
 #import "YTLite.h"
+#import <objc/runtime.h>
+#import <substrate.h>
 
 // Theme color keys
 static NSString *const kThemeOverlayButtons = @"theme_overlayButtons";
@@ -147,25 +149,27 @@ static inline UIColor *themed(NSString *key, CGFloat alpha) {
 - (UIColor *)lightBodyTextColor   { return themed(kThemeTextSecondary, 1.0) ?: %orig; }
 %end
 
-#pragma mark - View background overrides (only when theme background is set)
+#pragma mark - View background overrides
 
-// Macro to avoid repeating the same hook pattern
-#define HOOK_BG(cls) \
-%hook cls \
-- (void)setBackgroundColor:(UIColor *)color { \
-    UIColor *c = themeColor(kThemeBackground); \
-    %orig(c ?: color); \
-} \
-%end
+// Use MSHookMessageEx directly for views not in YouTubeHeader
+static void (*orig_setBackgroundColor)(id, SEL, UIColor *);
+static void hook_setBackgroundColor(id self, SEL _cmd, UIColor *color) {
+    UIColor *c = themeColor(kThemeBackground);
+    orig_setBackgroundColor(self, _cmd, c ?: color);
+}
 
-HOOK_BG(YTAsyncCollectionView)
-HOOK_BG(YTSearchView)
-HOOK_BG(YTSearchBoxView)
-HOOK_BG(YTHeaderView)
-HOOK_BG(YTSubheaderContainerView)
-HOOK_BG(YTAppView)
-HOOK_BG(YTCollectionView)
-HOOK_BG(YTCommentView)
-HOOK_BG(YTCreateCommentTextView)
-HOOK_BG(YTCreateCommentAccessoryView)
-HOOK_BG(YTEngagementPanelView)
+%ctor {
+    NSArray *bgClasses = @[
+        @"YTAsyncCollectionView", @"YTSearchView", @"YTSearchBoxView",
+        @"YTHeaderView", @"YTSubheaderContainerView", @"YTAppView",
+        @"YTCollectionView", @"YTCommentView", @"YTCreateCommentTextView",
+        @"YTCreateCommentAccessoryView", @"YTEngagementPanelView"
+    ];
+    SEL bgSel = @selector(setBackgroundColor:);
+    for (NSString *name in bgClasses) {
+        Class cls = objc_getClass(name.UTF8String);
+        if (cls) {
+            MSHookMessageEx(cls, bgSel, (IMP)hook_setBackgroundColor, (IMP *)&orig_setBackgroundColor);
+        }
+    }
+}
