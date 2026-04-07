@@ -1296,12 +1296,9 @@ static NSArray *ytlDefaultTabs() {
 }
 %end
 
-// Startup Tab + Frosted Pivot Bar
+// Startup Tab
 BOOL isTabSelected = NO;
 %hook YTPivotBarViewController
-- (BOOL)isFrostedPivotBarPermitted {
-    return ytlBool(@"frostedPivot") ? NO : %orig;
-}
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
 
