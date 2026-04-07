@@ -1298,6 +1298,18 @@ BOOL isTabSelected = NO;
 - (BOOL)isFrostedPivotBarPermitted {
     return ytlBool(@"frostedPivot") ? NO : %orig;
 }
+- (void)viewDidLayoutSubviews {
+    %orig;
+    if (ytlBool(@"frostedPivot")) {
+        YTPivotBarView *pivotBarView = [self pivotBarView];
+        for (UIView *subview in pivotBarView.subviews) {
+            if ([subview isKindOfClass:[UIVisualEffectView class]]) {
+                subview.hidden = YES;
+            }
+        }
+        pivotBarView.backgroundColor = [UIColor systemBackgroundColor];
+    }
+}
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
 
