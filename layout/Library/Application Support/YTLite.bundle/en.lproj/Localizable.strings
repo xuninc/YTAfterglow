@@ -412,6 +412,9 @@
 "RestartNow" = "Restart Now";
 "Later" = "Later";
 "ResetAndRestart" = "Reset & Restart";
+"Presets" = "Theme Presets";
+"CustomColors" = "Custom Colors";
+"PresetApplied" = "Theme Applied";
 "RemoveLabels" = "Remove tab labels";
 "RemoveLabelsDesc" = "Removes text labels from the Tab bar buttons.";
 "RemoveIndicators" = "Remove tab indicators";

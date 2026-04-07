@@ -279,6 +279,126 @@ static NSString *GetCacheSize() {
                 }
             };
 
+            // Helper: save a color to a theme key
+            void (^saveColor)(NSString *, UIColor *) = ^(NSString *key, UIColor *color) {
+                NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
+                [[YTLUserDefaults standardUserDefaults] setObject:data forKey:key];
+            };
+
+            // Helper: apply a full preset
+            void (^applyPreset)(UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *) =
+                ^(UIColor *overlay, UIColor *tabIcons, UIColor *seekBar, UIColor *bg, UIColor *textP, UIColor *textS, UIColor *nav, UIColor *accent) {
+                    saveColor(@"theme_overlayButtons", overlay);
+                    saveColor(@"theme_tabBarIcons", tabIcons);
+                    saveColor(@"theme_seekBar", seekBar);
+                    saveColor(@"theme_background", bg);
+                    saveColor(@"theme_textPrimary", textP);
+                    saveColor(@"theme_textSecondary", textS);
+                    saveColor(@"theme_navBar", nav);
+                    saveColor(@"theme_accent", accent);
+                    ytl_clearThemeCache();
+                };
+
+            // Helper: create a preset row
+            void (^addPreset)(NSString *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *) =
+                ^(NSString *name, UIColor *overlay, UIColor *tabIcons, UIColor *seekBar, UIColor *bg, UIColor *textP, UIColor *textS, UIColor *nav, UIColor *accent) {
+                    YTSettingsSectionItem *item = [YTSettingsSectionItemClass itemWithTitle:name
+                        accessibilityIdentifier:nil
+                        detailTextBlock:nil
+                        selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
+                            applyPreset(overlay, tabIcons, seekBar, bg, textP, textS, nav, accent);
+                            UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"PresetApplied")
+                                message:[NSString stringWithFormat:@"%@ %@", name, LOC(@"ColorSavedDesc")]
+                                preferredStyle:UIAlertControllerStyleAlert];
+                            [alert addAction:[UIAlertAction actionWithTitle:LOC(@"RestartNow") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) { exit(0); }]];
+                            [alert addAction:[UIAlertAction actionWithTitle:LOC(@"Later") style:UIAlertActionStyleCancel handler:nil]];
+                            UIViewController *presenter = settingsViewController.navigationController.topViewController ?: settingsViewController;
+                            [presenter presentViewController:alert animated:YES completion:nil];
+                            return YES;
+                        }];
+                    [rows addObject:item];
+                };
+
+            // --- Presets ---
+            YTSettingsSectionItem *presetsHeader = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Presets") accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
+            [rows addObject:presetsHeader];
+
+            // OLED Dark — pure black, white text, red accent
+            addPreset(@"OLED Dark",
+                [UIColor whiteColor],                                                    // overlay
+                [UIColor whiteColor],                                                    // tab icons
+                [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:1.0],                // seek bar
+                [UIColor blackColor],                                                    // background
+                [UIColor whiteColor],                                                    // primary text
+                [UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:1.0],              // secondary text
+                [UIColor blackColor],                                                    // nav bar
+                [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:1.0]                 // accent
+            );
+
+            // Midnight Blue
+            addPreset(@"Midnight Blue",
+                [UIColor colorWithRed:0.6 green:0.8 blue:1.0 alpha:1.0],                // overlay
+                [UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0],                // tab icons
+                [UIColor colorWithRed:0.2 green:0.5 blue:1.0 alpha:1.0],                // seek bar
+                [UIColor colorWithRed:0.05 green:0.05 blue:0.15 alpha:1.0],             // background
+                [UIColor colorWithRed:0.85 green:0.9 blue:1.0 alpha:1.0],               // primary text
+                [UIColor colorWithRed:0.5 green:0.6 blue:0.75 alpha:1.0],               // secondary text
+                [UIColor colorWithRed:0.08 green:0.08 blue:0.2 alpha:1.0],              // nav bar
+                [UIColor colorWithRed:0.2 green:0.5 blue:1.0 alpha:1.0]                 // accent
+            );
+
+            // Solarized Dark
+            addPreset(@"Solarized Dark",
+                [UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0],             // overlay (base1)
+                [UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0],             // tab icons
+                [UIColor colorWithRed:0.52 green:0.60 blue:0.0 alpha:1.0],              // seek bar (green)
+                [UIColor colorWithRed:0.0 green:0.17 blue:0.21 alpha:1.0],              // background (base03)
+                [UIColor colorWithRed:0.93 green:0.91 blue:0.84 alpha:1.0],             // primary text (base3)
+                [UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0],             // secondary text (base1)
+                [UIColor colorWithRed:0.03 green:0.21 blue:0.26 alpha:1.0],             // nav bar (base02)
+                [UIColor colorWithRed:0.15 green:0.55 blue:0.82 alpha:1.0]              // accent (blue)
+            );
+
+            // Monokai
+            addPreset(@"Monokai",
+                [UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0],             // overlay
+                [UIColor colorWithRed:0.65 green:0.89 blue:0.18 alpha:1.0],             // tab icons (green)
+                [UIColor colorWithRed:0.98 green:0.15 blue:0.45 alpha:1.0],             // seek bar (pink)
+                [UIColor colorWithRed:0.15 green:0.16 blue:0.13 alpha:1.0],             // background
+                [UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0],             // primary text
+                [UIColor colorWithRed:0.46 green:0.44 blue:0.37 alpha:1.0],             // secondary text
+                [UIColor colorWithRed:0.2 green:0.2 blue:0.17 alpha:1.0],               // nav bar
+                [UIColor colorWithRed:0.40 green:0.85 blue:0.94 alpha:1.0]              // accent (cyan)
+            );
+
+            // Rose Gold
+            addPreset(@"Rose Gold",
+                [UIColor colorWithRed:1.0 green:0.8 blue:0.8 alpha:1.0],                // overlay
+                [UIColor colorWithRed:0.93 green:0.7 blue:0.65 alpha:1.0],              // tab icons
+                [UIColor colorWithRed:0.93 green:0.46 blue:0.5 alpha:1.0],              // seek bar
+                [UIColor colorWithRed:0.1 green:0.07 blue:0.08 alpha:1.0],              // background
+                [UIColor colorWithRed:1.0 green:0.92 blue:0.9 alpha:1.0],               // primary text
+                [UIColor colorWithRed:0.7 green:0.55 blue:0.55 alpha:1.0],              // secondary text
+                [UIColor colorWithRed:0.15 green:0.1 blue:0.11 alpha:1.0],              // nav bar
+                [UIColor colorWithRed:0.93 green:0.46 blue:0.5 alpha:1.0]               // accent
+            );
+
+            // Forest
+            addPreset(@"Forest",
+                [UIColor colorWithRed:0.8 green:0.93 blue:0.8 alpha:1.0],               // overlay
+                [UIColor colorWithRed:0.4 green:0.75 blue:0.4 alpha:1.0],               // tab icons
+                [UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0],                // seek bar
+                [UIColor colorWithRed:0.06 green:0.1 blue:0.06 alpha:1.0],              // background
+                [UIColor colorWithRed:0.85 green:0.95 blue:0.85 alpha:1.0],             // primary text
+                [UIColor colorWithRed:0.5 green:0.65 blue:0.5 alpha:1.0],               // secondary text
+                [UIColor colorWithRed:0.08 green:0.14 blue:0.08 alpha:1.0],             // nav bar
+                [UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0]                 // accent
+            );
+
+            // --- Individual Colors ---
+            YTSettingsSectionItem *colorsHeader = [YTSettingsSectionItemClass itemWithTitle:LOC(@"CustomColors") accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
+            [rows addObject:colorsHeader];
+
             addColorRow(@"OverlayButtons", @"theme_overlayButtons");
             addColorRow(@"TabBarIcons", @"theme_tabBarIcons");
             addColorRow(@"SeekBar", @"theme_seekBar");
