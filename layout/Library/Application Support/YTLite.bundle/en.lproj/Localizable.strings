@@ -407,6 +407,8 @@
 "ResetAllColorsConfirm" = "This will remove all custom colors and restore defaults.";
 "Reset" = "Reset";
 "Cancel" = "Cancel";
+"ColorSaved" = "Color Saved";
+"ColorSavedDesc" = "Restart the app to fully apply the new color.";
 "RemoveLabels" = "Remove tab labels";
 "RemoveLabelsDesc" = "Removes text labels from the Tab bar buttons.";
 "RemoveIndicators" = "Remove tab indicators";
