@@ -1279,8 +1279,8 @@ static NSArray *ytlDefaultTabs() {
         NSString *selectedPath = [bundle pathForResource:[selectedName stringByAppendingString:@"@3x"] ofType:@"png"]
                               ?: [bundle pathForResource:[selectedName stringByAppendingString:@"@2x"] ofType:@"png"];
 
-        UIImage *normal = normalPath ? [[UIImage imageWithContentsOfFile:normalPath] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] : nil;
-        UIImage *selected = selectedPath ? [[UIImage imageWithContentsOfFile:selectedPath] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal] : nil;
+        UIImage *normal = normalPath ? [[UIImage imageWithContentsOfFile:normalPath] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] : nil;
+        UIImage *selected = selectedPath ? [[UIImage imageWithContentsOfFile:selectedPath] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate] : nil;
 
         YTQTMButton *button = self.navigationButton;
         if (normal) [button setImage:normal forState:UIControlStateNormal];
