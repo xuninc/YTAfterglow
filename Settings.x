@@ -1,12 +1,33 @@
 #import "YTLite.h"
 #import <objc/runtime.h>
 
+extern void ytl_clearThemeCache(void);
+
 @interface YTSettingsSectionItemManager (YTLite)
 - (void)updateYTLiteSectionWithEntry:(id)entry;
 @end
 
+// Color picker delegate that properly retains itself until dismissed
+API_AVAILABLE(ios(14.0))
+@interface YTLColorPickerDelegate : NSObject <UIColorPickerViewControllerDelegate>
+@property (nonatomic, copy) NSString *themeKey;
+@property (nonatomic, weak) YTSettingsViewController *settingsVC;
+@end
+
+@implementation YTLColorPickerDelegate
+- (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)vc {
+    UIColor *color = vc.selectedColor;
+    if (color && self.themeKey) {
+        NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
+        [[YTLUserDefaults standardUserDefaults] setObject:data forKey:self.themeKey];
+        ytl_clearThemeCache();
+        [self.settingsVC reloadData];
+    }
+}
+@end
+
 static const NSInteger YTLiteSection = 789;
-static id _colorPickerDelegate = nil;
+static YTLColorPickerDelegate *_colorPickerDelegate = nil;
 
 static NSString *GetCacheSize() {
     NSString *cachePath = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
@@ -167,8 +188,6 @@ static NSString *GetCacheSize() {
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
 
-            extern void ytl_clearThemeCache(void);
-
             // Helper: hex string from UIColor
             NSString *(^hexFromColor)(UIColor *) = ^NSString *(UIColor *color) {
                 CGFloat r, g, b, a;
@@ -185,6 +204,21 @@ static NSString *GetCacheSize() {
                 return [u decodeObjectForKey:NSKeyedArchiveRootObjectKey];
             };
 
+            // Helper: present color picker for a theme key
+            void (^presentPicker)(NSString *, UIColor *) = ^(NSString *themeKey, UIColor *startColor) {
+                if (@available(iOS 14.0, *)) {
+                    UIColorPickerViewController *picker = [[UIColorPickerViewController alloc] init];
+                    picker.supportsAlpha = NO;
+                    if (startColor) picker.selectedColor = startColor;
+                    YTLColorPickerDelegate *delegate = [[YTLColorPickerDelegate alloc] init];
+                    delegate.themeKey = themeKey;
+                    delegate.settingsVC = settingsViewController;
+                    picker.delegate = delegate;
+                    _colorPickerDelegate = delegate;
+                    [settingsViewController presentViewController:picker animated:YES completion:nil];
+                }
+            };
+
             // Helper: create a color picker row for a theme element
             void (^addColorRow)(NSString *, NSString *) = ^(NSString *title, NSString *themeKey) {
                 YTSettingsSectionItem *item = [YTSettingsSectionItemClass itemWithTitle:LOC(title)
@@ -196,55 +230,35 @@ static NSString *GetCacheSize() {
                     selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
                         UIColor *existing = loadColor(themeKey);
 
+                        UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(title)
+                            message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+
+                        [alert addAction:[UIAlertAction actionWithTitle:existing ? LOC(@"ChangeColor") : LOC(@"PickColor")
+                            style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+                                // Delay to let action sheet dismiss first
+                                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                                    presentPicker(themeKey, existing);
+                                });
+                            }]];
+
                         if (existing) {
-                            // Color already set — show options
-                            UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(title)
-                                message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-                            [alert addAction:[UIAlertAction actionWithTitle:LOC(@"ChangeColor") style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-                                if (@available(iOS 14.0, *)) {
-                                    UIColorPickerViewController *picker = [[UIColorPickerViewController alloc] init];
-                                    picker.supportsAlpha = NO;
-                                    picker.selectedColor = existing;
-                                    id delegate = [[NSObject alloc] init];
-                                    class_addMethod([NSObject class], @selector(colorPickerViewControllerDidFinish:),
-                                        imp_implementationWithBlock(^(id self, UIColorPickerViewController *vc) {
-                                            NSData *data = [NSKeyedArchiver archivedDataWithRootObject:vc.selectedColor requiringSecureCoding:NO error:nil];
-                                            [[YTLUserDefaults standardUserDefaults] setObject:data forKey:themeKey];
-                                            ytl_clearThemeCache();
-                                            [settingsViewController reloadData];
-                                            _colorPickerDelegate = nil;
-                                        }), "v@:@");
-                                    picker.delegate = (id)delegate;
-                                    _colorPickerDelegate = delegate;
-                                    [settingsViewController presentViewController:picker animated:YES completion:nil];
-                                }
-                            }]];
-                            [alert addAction:[UIAlertAction actionWithTitle:LOC(@"ResetDefault") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
-                                [[YTLUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
-                                ytl_clearThemeCache();
-                                [settingsViewController reloadData];
-                            }]];
-                            [alert addAction:[UIAlertAction actionWithTitle:LOC(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
-                            [settingsViewController presentViewController:alert animated:YES completion:nil];
-                        } else {
-                            // No color set — go straight to picker
-                            if (@available(iOS 14.0, *)) {
-                                UIColorPickerViewController *picker = [[UIColorPickerViewController alloc] init];
-                                picker.supportsAlpha = NO;
-                                id delegate = [[NSObject alloc] init];
-                                class_addMethod([NSObject class], @selector(colorPickerViewControllerDidFinish:),
-                                    imp_implementationWithBlock(^(id self, UIColorPickerViewController *vc) {
-                                        NSData *data = [NSKeyedArchiver archivedDataWithRootObject:vc.selectedColor requiringSecureCoding:NO error:nil];
-                                        [[YTLUserDefaults standardUserDefaults] setObject:data forKey:themeKey];
-                                        ytl_clearThemeCache();
-                                        [settingsViewController reloadData];
-                                        _colorPickerDelegate = nil;
-                                    }), "v@:@");
-                                picker.delegate = (id)delegate;
-                                _colorPickerDelegate = delegate;
-                                [settingsViewController presentViewController:picker animated:YES completion:nil];
-                            }
+                            [alert addAction:[UIAlertAction actionWithTitle:LOC(@"ResetDefault")
+                                style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+                                    [[YTLUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
+                                    ytl_clearThemeCache();
+                                    [settingsViewController reloadData];
+                                }]];
                         }
+
+                        [alert addAction:[UIAlertAction actionWithTitle:LOC(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
+
+                        // iPad popover anchor
+                        if (alert.popoverPresentationController) {
+                            alert.popoverPresentationController.sourceView = settingsViewController.view;
+                            alert.popoverPresentationController.sourceRect = CGRectMake(settingsViewController.view.bounds.size.width / 2, settingsViewController.view.bounds.size.height / 2, 0, 0);
+                        }
+
+                        [settingsViewController presentViewController:alert animated:YES completion:nil];
                         return YES;
                     }];
                 [rows addObject:item];
