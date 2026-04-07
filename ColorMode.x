@@ -1,115 +1,179 @@
 #import "YTLite.h"
 
-// Capture real UIColor values BEFORE hooks override them
-static UIColor *kRealWhite = nil;
-static UIColor *kLowContrastColor = nil;
-static UIColor *customContrastColor = nil;
+// Theme color keys
+static NSString *const kThemeOverlayButtons = @"theme_overlayButtons";
+static NSString *const kThemeTabBarIcons    = @"theme_tabBarIcons";
+static NSString *const kThemeSeekBar        = @"theme_seekBar";
+static NSString *const kThemeBackground     = @"theme_background";
+static NSString *const kThemeTextPrimary    = @"theme_textPrimary";
+static NSString *const kThemeTextSecondary  = @"theme_textSecondary";
+static NSString *const kThemeNavBar         = @"theme_navBar";
+static NSString *const kThemeAccent         = @"theme_accent";
 
-__attribute__((constructor)) static void initColors() {
-    kRealWhite = [UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0];
-    kLowContrastColor = [UIColor colorWithRed:0.56 green:0.56 blue:0.56 alpha:1.0];
+// Cache for decoded colors
+static NSMutableDictionary *colorCache = nil;
+
+static UIColor *themeColor(NSString *key) {
+    if (!colorCache) colorCache = [NSMutableDictionary dictionary];
+
+    // Check cache first
+    id cached = colorCache[key];
+    if (cached == [NSNull null]) return nil;
+    if (cached) return cached;
+
+    // Decode from user defaults
+    NSData *data = [[YTLUserDefaults standardUserDefaults] objectForKey:key];
+    if (!data) {
+        colorCache[key] = [NSNull null];
+        return nil;
+    }
+    NSKeyedUnarchiver *u = [[NSKeyedUnarchiver alloc] initForReadingFromData:data error:nil];
+    [u setRequiresSecureCoding:NO];
+    UIColor *color = [u decodeObjectForKey:NSKeyedArchiveRootObjectKey];
+    colorCache[key] = color ?: [NSNull null];
+    return color;
 }
 
-static inline NSInteger contrastMode() {
-    return [[YTLUserDefaults standardUserDefaults] integerForKey:@"contrastMode"];
+// Call this when a theme color changes to clear the cache
+void ytl_clearThemeCache(void) {
+    [colorCache removeAllObjects];
 }
 
-static inline UIColor *activeContrastColor() {
-    if (contrastMode() == 2 && customContrastColor) return customContrastColor;
-    return kLowContrastColor;
-}
-
-// 0 = off, 1 = low contrast (preset gray), 2 = custom color
-%group gContrastMode
+#pragma mark - Text Colors
 
 %hook YTCommonColorPalette
 - (UIColor *)textPrimary {
-    return self.pageStyle == 1 ? kRealWhite : %orig;
+    UIColor *c = themeColor(kThemeTextPrimary);
+    return c ?: %orig;
 }
 - (UIColor *)textSecondary {
-    return self.pageStyle == 1 ? kRealWhite : %orig;
+    UIColor *c = themeColor(kThemeTextSecondary);
+    return c ?: %orig;
 }
+
+#pragma mark - Overlay Button Colors
 - (UIColor *)overlayTextPrimary {
-    return self.pageStyle == 1 ? kRealWhite : %orig;
+    UIColor *c = themeColor(kThemeOverlayButtons);
+    return c ?: %orig;
 }
 - (UIColor *)overlayTextSecondary {
-    return self.pageStyle == 1 ? kRealWhite : %orig;
-}
-- (UIColor *)iconActive {
-    return self.pageStyle == 1 ? kRealWhite : %orig;
-}
-- (UIColor *)iconActiveOther {
-    return self.pageStyle == 1 ? kRealWhite : %orig;
-}
-- (UIColor *)brandIconActive {
-    return self.pageStyle == 1 ? kRealWhite : %orig;
-}
-- (UIColor *)staticBrandWhite {
-    return self.pageStyle == 1 ? kRealWhite : %orig;
+    UIColor *c = themeColor(kThemeOverlayButtons);
+    return c ?: %orig;
 }
 - (UIColor *)overlayIconActiveOther {
-    return self.pageStyle == 1 ? kRealWhite : %orig;
+    UIColor *c = themeColor(kThemeOverlayButtons);
+    return c ?: %orig;
 }
 - (UIColor *)overlayIconInactive {
-    return self.pageStyle == 1 ? [kRealWhite colorWithAlphaComponent:0.7] : %orig;
+    UIColor *c = themeColor(kThemeOverlayButtons);
+    return c ? [c colorWithAlphaComponent:0.7] : %orig;
 }
 - (UIColor *)overlayIconDisabled {
-    return self.pageStyle == 1 ? [kRealWhite colorWithAlphaComponent:0.3] : %orig;
+    UIColor *c = themeColor(kThemeOverlayButtons);
+    return c ? [c colorWithAlphaComponent:0.3] : %orig;
 }
 - (UIColor *)overlayFilledButtonActive {
-    return self.pageStyle == 1 ? [kRealWhite colorWithAlphaComponent:0.2] : %orig;
+    UIColor *c = themeColor(kThemeOverlayButtons);
+    return c ? [c colorWithAlphaComponent:0.2] : %orig;
+}
+
+#pragma mark - Icon Colors (Tab Bar + General)
+- (UIColor *)iconActive {
+    UIColor *c = themeColor(kThemeTabBarIcons);
+    return c ?: %orig;
+}
+- (UIColor *)iconActiveOther {
+    UIColor *c = themeColor(kThemeTabBarIcons);
+    return c ?: %orig;
+}
+- (UIColor *)iconInactive {
+    UIColor *c = themeColor(kThemeTabBarIcons);
+    return c ? [c colorWithAlphaComponent:0.5] : %orig;
+}
+- (UIColor *)brandIconActive {
+    UIColor *c = themeColor(kThemeTabBarIcons);
+    return c ?: %orig;
+}
+
+#pragma mark - Background Colors
+- (UIColor *)background1 {
+    UIColor *c = themeColor(kThemeBackground);
+    return c ?: %orig;
+}
+- (UIColor *)background2 {
+    UIColor *c = themeColor(kThemeBackground);
+    return c ?: %orig;
+}
+- (UIColor *)background3 {
+    UIColor *c = themeColor(kThemeBackground);
+    return c ?: %orig;
+}
+- (UIColor *)baseBackground {
+    UIColor *c = themeColor(kThemeBackground);
+    return c ?: %orig;
+}
+- (UIColor *)raisedBackground {
+    UIColor *c = themeColor(kThemeBackground);
+    return c ?: %orig;
+}
+- (UIColor *)menuBackground {
+    UIColor *c = themeColor(kThemeBackground);
+    return c ?: %orig;
+}
+- (UIColor *)generalBackgroundA {
+    UIColor *c = themeColor(kThemeBackground);
+    return c ?: %orig;
+}
+
+#pragma mark - Accent Colors
+- (UIColor *)callToAction {
+    UIColor *c = themeColor(kThemeAccent);
+    return c ?: %orig;
+}
+- (UIColor *)callToActionInverse {
+    UIColor *c = themeColor(kThemeAccent);
+    return c ?: %orig;
 }
 %end
 
-%hook YTColor
-+ (BOOL)darkerPaletteTextColorEnabled { return NO; }
-+ (UIColor *)white1 { return activeContrastColor(); }
-+ (UIColor *)white2 { return activeContrastColor(); }
-+ (UIColor *)white3 { return activeContrastColor(); }
-+ (UIColor *)white4 { return activeContrastColor(); }
-+ (UIColor *)white5 { return activeContrastColor(); }
-+ (UIColor *)grey1 { return activeContrastColor(); }
-+ (UIColor *)grey2 { return activeContrastColor(); }
-%end
+#pragma mark - Seek/Progress Bar
 
-%hook UIColor
-+ (UIColor *)colorNamed:(NSString *)name {
-    NSArray *targetColors = @[
-        @"ychGrey7", @"skt_chipBackgroundColor", @"placeholderTextColor",
-        @"systemLightGrayColor", @"systemExtraLightGrayColor",
-        @"labelColor", @"secondaryLabelColor",
-        @"tertiaryLabelColor", @"quaternaryLabelColor"
-    ];
-    return [targetColors containsObject:name] ? activeContrastColor() : %orig;
+%hook YTInlinePlayerBarContainerView
+- (id)quietProgressBarColor {
+    UIColor *c = themeColor(kThemeSeekBar);
+    return c ?: %orig;
 }
 %end
+
+%hook YTSegmentableInlinePlayerBarView
+- (void)setPlayedProgressBarColor:(id)color {
+    UIColor *c = themeColor(kThemeSeekBar);
+    %orig(c ?: color);
+}
+%end
+
+#pragma mark - Navigation Bar
+
+%hook YTNavigationBar
+- (void)setBackgroundColor:(UIColor *)color {
+    UIColor *c = themeColor(kThemeNavBar);
+    %orig(c ?: color);
+}
+- (void)setBarTintColor:(UIColor *)color {
+    UIColor *c = themeColor(kThemeNavBar);
+    %orig(c ?: color);
+}
+%end
+
+#pragma mark - Accent on QTM Material Buttons
 
 %hook QTMColorGroup
-- (UIColor *)tint100 { return kRealWhite; }
-- (UIColor *)tint300 { return kRealWhite; }
-- (UIColor *)tint500 { return kRealWhite; }
-- (UIColor *)tint700 { return kRealWhite; }
-- (UIColor *)accentColor { return kRealWhite; }
-- (UIColor *)brightAccentColor { return kRealWhite; }
-- (UIColor *)regularColor { return kRealWhite; }
-- (UIColor *)darkerColor { return kRealWhite; }
-- (UIColor *)bodyTextColor { return kRealWhite; }
-- (UIColor *)lightBodyTextColor { return kRealWhite; }
-%end
-
-%end
-
-%ctor {
-    NSInteger mode = contrastMode();
-    if (mode > 0) {
-        if (mode == 2) {
-            NSData *colorData = [[YTLUserDefaults standardUserDefaults] objectForKey:@"customContrastColor"];
-            if (colorData) {
-                NSKeyedUnarchiver *unarchiver = [[NSKeyedUnarchiver alloc] initForReadingFromData:colorData error:nil];
-                [unarchiver setRequiresSecureCoding:NO];
-                customContrastColor = [unarchiver decodeObjectForKey:NSKeyedArchiveRootObjectKey];
-            }
-        }
-        %init(gContrastMode);
-    }
+- (UIColor *)accentColor {
+    UIColor *c = themeColor(kThemeAccent);
+    return c ?: %orig;
 }
+- (UIColor *)brightAccentColor {
+    UIColor *c = themeColor(kThemeAccent);
+    return c ?: %orig;
+}
+%end
