@@ -6,6 +6,7 @@
 @end
 
 static const NSInteger YTLiteSection = 789;
+static id _colorPickerDelegate = nil;
 
 static NSString *GetCacheSize() {
     NSString *cachePath = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
@@ -205,17 +206,16 @@ static NSString *GetCacheSize() {
                                     picker.supportsAlpha = NO;
                                     picker.selectedColor = existing;
                                     id delegate = [[NSObject alloc] init];
-                                    static __attribute__((used)) id _held = nil;
                                     class_addMethod([NSObject class], @selector(colorPickerViewControllerDidFinish:),
                                         imp_implementationWithBlock(^(id self, UIColorPickerViewController *vc) {
                                             NSData *data = [NSKeyedArchiver archivedDataWithRootObject:vc.selectedColor requiringSecureCoding:NO error:nil];
                                             [[YTLUserDefaults standardUserDefaults] setObject:data forKey:themeKey];
                                             ytl_clearThemeCache();
                                             [settingsViewController reloadData];
-                                            _held = nil;
+                                            _colorPickerDelegate = nil;
                                         }), "v@:@");
                                     picker.delegate = (id)delegate;
-                                    _held = delegate;
+                                    _colorPickerDelegate = delegate;
                                     [settingsViewController presentViewController:picker animated:YES completion:nil];
                                 }
                             }]];
@@ -232,17 +232,16 @@ static NSString *GetCacheSize() {
                                 UIColorPickerViewController *picker = [[UIColorPickerViewController alloc] init];
                                 picker.supportsAlpha = NO;
                                 id delegate = [[NSObject alloc] init];
-                                static __attribute__((used)) id _held2 = nil;
                                 class_addMethod([NSObject class], @selector(colorPickerViewControllerDidFinish:),
                                     imp_implementationWithBlock(^(id self, UIColorPickerViewController *vc) {
                                         NSData *data = [NSKeyedArchiver archivedDataWithRootObject:vc.selectedColor requiringSecureCoding:NO error:nil];
                                         [[YTLUserDefaults standardUserDefaults] setObject:data forKey:themeKey];
                                         ytl_clearThemeCache();
                                         [settingsViewController reloadData];
-                                        _held2 = nil;
+                                        _colorPickerDelegate = nil;
                                     }), "v@:@");
                                 picker.delegate = (id)delegate;
-                                _held2 = delegate;
+                                _colorPickerDelegate = delegate;
                                 [settingsViewController presentViewController:picker animated:YES completion:nil];
                             }
                         }
