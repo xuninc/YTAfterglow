@@ -13,20 +13,25 @@ API_AVAILABLE(ios(14.0))
 @property (nonatomic, copy) NSString *themeKey;
 @property (nonatomic, weak) YTSettingsViewController *settingsVC;
 @property (nonatomic, assign) BOOL didSelect;
+@property (nonatomic, assign) CFAbsoluteTime lastSave;
 @end
 
 @implementation YTLColorPickerDelegate
 - (void)colorPickerViewController:(UIColorPickerViewController *)vc didSelectColor:(UIColor *)color continuously:(BOOL)continuously {
-    // Live save as user picks — immediate feedback
-    if (color && self.themeKey) {
-        self.didSelect = YES;
-        NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
-        [[YTLUserDefaults standardUserDefaults] setObject:data forKey:self.themeKey];
-        ytl_clearThemeCache();
-    }
+    if (!color || !self.themeKey) return;
+    self.didSelect = YES;
+
+    // Throttle: save at most every 0.25s during continuous drag
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if (continuously && (now - self.lastSave) < 0.25) return;
+    self.lastSave = now;
+
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
+    [[YTLUserDefaults standardUserDefaults] setObject:data forKey:self.themeKey];
+    ytl_clearThemeCache();
 }
 - (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)vc {
-    // Final save + UI update on dismiss
+    // Final save on dismiss
     UIColor *color = vc.selectedColor;
     if (color && self.themeKey) {
         NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
@@ -34,10 +39,12 @@ API_AVAILABLE(ios(14.0))
         ytl_clearThemeCache();
     }
 
-    // Reload settings to update hex labels
+    // Reload settings + show alert
+    __weak YTSettingsViewController *weakVC = self.settingsVC;
+    BOOL selected = self.didSelect;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self.settingsVC reloadData];
-        if (self.didSelect) {
+        [weakVC reloadData];
+        if (selected && weakVC) {
             UIAlertController *saved = [UIAlertController alertControllerWithTitle:LOC(@"ColorSaved")
                 message:LOC(@"ColorSavedDesc")
                 preferredStyle:UIAlertControllerStyleAlert];
@@ -45,7 +52,7 @@ API_AVAILABLE(ios(14.0))
                 exit(0);
             }]];
             [saved addAction:[UIAlertAction actionWithTitle:LOC(@"Later") style:UIAlertActionStyleCancel handler:nil]];
-            UIViewController *presenter = self.settingsVC.navigationController.topViewController ?: self.settingsVC;
+            UIViewController *presenter = weakVC.navigationController.topViewController ?: weakVC;
             [presenter presentViewController:saved animated:YES completion:nil];
         }
     });
@@ -321,8 +328,7 @@ static NSString *GetCacheSize() {
                 };
 
             // --- Presets ---
-            YTSettingsSectionItem *presetsHeader = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Presets") accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
-            presetsHeader.enabled = NO;
+            YTSettingsSectionItem *presetsHeader = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"— %@ —", LOC(@"Presets")] accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
             [rows addObject:presetsHeader];
 
             // OLED Dark — pure black, white text, red accent
@@ -398,8 +404,7 @@ static NSString *GetCacheSize() {
             );
 
             // --- Individual Colors ---
-            YTSettingsSectionItem *colorsHeader = [YTSettingsSectionItemClass itemWithTitle:LOC(@"CustomColors") accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
-            colorsHeader.enabled = NO;
+            YTSettingsSectionItem *colorsHeader = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"— %@ —", LOC(@"CustomColors")] accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
             [rows addObject:colorsHeader];
 
             addColorRow(@"OverlayButtons", @"theme_overlayButtons");
