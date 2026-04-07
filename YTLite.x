@@ -388,14 +388,7 @@ static UIImage *YTImageNamed(NSString *imageName) {
 - (void)didMoveToWindow { %orig; if (ytlBool(@"dontSnapToChapter")) self.enableSnapToChapter = NO; }
 %end
 
-// Red Progress Bar and Gray Buffer Progress
-%hook YTInlinePlayerBarContainerView
-- (id)quietProgressBarColor { return ytlBool(@"redProgressBar") ? [UIColor redColor] : %orig; }
-%end
-
-%hook YTSegmentableInlinePlayerBarView
-- (void)setBufferedProgressBarColor:(id)arg1 { if (ytlBool(@"redProgressBar")) %orig([UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:0.60]); }
-%end
+// Progress bar colors now handled by ColorMode.x theme system
 
 // Disable Hints
 %hook YTSettings

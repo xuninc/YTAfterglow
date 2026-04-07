@@ -10,18 +10,16 @@ static NSString *const kThemeTextSecondary  = @"theme_textSecondary";
 static NSString *const kThemeNavBar         = @"theme_navBar";
 static NSString *const kThemeAccent         = @"theme_accent";
 
-// Cache for decoded colors
+// Cache for decoded colors — avoids NSKeyedUnarchiver on every hook call
 static NSMutableDictionary *colorCache = nil;
 
 static UIColor *themeColor(NSString *key) {
     if (!colorCache) colorCache = [NSMutableDictionary dictionary];
 
-    // Check cache first
     id cached = colorCache[key];
     if (cached == [NSNull null]) return nil;
     if (cached) return cached;
 
-    // Decode from user defaults
     NSData *data = [[YTLUserDefaults standardUserDefaults] objectForKey:key];
     if (!data) {
         colorCache[key] = [NSNull null];
@@ -34,14 +32,15 @@ static UIColor *themeColor(NSString *key) {
     return color;
 }
 
-// Call this when a theme color changes to clear the cache
 void ytl_clearThemeCache(void) {
     [colorCache removeAllObjects];
 }
 
-#pragma mark - Text Colors
+#pragma mark - YTCommonColorPalette: text, icons, overlays, backgrounds, accents
 
 %hook YTCommonColorPalette
+
+// Primary text
 - (UIColor *)textPrimary {
     UIColor *c = themeColor(kThemeTextPrimary);
     return c ?: %orig;
@@ -50,15 +49,19 @@ void ytl_clearThemeCache(void) {
     UIColor *c = themeColor(kThemeTextSecondary);
     return c ?: %orig;
 }
+- (UIColor *)textDisabled {
+    UIColor *c = themeColor(kThemeTextSecondary);
+    return c ? [c colorWithAlphaComponent:0.4] : %orig;
+}
 
-#pragma mark - Overlay Button Colors
+// Overlay (player controls)
 - (UIColor *)overlayTextPrimary {
     UIColor *c = themeColor(kThemeOverlayButtons);
     return c ?: %orig;
 }
 - (UIColor *)overlayTextSecondary {
     UIColor *c = themeColor(kThemeOverlayButtons);
-    return c ?: %orig;
+    return c ? [c colorWithAlphaComponent:0.8] : %orig;
 }
 - (UIColor *)overlayIconActiveOther {
     UIColor *c = themeColor(kThemeOverlayButtons);
@@ -77,7 +80,7 @@ void ytl_clearThemeCache(void) {
     return c ? [c colorWithAlphaComponent:0.2] : %orig;
 }
 
-#pragma mark - Icon Colors (Tab Bar + General)
+// Tab bar / general icons
 - (UIColor *)iconActive {
     UIColor *c = themeColor(kThemeTabBarIcons);
     return c ?: %orig;
@@ -90,12 +93,20 @@ void ytl_clearThemeCache(void) {
     UIColor *c = themeColor(kThemeTabBarIcons);
     return c ? [c colorWithAlphaComponent:0.5] : %orig;
 }
+- (UIColor *)iconDisabled {
+    UIColor *c = themeColor(kThemeTabBarIcons);
+    return c ? [c colorWithAlphaComponent:0.3] : %orig;
+}
 - (UIColor *)brandIconActive {
     UIColor *c = themeColor(kThemeTabBarIcons);
     return c ?: %orig;
 }
+- (UIColor *)brandIconInactive {
+    UIColor *c = themeColor(kThemeTabBarIcons);
+    return c ? [c colorWithAlphaComponent:0.5] : %orig;
+}
 
-#pragma mark - Background Colors
+// Backgrounds
 - (UIColor *)background1 {
     UIColor *c = themeColor(kThemeBackground);
     return c ?: %orig;
@@ -124,8 +135,24 @@ void ytl_clearThemeCache(void) {
     UIColor *c = themeColor(kThemeBackground);
     return c ?: %orig;
 }
+- (UIColor *)generalBackgroundB {
+    UIColor *c = themeColor(kThemeBackground);
+    return c ?: %orig;
+}
+- (UIColor *)brandBackgroundSolid {
+    UIColor *c = themeColor(kThemeBackground);
+    return c ?: %orig;
+}
+- (UIColor *)brandBackgroundPrimary {
+    UIColor *c = themeColor(kThemeBackground);
+    return c ?: %orig;
+}
+- (UIColor *)brandBackgroundSecondary {
+    UIColor *c = themeColor(kThemeBackground);
+    return c ?: %orig;
+}
 
-#pragma mark - Accent Colors
+// Accent
 - (UIColor *)callToAction {
     UIColor *c = themeColor(kThemeAccent);
     return c ?: %orig;
@@ -141,7 +168,9 @@ void ytl_clearThemeCache(void) {
 %hook YTInlinePlayerBarContainerView
 - (id)quietProgressBarColor {
     UIColor *c = themeColor(kThemeSeekBar);
-    return c ?: %orig;
+    if (c) return c;
+    if (ytlBool(@"redProgressBar")) return [UIColor redColor];
+    return %orig;
 }
 %end
 
@@ -149,6 +178,11 @@ void ytl_clearThemeCache(void) {
 - (void)setPlayedProgressBarColor:(id)color {
     UIColor *c = themeColor(kThemeSeekBar);
     %orig(c ?: color);
+}
+- (void)setBufferedProgressBarColor:(id)color {
+    if (ytlBool(@"redProgressBar") || themeColor(kThemeSeekBar))
+        %orig([UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:0.60]);
+    else %orig;
 }
 %end
 
@@ -165,7 +199,16 @@ void ytl_clearThemeCache(void) {
 }
 %end
 
-#pragma mark - Accent on QTM Material Buttons
+#pragma mark - Tab Bar Background
+
+%hook YTPivotBarView
+- (void)setBackgroundColor:(UIColor *)color {
+    UIColor *c = themeColor(kThemeBackground);
+    %orig(c ?: color);
+}
+%end
+
+#pragma mark - Accent on Material Design buttons
 
 %hook QTMColorGroup
 - (UIColor *)accentColor {
@@ -175,5 +218,32 @@ void ytl_clearThemeCache(void) {
 - (UIColor *)brightAccentColor {
     UIColor *c = themeColor(kThemeAccent);
     return c ?: %orig;
+}
+- (UIColor *)buttonBackgroundColor {
+    UIColor *c = themeColor(kThemeAccent);
+    return c ? [c colorWithAlphaComponent:0.15] : %orig;
+}
+%end
+
+#pragma mark - Background on key view classes
+
+%hook YTAsyncCollectionView
+- (void)setBackgroundColor:(UIColor *)color {
+    UIColor *c = themeColor(kThemeBackground);
+    %orig(c ?: color);
+}
+%end
+
+%hook YTSearchView
+- (void)setBackgroundColor:(UIColor *)color {
+    UIColor *c = themeColor(kThemeBackground);
+    %orig(c ?: color);
+}
+%end
+
+%hook YTSearchBoxView
+- (void)setBackgroundColor:(UIColor *)color {
+    UIColor *c = themeColor(kThemeBackground);
+    %orig(c ?: color);
 }
 %end
