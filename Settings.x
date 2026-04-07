@@ -272,7 +272,8 @@ static NSString *GetCacheSize() {
                         selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
                             [[YTLUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
                             ytl_clearThemeCache();
-                            [settingsViewController reloadData];
+                            // Pop back so the page rebuilds without the stale reset row
+                            [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
                             return YES;
                         }];
                     [rows addObject:reset];
@@ -321,6 +322,7 @@ static NSString *GetCacheSize() {
 
             // --- Presets ---
             YTSettingsSectionItem *presetsHeader = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Presets") accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
+            presetsHeader.enabled = NO;
             [rows addObject:presetsHeader];
 
             // OLED Dark — pure black, white text, red accent
@@ -397,6 +399,7 @@ static NSString *GetCacheSize() {
 
             // --- Individual Colors ---
             YTSettingsSectionItem *colorsHeader = [YTSettingsSectionItemClass itemWithTitle:LOC(@"CustomColors") accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
+            colorsHeader.enabled = NO;
             [rows addObject:colorsHeader];
 
             addColorRow(@"OverlayButtons", @"theme_overlayButtons");
