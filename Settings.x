@@ -205,7 +205,7 @@ static NSString *GetCacheSize() {
                                     picker.supportsAlpha = NO;
                                     picker.selectedColor = existing;
                                     id delegate = [[NSObject alloc] init];
-                                    static id _held = nil;
+                                    static __attribute__((used)) id _held = nil;
                                     class_addMethod([NSObject class], @selector(colorPickerViewControllerDidFinish:),
                                         imp_implementationWithBlock(^(id self, UIColorPickerViewController *vc) {
                                             NSData *data = [NSKeyedArchiver archivedDataWithRootObject:vc.selectedColor requiringSecureCoding:NO error:nil];
@@ -232,7 +232,7 @@ static NSString *GetCacheSize() {
                                 UIColorPickerViewController *picker = [[UIColorPickerViewController alloc] init];
                                 picker.supportsAlpha = NO;
                                 id delegate = [[NSObject alloc] init];
-                                static id _held2 = nil;
+                                static __attribute__((used)) id _held2 = nil;
                                 class_addMethod([NSObject class], @selector(colorPickerViewControllerDidFinish:),
                                     imp_implementationWithBlock(^(id self, UIColorPickerViewController *vc) {
                                         NSData *data = [NSKeyedArchiver archivedDataWithRootObject:vc.selectedColor requiringSecureCoding:NO error:nil];
