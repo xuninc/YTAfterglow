@@ -1,6 +1,4 @@
 #import "YTLite.h"
-#import <objc/runtime.h>
-#import <objc/message.h>
 
 // Theme color keys
 static NSString *const kThemeOverlayButtons = @"theme_overlayButtons";
@@ -149,28 +147,7 @@ static inline UIColor *themed(NSString *key, CGFloat alpha) {
 - (UIColor *)lightBodyTextColor   { return themed(kThemeTextSecondary, 1.0) ?: %orig; }
 %end
 
-#pragma mark - View background overrides
-
-// Swizzle setBackgroundColor: on YouTube view classes to apply theme background.
-// Uses objc_msgSendSuper to call UIView's original — avoids per-class orig pointer issues.
-static void ytl_themed_setBackgroundColor(id self, SEL _cmd, UIColor *color) {
-    UIColor *c = themeColor(kThemeBackground);
-    struct objc_super sup = { self, class_getSuperclass(object_getClass(self)) };
-    ((void(*)(struct objc_super *, SEL, UIColor *))objc_msgSendSuper)(&sup, _cmd, c ?: color);
-}
-
-%ctor {
-    NSArray *bgClasses = @[
-        @"YTAsyncCollectionView", @"YTSearchView", @"YTSearchBoxView",
-        @"YTHeaderView", @"YTSubheaderContainerView", @"YTAppView",
-        @"YTCollectionView", @"YTCommentView", @"YTCreateCommentTextView",
-        @"YTCreateCommentAccessoryView", @"YTEngagementPanelView"
-    ];
-    SEL bgSel = @selector(setBackgroundColor:);
-    for (NSString *name in bgClasses) {
-        Class cls = objc_getClass(name.UTF8String);
-        if (cls) {
-            class_replaceMethod(cls, bgSel, (IMP)ytl_themed_setBackgroundColor, "v@:@");
-        }
-    }
-}
+// Background colors are handled by YTCommonColorPalette hooks above
+// (background1-3, baseBackground, raisedBackground, menuBackground, etc.)
+// View-level setBackgroundColor: overrides are too aggressive and can
+// break YouTube's internal layout logic.
