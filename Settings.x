@@ -383,16 +383,52 @@ static NSString *GetCacheSize() {
                 [UIColor colorWithRed:0.40 green:0.85 blue:0.94 alpha:1.0]              // accent (cyan)
             );
 
-            // Rose Gold
+            // Rose Gold (light)
             addPreset(@"Rose Gold",
-                [UIColor colorWithRed:1.0 green:0.8 blue:0.8 alpha:1.0],                // overlay
-                [UIColor colorWithRed:0.93 green:0.7 blue:0.65 alpha:1.0],              // tab icons
-                [UIColor colorWithRed:0.93 green:0.46 blue:0.5 alpha:1.0],              // seek bar
-                [UIColor colorWithRed:0.1 green:0.07 blue:0.08 alpha:1.0],              // background
-                [UIColor colorWithRed:1.0 green:0.92 blue:0.9 alpha:1.0],               // primary text
-                [UIColor colorWithRed:0.7 green:0.55 blue:0.55 alpha:1.0],              // secondary text
-                [UIColor colorWithRed:0.15 green:0.1 blue:0.11 alpha:1.0],              // nav bar
-                [UIColor colorWithRed:0.93 green:0.46 blue:0.5 alpha:1.0]               // accent
+                [UIColor colorWithRed:0.6 green:0.35 blue:0.35 alpha:1.0],              // overlay
+                [UIColor colorWithRed:0.7 green:0.4 blue:0.4 alpha:1.0],                // tab icons
+                [UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0],              // seek bar
+                [UIColor colorWithRed:1.0 green:0.95 blue:0.93 alpha:1.0],              // background (warm cream)
+                [UIColor colorWithRed:0.25 green:0.15 blue:0.15 alpha:1.0],             // primary text (dark rose)
+                [UIColor colorWithRed:0.55 green:0.4 blue:0.4 alpha:1.0],               // secondary text
+                [UIColor colorWithRed:0.95 green:0.88 blue:0.86 alpha:1.0],             // nav bar (light pink)
+                [UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0]               // accent
+            );
+
+            // Clean White (light)
+            addPreset(@"Clean White",
+                [UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:1.0],                // overlay
+                [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1.0],             // tab icons
+                [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0],                // seek bar (red)
+                [UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0],                // background (pure white)
+                [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:1.0],                // primary text
+                [UIColor colorWithRed:0.45 green:0.45 blue:0.45 alpha:1.0],             // secondary text
+                [UIColor colorWithRed:0.97 green:0.97 blue:0.97 alpha:1.0],             // nav bar
+                [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0]                // accent (blue)
+            );
+
+            // Warm Sand (light)
+            addPreset(@"Warm Sand",
+                [UIColor colorWithRed:0.45 green:0.35 blue:0.25 alpha:1.0],             // overlay
+                [UIColor colorWithRed:0.5 green:0.38 blue:0.25 alpha:1.0],              // tab icons
+                [UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0],              // seek bar (amber)
+                [UIColor colorWithRed:0.98 green:0.96 blue:0.91 alpha:1.0],             // background (cream)
+                [UIColor colorWithRed:0.2 green:0.15 blue:0.1 alpha:1.0],               // primary text (dark brown)
+                [UIColor colorWithRed:0.5 green:0.42 blue:0.35 alpha:1.0],              // secondary text
+                [UIColor colorWithRed:0.95 green:0.92 blue:0.85 alpha:1.0],             // nav bar (light tan)
+                [UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0]               // accent (amber)
+            );
+
+            // Ocean Breeze (light)
+            addPreset(@"Ocean Breeze",
+                [UIColor colorWithRed:0.15 green:0.4 blue:0.55 alpha:1.0],              // overlay
+                [UIColor colorWithRed:0.1 green:0.45 blue:0.6 alpha:1.0],               // tab icons
+                [UIColor colorWithRed:0.0 green:0.6 blue:0.7 alpha:1.0],                // seek bar (teal)
+                [UIColor colorWithRed:0.94 green:0.97 blue:1.0 alpha:1.0],              // background (ice blue)
+                [UIColor colorWithRed:0.1 green:0.15 blue:0.2 alpha:1.0],               // primary text (dark navy)
+                [UIColor colorWithRed:0.35 green:0.45 blue:0.55 alpha:1.0],             // secondary text
+                [UIColor colorWithRed:0.9 green:0.94 blue:0.98 alpha:1.0],              // nav bar (light sky)
+                [UIColor colorWithRed:0.0 green:0.55 blue:0.65 alpha:1.0]               // accent (teal)
             );
 
             // Forest
