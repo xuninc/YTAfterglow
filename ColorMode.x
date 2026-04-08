@@ -99,6 +99,20 @@ static inline UIColor *themed(NSString *key, CGFloat alpha) {
 - (UIColor *)callToAction        { return themed(kThemeAccent, 1.0) ?: %orig; }
 - (UIColor *)callToActionInverse { return themed(kThemeAccent, 1.0) ?: %orig; }
 
+// Force dark page style when a dark background is set
+// This makes YouTube use light text/icons everywhere
+- (NSInteger)pageStyle {
+    UIColor *bg = themeColor(kThemeBackground);
+    if (bg) {
+        CGFloat r, g, b;
+        [bg getRed:&r green:&g blue:&b alpha:nil];
+        // If background luminance is dark, force dark mode
+        CGFloat luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+        if (luminance < 0.5) return 1; // dark
+    }
+    return %orig;
+}
+
 %end
 
 #pragma mark - Seek/Progress Bar
