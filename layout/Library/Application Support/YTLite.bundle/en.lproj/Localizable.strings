@@ -407,6 +407,9 @@
 "ResetAllColorsConfirm" = "This will remove all custom colors and restore defaults.";
 "Reset" = "Reset";
 "Cancel" = "Cancel";
+"Gradient" = "Gradient Background";
+"GradientStart" = "Gradient Top";
+"GradientEnd" = "Gradient Bottom";
 "ColorSaved" = "Color Saved";
 "ColorSavedDesc" = "Restart the app to fully apply the new color.";
 "RestartNow" = "Restart Now";
