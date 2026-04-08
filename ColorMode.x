@@ -196,7 +196,7 @@ static void ytl_applyGradient(UIView *view) {
 %hook YTAppView
 - (void)layoutSubviews {
     %orig;
-    ytl_applyGradient(self);
+    ytl_applyGradient((UIView *)self);
 }
 %end
 
