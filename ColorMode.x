@@ -1,4 +1,5 @@
 #import "YTLite.h"
+#import <QuartzCore/QuartzCore.h>
 
 // Theme color keys
 static NSString *const kThemeOverlayButtons = @"theme_overlayButtons";
@@ -9,6 +10,8 @@ static NSString *const kThemeTextPrimary    = @"theme_textPrimary";
 static NSString *const kThemeTextSecondary  = @"theme_textSecondary";
 static NSString *const kThemeNavBar         = @"theme_navBar";
 static NSString *const kThemeAccent         = @"theme_accent";
+static NSString *const kThemeGradientStart  = @"theme_gradientStart";
+static NSString *const kThemeGradientEnd    = @"theme_gradientEnd";
 
 // Thread-safe color cache
 static NSMutableDictionary *colorCache = nil;
@@ -102,11 +105,11 @@ static inline UIColor *themed(NSString *key, CGFloat alpha) {
 // Force dark page style when a dark background is set
 // This makes YouTube use light text/icons everywhere
 - (NSInteger)pageStyle {
-    UIColor *bg = themeColor(kThemeBackground);
+    // Check gradient start color first, then flat background
+    UIColor *bg = themeColor(kThemeGradientStart) ?: themeColor(kThemeBackground);
     if (bg) {
         CGFloat r, g, b;
         [bg getRed:&r green:&g blue:&b alpha:nil];
-        // If background luminance is dark, force dark mode
         CGFloat luminance = 0.299 * r + 0.587 * g + 0.114 * b;
         if (luminance < 0.5) return 1; // dark
     }
@@ -161,7 +164,48 @@ static inline UIColor *themed(NSString *key, CGFloat alpha) {
 - (UIColor *)lightBodyTextColor   { return themed(kThemeTextSecondary, 1.0) ?: %orig; }
 %end
 
-// Background colors are handled by YTCommonColorPalette hooks above
-// (background1-3, baseBackground, raisedBackground, menuBackground, etc.)
-// View-level setBackgroundColor: overrides are too aggressive and can
-// break YouTube's internal layout logic.
+#pragma mark - Gradient Background
+
+static CAGradientLayer *ytl_createGradient(CGRect bounds) {
+    UIColor *start = themeColor(kThemeGradientStart);
+    UIColor *end = themeColor(kThemeGradientEnd);
+    if (!start || !end) return nil;
+
+    CAGradientLayer *gradient = [CAGradientLayer layer];
+    gradient.frame = bounds;
+    gradient.colors = @[(id)start.CGColor, (id)end.CGColor];
+    gradient.startPoint = CGPointMake(0.5, 0.0);
+    gradient.endPoint = CGPointMake(0.5, 1.0);
+    gradient.name = @"ytl_gradient";
+    return gradient;
+}
+
+static void ytl_applyGradient(UIView *view) {
+    if (!themeColor(kThemeGradientStart) || !themeColor(kThemeGradientEnd)) return;
+
+    // Remove existing gradient
+    for (CALayer *layer in [view.layer.sublayers copy]) {
+        if ([layer.name isEqualToString:@"ytl_gradient"]) [layer removeFromSuperlayer];
+    }
+
+    CAGradientLayer *gradient = ytl_createGradient(view.bounds);
+    if (gradient) [view.layer insertSublayer:gradient atIndex:0];
+}
+
+// Apply gradient to the main app view
+%hook YTAppView
+- (void)layoutSubviews {
+    %orig;
+    ytl_applyGradient(self);
+}
+%end
+
+// Make collection views transparent so gradient shows through
+%hook YTAsyncCollectionView
+- (void)layoutSubviews {
+    %orig;
+    if (themeColor(kThemeGradientStart) && themeColor(kThemeGradientEnd)) {
+        self.backgroundColor = [UIColor clearColor];
+    }
+}
+%end

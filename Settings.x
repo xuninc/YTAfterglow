@@ -137,7 +137,8 @@ static NSString *GetCacheSize() {
             NSArray *keys = @[@"removeLabels", @"removeIndicators", @"frostedPivot",
                 @"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar",
                 @"theme_background", @"theme_textPrimary", @"theme_textSecondary",
-                @"theme_navBar", @"theme_accent"];
+                @"theme_navBar", @"theme_accent",
+                @"theme_gradientStart", @"theme_gradientEnd"];
             if ([keys containsObject:key]) {
                 [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
             }
@@ -480,6 +481,13 @@ static NSString *GetCacheSize() {
             addColorRow(@"NavigationBar", @"theme_navBar");
             addColorRow(@"AccentColor", @"theme_accent");
 
+            // --- Gradient ---
+            YTSettingsSectionItem *gradientHeader = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"— %@ —", LOC(@"Gradient")] accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
+            [rows addObject:gradientHeader];
+
+            addColorRow(@"GradientStart", @"theme_gradientStart");
+            addColorRow(@"GradientEnd", @"theme_gradientEnd");
+
             // Reset All button
             YTSettingsSectionItem *resetAll = [YTSettingsSectionItemClass itemWithTitle:LOC(@"ResetAllColors")
                 accessibilityIdentifier:nil
@@ -490,7 +498,8 @@ static NSString *GetCacheSize() {
                     [alert addAction:[UIAlertAction actionWithTitle:LOC(@"ResetAndRestart") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
                         NSArray *keys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar",
                                           @"theme_background", @"theme_textPrimary", @"theme_textSecondary",
-                                          @"theme_navBar", @"theme_accent"];
+                                          @"theme_navBar", @"theme_accent",
+                                          @"theme_gradientStart", @"theme_gradientEnd"];
                         for (NSString *key in keys) {
                             [[YTLUserDefaults standardUserDefaults] removeObjectForKey:key];
                         }
