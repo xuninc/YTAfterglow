@@ -5,6 +5,13 @@ extern void ytl_clearThemeCache(void);
 
 @interface YTSettingsSectionItemManager (YTLite)
 - (void)updateYTLiteSectionWithEntry:(id)entry;
+- (NSString *)themeHexFromColor:(UIColor *)color;
+- (UIColor *)themeLoadColorForKey:(NSString *)key;
+- (void)themePresentPickerForKey:(NSString *)themeKey startColor:(UIColor *)startColor settingsVC:(YTSettingsViewController *)settingsVC;
+- (void)themeAddColorRowWithTitle:(NSString *)title themeKey:(NSString *)themeKey toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC;
+- (void)themeSaveColor:(UIColor *)color forKey:(NSString *)key;
+- (void)themeApplyPresetOverlay:(UIColor *)overlay tabIcons:(UIColor *)tabIcons seekBar:(UIColor *)seekBar bg:(UIColor *)bg textP:(UIColor *)textP textS:(UIColor *)textS nav:(UIColor *)nav accent:(UIColor *)accent;
+- (void)themeAddPresetRowWithName:(NSString *)name overlay:(UIColor *)overlay tabIcons:(UIColor *)tabIcons seekBar:(UIColor *)seekBar bg:(UIColor *)bg textP:(UIColor *)textP textS:(UIColor *)textS nav:(UIColor *)nav accent:(UIColor *)accent toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC;
 @end
 
 #pragma clang diagnostic push
@@ -129,9 +136,7 @@ static NSString *GetCacheSize() {
             alertView.title = LOC(@"Warning");
             alertView.subtitle = LOC(@"ShortsOnlyWarning");
             [alertView show];
-        }
-
-        else {
+        } else {
             ytlSetBool(enabled, key);
 
             NSArray *keys = @[@"removeLabels", @"removeIndicators", @"frostedPivot",
@@ -162,6 +167,114 @@ static NSString *GetCacheSize() {
     }];
 }
 
+#pragma mark - Theme Helpers
+
+%new
+- (NSString *)themeHexFromColor:(UIColor *)color {
+    CGFloat r, g, b, a;
+    [color getRed:&r green:&g blue:&b alpha:&a];
+    return [NSString stringWithFormat:@"#%02X%02X%02X", (int)(r*255), (int)(g*255), (int)(b*255)];
+}
+
+%new
+- (UIColor *)themeLoadColorForKey:(NSString *)key {
+    NSData *data = [[YTLUserDefaults standardUserDefaults] objectForKey:key];
+    if (!data) return nil;
+    NSKeyedUnarchiver *u = [[NSKeyedUnarchiver alloc] initForReadingFromData:data error:nil];
+    [u setRequiresSecureCoding:NO];
+    return [u decodeObjectForKey:NSKeyedArchiveRootObjectKey];
+}
+
+%new
+- (void)themePresentPickerForKey:(NSString *)themeKey startColor:(UIColor *)startColor settingsVC:(YTSettingsViewController *)settingsVC {
+    if (@available(iOS 14.0, *)) {
+        UIColorPickerViewController *picker = [[UIColorPickerViewController alloc] init];
+        picker.supportsAlpha = NO;
+        if (startColor) picker.selectedColor = startColor;
+        YTLColorPickerDelegate *delegate = [[YTLColorPickerDelegate alloc] init];
+        delegate.themeKey = themeKey;
+        delegate.settingsVC = settingsVC;
+        delegate.didSelect = NO;
+        picker.delegate = delegate;
+        _colorPickerDelegate = delegate;
+        UIViewController *presenter = settingsVC.navigationController.topViewController ?: settingsVC;
+        while (presenter.presentedViewController) presenter = presenter.presentedViewController;
+        [presenter presentViewController:picker animated:YES completion:nil];
+    }
+}
+
+%new
+- (void)themeAddColorRowWithTitle:(NSString *)title themeKey:(NSString *)themeKey toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC {
+    Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
+
+    YTSettingsSectionItem *item = [YTSettingsSectionItemClass itemWithTitle:LOC(title)
+        accessibilityIdentifier:nil
+        detailTextBlock:^NSString *() {
+            UIColor *c = [self themeLoadColorForKey:themeKey];
+            return c ? [self themeHexFromColor:c] : LOC(@"Default");
+        }
+        selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
+            [self themePresentPickerForKey:themeKey startColor:[self themeLoadColorForKey:themeKey] settingsVC:settingsVC];
+            return YES;
+        }];
+    [rows addObject:item];
+
+    if ([self themeLoadColorForKey:themeKey]) {
+        YTSettingsSectionItem *reset = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"    %@ %@", @"\u21BA", LOC(title)]
+            accessibilityIdentifier:nil
+            detailTextBlock:nil
+            selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
+                [[YTLUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
+                ytl_clearThemeCache();
+                [(UINavigationController *)settingsVC.navigationController popViewControllerAnimated:YES];
+                return YES;
+            }];
+        [rows addObject:reset];
+    }
+}
+
+%new
+- (void)themeSaveColor:(UIColor *)color forKey:(NSString *)key {
+    NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
+    [[YTLUserDefaults standardUserDefaults] setObject:data forKey:key];
+}
+
+%new
+- (void)themeApplyPresetOverlay:(UIColor *)overlay tabIcons:(UIColor *)tabIcons seekBar:(UIColor *)seekBar bg:(UIColor *)bg textP:(UIColor *)textP textS:(UIColor *)textS nav:(UIColor *)nav accent:(UIColor *)accent {
+    [self themeSaveColor:overlay forKey:@"theme_overlayButtons"];
+    [self themeSaveColor:tabIcons forKey:@"theme_tabBarIcons"];
+    [self themeSaveColor:seekBar forKey:@"theme_seekBar"];
+    [self themeSaveColor:bg forKey:@"theme_background"];
+    [self themeSaveColor:textP forKey:@"theme_textPrimary"];
+    [self themeSaveColor:textS forKey:@"theme_textSecondary"];
+    [self themeSaveColor:nav forKey:@"theme_navBar"];
+    [self themeSaveColor:accent forKey:@"theme_accent"];
+    ytl_clearThemeCache();
+}
+
+%new
+- (void)themeAddPresetRowWithName:(NSString *)name overlay:(UIColor *)overlay tabIcons:(UIColor *)tabIcons seekBar:(UIColor *)seekBar bg:(UIColor *)bg textP:(UIColor *)textP textS:(UIColor *)textS nav:(UIColor *)nav accent:(UIColor *)accent toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC {
+    Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
+
+    YTSettingsSectionItem *item = [YTSettingsSectionItemClass itemWithTitle:name
+        accessibilityIdentifier:nil
+        detailTextBlock:nil
+        selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
+            [self themeApplyPresetOverlay:overlay tabIcons:tabIcons seekBar:seekBar bg:bg textP:textP textS:textS nav:nav accent:accent];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"PresetApplied")
+                message:[NSString stringWithFormat:@"%@ %@", name, LOC(@"ColorSavedDesc")]
+                preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:LOC(@"RestartNow") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) { exit(0); }]];
+            [alert addAction:[UIAlertAction actionWithTitle:LOC(@"Later") style:UIAlertActionStyleCancel handler:nil]];
+            UIViewController *presenter = settingsVC.navigationController.topViewController ?: settingsVC;
+            [presenter presentViewController:alert animated:YES completion:nil];
+            return YES;
+        }];
+    [rows addObject:item];
+}
+
+#pragma mark - Settings Section
+
 %new(v@:@)
 - (void)updateYTLiteSectionWithEntry:(id)entry {
     NSMutableArray *sectionItems = [NSMutableArray array];
@@ -173,322 +286,232 @@ static NSString *GetCacheSize() {
     YTSettingsSectionItem *general = [YTSettingsSectionItemClass itemWithTitle:LOC(@"General")
         accessibilityIdentifier:@"YTLiteSectionItem"
         detailTextBlock:^NSString *() {
-            return @"‣";
+            return @"\u2023";
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSArray <YTSettingsSectionItem *> *rows = @[
-            [self switchWithTitle:@"RemoveAds" key:@"noAds"],
-            [self switchWithTitle:@"BackgroundPlayback" key:@"backgroundPlayback"]
-        ];
+                [self switchWithTitle:@"RemoveAds" key:@"noAds"],
+                [self switchWithTitle:@"BackgroundPlayback" key:@"backgroundPlayback"]
+            ];
 
-        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"General") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-        [settingsViewController pushViewController:picker];
-        return YES;
-    }];
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"General") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+            [settingsViewController pushViewController:picker];
+            return YES;
+        }];
 
     [sectionItems addObject:general];
 
     YTSettingsSectionItem *navbar = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Navbar")
-    accessibilityIdentifier:@"YTLiteSectionItem"
-    detailTextBlock:^NSString *() {
-        return @"‣";
-    }
-    selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-        NSArray <YTSettingsSectionItem *> *rows = @[
-            [self switchWithTitle:@"RemoveCast" key:@"noCast"],
-            [self switchWithTitle:@"RemoveNotifications" key:@"noNotifsButton"],
-            [self switchWithTitle:@"RemoveSearch" key:@"noSearchButton"],
-            [self switchWithTitle:@"RemoveVoiceSearch" key:@"noVoiceSearchButton"]
-        ];
-
-        if (ytlBool(@"advancedMode")) {
-            rows = [rows arrayByAddingObjectsFromArray:@[
-                [self switchWithTitle:@"StickyNavbar" key:@"stickyNavbar"],
-                [self switchWithTitle:@"NoSubbar" key:@"noSubbar"],
-                [self switchWithTitle:@"NoYTLogo" key:@"noYTLogo"],
-                [self switchWithTitle:@"PremiumYTLogo" key:@"premiumYTLogo"]
-            ]];
+        accessibilityIdentifier:@"YTLiteSectionItem"
+        detailTextBlock:^NSString *() {
+            return @"\u2023";
         }
+        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+            NSArray <YTSettingsSectionItem *> *rows = @[
+                [self switchWithTitle:@"RemoveCast" key:@"noCast"],
+                [self switchWithTitle:@"RemoveNotifications" key:@"noNotifsButton"],
+                [self switchWithTitle:@"RemoveSearch" key:@"noSearchButton"],
+                [self switchWithTitle:@"RemoveVoiceSearch" key:@"noVoiceSearchButton"]
+            ];
 
-        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Navbar") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-        [settingsViewController pushViewController:picker];
-        return YES;
-    }];
+            if (ytlBool(@"advancedMode")) {
+                rows = [rows arrayByAddingObjectsFromArray:@[
+                    [self switchWithTitle:@"StickyNavbar" key:@"stickyNavbar"],
+                    [self switchWithTitle:@"NoSubbar" key:@"noSubbar"],
+                    [self switchWithTitle:@"NoYTLogo" key:@"noYTLogo"],
+                    [self switchWithTitle:@"PremiumYTLogo" key:@"premiumYTLogo"]
+                ]];
+            }
+
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Navbar") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+            [settingsViewController pushViewController:picker];
+            return YES;
+        }];
 
     [sectionItems addObject:navbar];
 
-    // Appearance section — per-element color customization
+    // Appearance section — organized into sub-pages
     YTSettingsSectionItem *appearance = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Appearance")
         accessibilityIdentifier:@"YTLiteSectionItem"
         detailTextBlock:^NSString *() {
-            return @"‣";
+            return @"\u2023";
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
 
-            // Helper: hex string from UIColor
-            NSString *(^hexFromColor)(UIColor *) = ^NSString *(UIColor *color) {
-                CGFloat r, g, b, a;
-                [color getRed:&r green:&g blue:&b alpha:&a];
-                return [NSString stringWithFormat:@"#%02X%02X%02X", (int)(r*255), (int)(g*255), (int)(b*255)];
-            };
+            // Theme Presets sub-page
+            YTSettingsSectionItem *presetsPage = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Presets")
+                accessibilityIdentifier:nil
+                detailTextBlock:^NSString *() { return @"\u2023"; }
+                selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
+                    NSMutableArray <YTSettingsSectionItem *> *presetRows = [NSMutableArray array];
 
-            // Helper: load saved color for a key
-            UIColor *(^loadColor)(NSString *) = ^UIColor *(NSString *key) {
-                NSData *data = [[YTLUserDefaults standardUserDefaults] objectForKey:key];
-                if (!data) return nil;
-                NSKeyedUnarchiver *u = [[NSKeyedUnarchiver alloc] initForReadingFromData:data error:nil];
-                [u setRequiresSecureCoding:NO];
-                return [u decodeObjectForKey:NSKeyedArchiveRootObjectKey];
-            };
+                    [self themeAddPresetRowWithName:@"OLED Dark"
+                        overlay:[UIColor whiteColor]
+                        tabIcons:[UIColor whiteColor]
+                        seekBar:[UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:1.0]
+                        bg:[UIColor blackColor]
+                        textP:[UIColor whiteColor]
+                        textS:[UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:1.0]
+                        nav:[UIColor blackColor]
+                        accent:[UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:1.0]
+                        toRows:presetRows settingsVC:settingsViewController];
 
-            // Helper: present color picker for a theme key
-            void (^presentPicker)(NSString *, UIColor *) = ^(NSString *themeKey, UIColor *startColor) {
-                if (@available(iOS 14.0, *)) {
-                    UIColorPickerViewController *picker = [[UIColorPickerViewController alloc] init];
-                    picker.supportsAlpha = NO;
-                    if (startColor) picker.selectedColor = startColor;
-                    YTLColorPickerDelegate *delegate = [[YTLColorPickerDelegate alloc] init];
-                    delegate.themeKey = themeKey;
-                    delegate.settingsVC = settingsViewController;
-                    delegate.didSelect = NO;
-                    picker.delegate = delegate;
-                    _colorPickerDelegate = delegate;
-                    // Present from the topmost visible VC to avoid conflicts
-                    UIViewController *presenter = settingsViewController.navigationController.topViewController ?: settingsViewController;
-                    while (presenter.presentedViewController) presenter = presenter.presentedViewController;
-                    [presenter presentViewController:picker animated:YES completion:nil];
-                }
-            };
+                    [self themeAddPresetRowWithName:@"Midnight Blue"
+                        overlay:[UIColor colorWithRed:0.6 green:0.8 blue:1.0 alpha:1.0]
+                        tabIcons:[UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0]
+                        seekBar:[UIColor colorWithRed:0.2 green:0.5 blue:1.0 alpha:1.0]
+                        bg:[UIColor colorWithRed:0.05 green:0.05 blue:0.15 alpha:1.0]
+                        textP:[UIColor colorWithRed:0.85 green:0.9 blue:1.0 alpha:1.0]
+                        textS:[UIColor colorWithRed:0.5 green:0.6 blue:0.75 alpha:1.0]
+                        nav:[UIColor colorWithRed:0.08 green:0.08 blue:0.2 alpha:1.0]
+                        accent:[UIColor colorWithRed:0.2 green:0.5 blue:1.0 alpha:1.0]
+                        toRows:presetRows settingsVC:settingsViewController];
 
-            // Helper: create a color picker row for a theme element
-            void (^addColorRow)(NSString *, NSString *) = ^(NSString *title, NSString *themeKey) {
-                YTSettingsSectionItem *item = [YTSettingsSectionItemClass itemWithTitle:LOC(title)
-                    accessibilityIdentifier:nil
-                    detailTextBlock:^NSString *() {
-                        UIColor *c = loadColor(themeKey);
-                        return c ? hexFromColor(c) : LOC(@"Default");
-                    }
-                    selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
-                        // Tap → open color picker directly
-                        presentPicker(themeKey, loadColor(themeKey));
-                        return YES;
-                    }];
-                [rows addObject:item];
+                    [self themeAddPresetRowWithName:@"Solarized Dark"
+                        overlay:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0]
+                        tabIcons:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0]
+                        seekBar:[UIColor colorWithRed:0.52 green:0.60 blue:0.0 alpha:1.0]
+                        bg:[UIColor colorWithRed:0.0 green:0.17 blue:0.21 alpha:1.0]
+                        textP:[UIColor colorWithRed:0.93 green:0.91 blue:0.84 alpha:1.0]
+                        textS:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0]
+                        nav:[UIColor colorWithRed:0.03 green:0.21 blue:0.26 alpha:1.0]
+                        accent:[UIColor colorWithRed:0.15 green:0.55 blue:0.82 alpha:1.0]
+                        toRows:presetRows settingsVC:settingsViewController];
 
-                // Add reset row underneath if color is set
-                if (loadColor(themeKey)) {
-                    YTSettingsSectionItem *reset = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"    ↺ %@ %@", LOC(@"Reset"), LOC(title)]
-                        accessibilityIdentifier:nil
-                        detailTextBlock:nil
-                        selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
-                            [[YTLUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
-                            ytl_clearThemeCache();
-                            // Pop back so the page rebuilds without the stale reset row
-                            [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
-                            return YES;
-                        }];
-                    [rows addObject:reset];
-                }
-            };
+                    [self themeAddPresetRowWithName:@"Monokai"
+                        overlay:[UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0]
+                        tabIcons:[UIColor colorWithRed:0.65 green:0.89 blue:0.18 alpha:1.0]
+                        seekBar:[UIColor colorWithRed:0.98 green:0.15 blue:0.45 alpha:1.0]
+                        bg:[UIColor colorWithRed:0.15 green:0.16 blue:0.13 alpha:1.0]
+                        textP:[UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0]
+                        textS:[UIColor colorWithRed:0.46 green:0.44 blue:0.37 alpha:1.0]
+                        nav:[UIColor colorWithRed:0.2 green:0.2 blue:0.17 alpha:1.0]
+                        accent:[UIColor colorWithRed:0.40 green:0.85 blue:0.94 alpha:1.0]
+                        toRows:presetRows settingsVC:settingsViewController];
 
-            // Helper: save a color to a theme key
-            void (^saveColor)(NSString *, UIColor *) = ^(NSString *key, UIColor *color) {
-                NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
-                [[YTLUserDefaults standardUserDefaults] setObject:data forKey:key];
-            };
+                    [self themeAddPresetRowWithName:@"Rose Gold"
+                        overlay:[UIColor colorWithRed:0.6 green:0.35 blue:0.35 alpha:1.0]
+                        tabIcons:[UIColor colorWithRed:0.7 green:0.4 blue:0.4 alpha:1.0]
+                        seekBar:[UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0]
+                        bg:[UIColor colorWithRed:1.0 green:0.95 blue:0.93 alpha:1.0]
+                        textP:[UIColor colorWithRed:0.25 green:0.15 blue:0.15 alpha:1.0]
+                        textS:[UIColor colorWithRed:0.55 green:0.4 blue:0.4 alpha:1.0]
+                        nav:[UIColor colorWithRed:0.95 green:0.88 blue:0.86 alpha:1.0]
+                        accent:[UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0]
+                        toRows:presetRows settingsVC:settingsViewController];
 
-            // Helper: apply a full preset
-            void (^applyPreset)(UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *) =
-                ^(UIColor *overlay, UIColor *tabIcons, UIColor *seekBar, UIColor *bg, UIColor *textP, UIColor *textS, UIColor *nav, UIColor *accent) {
-                    saveColor(@"theme_overlayButtons", overlay);
-                    saveColor(@"theme_tabBarIcons", tabIcons);
-                    saveColor(@"theme_seekBar", seekBar);
-                    saveColor(@"theme_background", bg);
-                    saveColor(@"theme_textPrimary", textP);
-                    saveColor(@"theme_textSecondary", textS);
-                    saveColor(@"theme_navBar", nav);
-                    saveColor(@"theme_accent", accent);
-                    ytl_clearThemeCache();
-                };
+                    [self themeAddPresetRowWithName:@"Clean White"
+                        overlay:[UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:1.0]
+                        tabIcons:[UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1.0]
+                        seekBar:[UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0]
+                        bg:[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0]
+                        textP:[UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:1.0]
+                        textS:[UIColor colorWithRed:0.45 green:0.45 blue:0.45 alpha:1.0]
+                        nav:[UIColor colorWithRed:0.97 green:0.97 blue:0.97 alpha:1.0]
+                        accent:[UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0]
+                        toRows:presetRows settingsVC:settingsViewController];
 
-            // Helper: create a preset row
-            void (^addPreset)(NSString *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *, UIColor *) =
-                ^(NSString *name, UIColor *overlay, UIColor *tabIcons, UIColor *seekBar, UIColor *bg, UIColor *textP, UIColor *textS, UIColor *nav, UIColor *accent) {
-                    YTSettingsSectionItem *item = [YTSettingsSectionItemClass itemWithTitle:name
-                        accessibilityIdentifier:nil
-                        detailTextBlock:nil
-                        selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
-                            applyPreset(overlay, tabIcons, seekBar, bg, textP, textS, nav, accent);
-                            UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"PresetApplied")
-                                message:[NSString stringWithFormat:@"%@ %@", name, LOC(@"ColorSavedDesc")]
-                                preferredStyle:UIAlertControllerStyleAlert];
-                            [alert addAction:[UIAlertAction actionWithTitle:LOC(@"RestartNow") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *a) { exit(0); }]];
-                            [alert addAction:[UIAlertAction actionWithTitle:LOC(@"Later") style:UIAlertActionStyleCancel handler:nil]];
-                            UIViewController *presenter = settingsViewController.navigationController.topViewController ?: settingsViewController;
-                            [presenter presentViewController:alert animated:YES completion:nil];
-                            return YES;
-                        }];
-                    [rows addObject:item];
-                };
+                    [self themeAddPresetRowWithName:@"Warm Sand"
+                        overlay:[UIColor colorWithRed:0.45 green:0.35 blue:0.25 alpha:1.0]
+                        tabIcons:[UIColor colorWithRed:0.5 green:0.38 blue:0.25 alpha:1.0]
+                        seekBar:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0]
+                        bg:[UIColor colorWithRed:0.98 green:0.96 blue:0.91 alpha:1.0]
+                        textP:[UIColor colorWithRed:0.2 green:0.15 blue:0.1 alpha:1.0]
+                        textS:[UIColor colorWithRed:0.5 green:0.42 blue:0.35 alpha:1.0]
+                        nav:[UIColor colorWithRed:0.95 green:0.92 blue:0.85 alpha:1.0]
+                        accent:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0]
+                        toRows:presetRows settingsVC:settingsViewController];
 
-            // --- Presets ---
-            YTSettingsSectionItem *presetsHeader = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"— %@ —", LOC(@"Presets")] accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
-            [rows addObject:presetsHeader];
+                    [self themeAddPresetRowWithName:@"Ocean Breeze"
+                        overlay:[UIColor colorWithRed:0.15 green:0.4 blue:0.55 alpha:1.0]
+                        tabIcons:[UIColor colorWithRed:0.1 green:0.45 blue:0.6 alpha:1.0]
+                        seekBar:[UIColor colorWithRed:0.0 green:0.6 blue:0.7 alpha:1.0]
+                        bg:[UIColor colorWithRed:0.94 green:0.97 blue:1.0 alpha:1.0]
+                        textP:[UIColor colorWithRed:0.1 green:0.15 blue:0.2 alpha:1.0]
+                        textS:[UIColor colorWithRed:0.35 green:0.45 blue:0.55 alpha:1.0]
+                        nav:[UIColor colorWithRed:0.9 green:0.94 blue:0.98 alpha:1.0]
+                        accent:[UIColor colorWithRed:0.0 green:0.55 blue:0.65 alpha:1.0]
+                        toRows:presetRows settingsVC:settingsViewController];
 
-            // OLED Dark — pure black, white text, red accent
-            addPreset(@"OLED Dark",
-                [UIColor whiteColor],                                                    // overlay
-                [UIColor whiteColor],                                                    // tab icons
-                [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:1.0],                // seek bar
-                [UIColor blackColor],                                                    // background
-                [UIColor whiteColor],                                                    // primary text
-                [UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:1.0],              // secondary text
-                [UIColor blackColor],                                                    // nav bar
-                [UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:1.0]                 // accent
-            );
+                    [self themeAddPresetRowWithName:@"Forest"
+                        overlay:[UIColor colorWithRed:0.8 green:0.93 blue:0.8 alpha:1.0]
+                        tabIcons:[UIColor colorWithRed:0.4 green:0.75 blue:0.4 alpha:1.0]
+                        seekBar:[UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0]
+                        bg:[UIColor colorWithRed:0.06 green:0.1 blue:0.06 alpha:1.0]
+                        textP:[UIColor colorWithRed:0.85 green:0.95 blue:0.85 alpha:1.0]
+                        textS:[UIColor colorWithRed:0.5 green:0.65 blue:0.5 alpha:1.0]
+                        nav:[UIColor colorWithRed:0.08 green:0.14 blue:0.08 alpha:1.0]
+                        accent:[UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0]
+                        toRows:presetRows settingsVC:settingsViewController];
 
-            // Midnight Blue
-            addPreset(@"Midnight Blue",
-                [UIColor colorWithRed:0.6 green:0.8 blue:1.0 alpha:1.0],                // overlay
-                [UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0],                // tab icons
-                [UIColor colorWithRed:0.2 green:0.5 blue:1.0 alpha:1.0],                // seek bar
-                [UIColor colorWithRed:0.05 green:0.05 blue:0.15 alpha:1.0],             // background
-                [UIColor colorWithRed:0.85 green:0.9 blue:1.0 alpha:1.0],               // primary text
-                [UIColor colorWithRed:0.5 green:0.6 blue:0.75 alpha:1.0],               // secondary text
-                [UIColor colorWithRed:0.08 green:0.08 blue:0.2 alpha:1.0],              // nav bar
-                [UIColor colorWithRed:0.2 green:0.5 blue:1.0 alpha:1.0]                 // accent
-            );
+                    [self themeAddPresetRowWithName:@"Afterglow"
+                        overlay:[UIColor colorWithRed:1.0 green:0.55 blue:0.65 alpha:1.0]
+                        tabIcons:[UIColor colorWithRed:0.95 green:0.45 blue:0.55 alpha:1.0]
+                        seekBar:[UIColor colorWithRed:1.0 green:0.4 blue:0.5 alpha:1.0]
+                        bg:[UIColor colorWithRed:0.1 green:0.05 blue:0.18 alpha:1.0]
+                        textP:[UIColor colorWithRed:1.0 green:0.9 blue:0.92 alpha:1.0]
+                        textS:[UIColor colorWithRed:0.65 green:0.5 blue:0.7 alpha:1.0]
+                        nav:[UIColor colorWithRed:0.12 green:0.07 blue:0.22 alpha:1.0]
+                        accent:[UIColor colorWithRed:0.95 green:0.4 blue:0.5 alpha:1.0]
+                        toRows:presetRows settingsVC:settingsViewController];
 
-            // Solarized Dark
-            addPreset(@"Solarized Dark",
-                [UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0],             // overlay (base1)
-                [UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0],             // tab icons
-                [UIColor colorWithRed:0.52 green:0.60 blue:0.0 alpha:1.0],              // seek bar (green)
-                [UIColor colorWithRed:0.0 green:0.17 blue:0.21 alpha:1.0],              // background (base03)
-                [UIColor colorWithRed:0.93 green:0.91 blue:0.84 alpha:1.0],             // primary text (base3)
-                [UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0],             // secondary text (base1)
-                [UIColor colorWithRed:0.03 green:0.21 blue:0.26 alpha:1.0],             // nav bar (base02)
-                [UIColor colorWithRed:0.15 green:0.55 blue:0.82 alpha:1.0]              // accent (blue)
-            );
+                    [self themeAddPresetRowWithName:@"Afterglow Light"
+                        overlay:[UIColor colorWithRed:0.75 green:0.3 blue:0.45 alpha:1.0]
+                        tabIcons:[UIColor colorWithRed:0.7 green:0.3 blue:0.5 alpha:1.0]
+                        seekBar:[UIColor colorWithRed:0.95 green:0.35 blue:0.45 alpha:1.0]
+                        bg:[UIColor colorWithRed:1.0 green:0.95 blue:0.96 alpha:1.0]
+                        textP:[UIColor colorWithRed:0.2 green:0.08 blue:0.15 alpha:1.0]
+                        textS:[UIColor colorWithRed:0.5 green:0.32 blue:0.45 alpha:1.0]
+                        nav:[UIColor colorWithRed:0.97 green:0.9 blue:0.93 alpha:1.0]
+                        accent:[UIColor colorWithRed:0.85 green:0.3 blue:0.45 alpha:1.0]
+                        toRows:presetRows settingsVC:settingsViewController];
 
-            // Monokai
-            addPreset(@"Monokai",
-                [UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0],             // overlay
-                [UIColor colorWithRed:0.65 green:0.89 blue:0.18 alpha:1.0],             // tab icons (green)
-                [UIColor colorWithRed:0.98 green:0.15 blue:0.45 alpha:1.0],             // seek bar (pink)
-                [UIColor colorWithRed:0.15 green:0.16 blue:0.13 alpha:1.0],             // background
-                [UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0],             // primary text
-                [UIColor colorWithRed:0.46 green:0.44 blue:0.37 alpha:1.0],             // secondary text
-                [UIColor colorWithRed:0.2 green:0.2 blue:0.17 alpha:1.0],               // nav bar
-                [UIColor colorWithRed:0.40 green:0.85 blue:0.94 alpha:1.0]              // accent (cyan)
-            );
+                    YTSettingsPickerViewController *presetPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Presets") pickerSectionTitle:nil rows:presetRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:presetPicker];
+                    return YES;
+                }];
+            [rows addObject:presetsPage];
 
-            // Rose Gold (light)
-            addPreset(@"Rose Gold",
-                [UIColor colorWithRed:0.6 green:0.35 blue:0.35 alpha:1.0],              // overlay
-                [UIColor colorWithRed:0.7 green:0.4 blue:0.4 alpha:1.0],                // tab icons
-                [UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0],              // seek bar
-                [UIColor colorWithRed:1.0 green:0.95 blue:0.93 alpha:1.0],              // background (warm cream)
-                [UIColor colorWithRed:0.25 green:0.15 blue:0.15 alpha:1.0],             // primary text (dark rose)
-                [UIColor colorWithRed:0.55 green:0.4 blue:0.4 alpha:1.0],               // secondary text
-                [UIColor colorWithRed:0.95 green:0.88 blue:0.86 alpha:1.0],             // nav bar (light pink)
-                [UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0]               // accent
-            );
+            // Custom Colors sub-page
+            YTSettingsSectionItem *colorsPage = [YTSettingsSectionItemClass itemWithTitle:LOC(@"CustomColors")
+                accessibilityIdentifier:nil
+                detailTextBlock:^NSString *() { return @"\u2023"; }
+                selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
+                    NSMutableArray <YTSettingsSectionItem *> *colorRows = [NSMutableArray array];
 
-            // Clean White (light)
-            addPreset(@"Clean White",
-                [UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:1.0],                // overlay
-                [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1.0],             // tab icons
-                [UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0],                // seek bar (red)
-                [UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0],                // background (pure white)
-                [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:1.0],                // primary text
-                [UIColor colorWithRed:0.45 green:0.45 blue:0.45 alpha:1.0],             // secondary text
-                [UIColor colorWithRed:0.97 green:0.97 blue:0.97 alpha:1.0],             // nav bar
-                [UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0]                // accent (blue)
-            );
+                    [self themeAddColorRowWithTitle:@"OverlayButtons" themeKey:@"theme_overlayButtons" toRows:colorRows settingsVC:settingsViewController];
+                    [self themeAddColorRowWithTitle:@"TabBarIcons" themeKey:@"theme_tabBarIcons" toRows:colorRows settingsVC:settingsViewController];
+                    [self themeAddColorRowWithTitle:@"SeekBar" themeKey:@"theme_seekBar" toRows:colorRows settingsVC:settingsViewController];
+                    [self themeAddColorRowWithTitle:@"Background" themeKey:@"theme_background" toRows:colorRows settingsVC:settingsViewController];
+                    [self themeAddColorRowWithTitle:@"PrimaryText" themeKey:@"theme_textPrimary" toRows:colorRows settingsVC:settingsViewController];
+                    [self themeAddColorRowWithTitle:@"SecondaryText" themeKey:@"theme_textSecondary" toRows:colorRows settingsVC:settingsViewController];
+                    [self themeAddColorRowWithTitle:@"NavigationBar" themeKey:@"theme_navBar" toRows:colorRows settingsVC:settingsViewController];
+                    [self themeAddColorRowWithTitle:@"AccentColor" themeKey:@"theme_accent" toRows:colorRows settingsVC:settingsViewController];
 
-            // Warm Sand (light)
-            addPreset(@"Warm Sand",
-                [UIColor colorWithRed:0.45 green:0.35 blue:0.25 alpha:1.0],             // overlay
-                [UIColor colorWithRed:0.5 green:0.38 blue:0.25 alpha:1.0],              // tab icons
-                [UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0],              // seek bar (amber)
-                [UIColor colorWithRed:0.98 green:0.96 blue:0.91 alpha:1.0],             // background (cream)
-                [UIColor colorWithRed:0.2 green:0.15 blue:0.1 alpha:1.0],               // primary text (dark brown)
-                [UIColor colorWithRed:0.5 green:0.42 blue:0.35 alpha:1.0],              // secondary text
-                [UIColor colorWithRed:0.95 green:0.92 blue:0.85 alpha:1.0],             // nav bar (light tan)
-                [UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0]               // accent (amber)
-            );
+                    YTSettingsPickerViewController *colorPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"CustomColors") pickerSectionTitle:nil rows:colorRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:colorPicker];
+                    return YES;
+                }];
+            [rows addObject:colorsPage];
 
-            // Ocean Breeze (light)
-            addPreset(@"Ocean Breeze",
-                [UIColor colorWithRed:0.15 green:0.4 blue:0.55 alpha:1.0],              // overlay
-                [UIColor colorWithRed:0.1 green:0.45 blue:0.6 alpha:1.0],               // tab icons
-                [UIColor colorWithRed:0.0 green:0.6 blue:0.7 alpha:1.0],                // seek bar (teal)
-                [UIColor colorWithRed:0.94 green:0.97 blue:1.0 alpha:1.0],              // background (ice blue)
-                [UIColor colorWithRed:0.1 green:0.15 blue:0.2 alpha:1.0],               // primary text (dark navy)
-                [UIColor colorWithRed:0.35 green:0.45 blue:0.55 alpha:1.0],             // secondary text
-                [UIColor colorWithRed:0.9 green:0.94 blue:0.98 alpha:1.0],              // nav bar (light sky)
-                [UIColor colorWithRed:0.0 green:0.55 blue:0.65 alpha:1.0]               // accent (teal)
-            );
+            // Gradient sub-page
+            YTSettingsSectionItem *gradientPage = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Gradient")
+                accessibilityIdentifier:nil
+                detailTextBlock:^NSString *() { return @"\u2023"; }
+                selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
+                    NSMutableArray <YTSettingsSectionItem *> *gradientRows = [NSMutableArray array];
 
-            // Forest
-            addPreset(@"Forest",
-                [UIColor colorWithRed:0.8 green:0.93 blue:0.8 alpha:1.0],               // overlay
-                [UIColor colorWithRed:0.4 green:0.75 blue:0.4 alpha:1.0],               // tab icons
-                [UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0],                // seek bar
-                [UIColor colorWithRed:0.06 green:0.1 blue:0.06 alpha:1.0],              // background
-                [UIColor colorWithRed:0.85 green:0.95 blue:0.85 alpha:1.0],             // primary text
-                [UIColor colorWithRed:0.5 green:0.65 blue:0.5 alpha:1.0],               // secondary text
-                [UIColor colorWithRed:0.08 green:0.14 blue:0.08 alpha:1.0],             // nav bar
-                [UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0]                 // accent
-            );
+                    [self themeAddColorRowWithTitle:@"GradientStart" themeKey:@"theme_gradientStart" toRows:gradientRows settingsVC:settingsViewController];
+                    [self themeAddColorRowWithTitle:@"GradientEnd" themeKey:@"theme_gradientEnd" toRows:gradientRows settingsVC:settingsViewController];
 
-            // Afterglow — vaporwave sunset
-            addPreset(@"Afterglow",
-                [UIColor colorWithRed:1.0 green:0.55 blue:0.65 alpha:1.0],               // overlay (warm pink)
-                [UIColor colorWithRed:0.95 green:0.45 blue:0.55 alpha:1.0],              // tab icons (porange-pink)
-                [UIColor colorWithRed:1.0 green:0.4 blue:0.5 alpha:1.0],                 // seek bar (hot coral)
-                [UIColor colorWithRed:0.1 green:0.05 blue:0.18 alpha:1.0],               // background (deep purple-black)
-                [UIColor colorWithRed:1.0 green:0.9 blue:0.92 alpha:1.0],                // primary text (warm white)
-                [UIColor colorWithRed:0.65 green:0.5 blue:0.7 alpha:1.0],                // secondary text (lavender)
-                [UIColor colorWithRed:0.12 green:0.07 blue:0.22 alpha:1.0],              // nav bar (dark purple)
-                [UIColor colorWithRed:0.95 green:0.4 blue:0.5 alpha:1.0]                 // accent (porange)
-            );
+                    YTSettingsPickerViewController *gradientPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Gradient") pickerSectionTitle:nil rows:gradientRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:gradientPicker];
+                    return YES;
+                }];
+            [rows addObject:gradientPage];
 
-            // Afterglow Light — vaporwave sunrise
-            addPreset(@"Afterglow Light",
-                [UIColor colorWithRed:0.75 green:0.3 blue:0.45 alpha:1.0],               // overlay (muted pink)
-                [UIColor colorWithRed:0.7 green:0.3 blue:0.5 alpha:1.0],                 // tab icons (porange-pink)
-                [UIColor colorWithRed:0.95 green:0.35 blue:0.45 alpha:1.0],              // seek bar (hot coral)
-                [UIColor colorWithRed:1.0 green:0.95 blue:0.96 alpha:1.0],               // background (warm blush white)
-                [UIColor colorWithRed:0.2 green:0.08 blue:0.15 alpha:1.0],               // primary text (deep plum)
-                [UIColor colorWithRed:0.5 green:0.32 blue:0.45 alpha:1.0],               // secondary text (dusty purple)
-                [UIColor colorWithRed:0.97 green:0.9 blue:0.93 alpha:1.0],               // nav bar (light blush)
-                [UIColor colorWithRed:0.85 green:0.3 blue:0.45 alpha:1.0]                // accent (porange)
-            );
-
-            // --- Individual Colors ---
-            YTSettingsSectionItem *colorsHeader = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"— %@ —", LOC(@"CustomColors")] accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
-            [rows addObject:colorsHeader];
-
-            addColorRow(@"OverlayButtons", @"theme_overlayButtons");
-            addColorRow(@"TabBarIcons", @"theme_tabBarIcons");
-            addColorRow(@"SeekBar", @"theme_seekBar");
-            addColorRow(@"Background", @"theme_background");
-            addColorRow(@"PrimaryText", @"theme_textPrimary");
-            addColorRow(@"SecondaryText", @"theme_textSecondary");
-            addColorRow(@"NavigationBar", @"theme_navBar");
-            addColorRow(@"AccentColor", @"theme_accent");
-
-            // --- Gradient ---
-            YTSettingsSectionItem *gradientHeader = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"— %@ —", LOC(@"Gradient")] accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
-            [rows addObject:gradientHeader];
-
-            addColorRow(@"GradientStart", @"theme_gradientStart");
-            addColorRow(@"GradientEnd", @"theme_gradientEnd");
-
-            // Reset All button
+            // Reset All Colors stays at the Appearance top level
             YTSettingsSectionItem *resetAll = [YTSettingsSectionItemClass itemWithTitle:LOC(@"ResetAllColors")
                 accessibilityIdentifier:nil
                 detailTextBlock:nil
@@ -520,119 +543,119 @@ static NSString *GetCacheSize() {
 
     if (ytlBool(@"advancedMode")) {
         YTSettingsSectionItem *overlay = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Overlay")
-        accessibilityIdentifier:@"YTLiteSectionItem"
-        detailTextBlock:^NSString *() {
-            return @"‣";
-        }
-        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSArray <YTSettingsSectionItem *> *rows = @[
-                [self switchWithTitle:@"HideAutoplay" key:@"hideAutoplay"],
-                [self switchWithTitle:@"HideSubs" key:@"hideSubs"],
-                [self switchWithTitle:@"NoHUDMsgs" key:@"noHUDMsgs"],
-                [self switchWithTitle:@"HidePrevNext" key:@"hidePrevNext"],
-                [self switchWithTitle:@"ReplacePrevNext" key:@"replacePrevNext"],
-                [self switchWithTitle:@"NoDarkBg" key:@"noDarkBg"],
-                [self switchWithTitle:@"NoEndScreenCards" key:@"endScreenCards"],
-                [self switchWithTitle:@"NoFullscreenActions" key:@"noFullscreenActions"],
-                [self switchWithTitle:@"PersistentProgressBar" key:@"persistentProgressBar"],
-                [self switchWithTitle:@"StockVolumeHUD" key:@"stockVolumeHUD"],
-                [self switchWithTitle:@"NoRelatedVids" key:@"noRelatedVids"],
-                [self switchWithTitle:@"NoPromotionCards" key:@"noPromotionCards"],
-                [self switchWithTitle:@"NoWatermarks" key:@"noWatermarks"],
-                [self switchWithTitle:@"VideoEndTime" key:@"videoEndTime"],
-                [self switchWithTitle:@"24hrFormat" key:@"24hrFormat"]
-            ];
+            accessibilityIdentifier:@"YTLiteSectionItem"
+            detailTextBlock:^NSString *() {
+                return @"\u2023";
+            }
+            selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+                NSArray <YTSettingsSectionItem *> *rows = @[
+                    [self switchWithTitle:@"HideAutoplay" key:@"hideAutoplay"],
+                    [self switchWithTitle:@"HideSubs" key:@"hideSubs"],
+                    [self switchWithTitle:@"NoHUDMsgs" key:@"noHUDMsgs"],
+                    [self switchWithTitle:@"HidePrevNext" key:@"hidePrevNext"],
+                    [self switchWithTitle:@"ReplacePrevNext" key:@"replacePrevNext"],
+                    [self switchWithTitle:@"NoDarkBg" key:@"noDarkBg"],
+                    [self switchWithTitle:@"NoEndScreenCards" key:@"endScreenCards"],
+                    [self switchWithTitle:@"NoFullscreenActions" key:@"noFullscreenActions"],
+                    [self switchWithTitle:@"PersistentProgressBar" key:@"persistentProgressBar"],
+                    [self switchWithTitle:@"StockVolumeHUD" key:@"stockVolumeHUD"],
+                    [self switchWithTitle:@"NoRelatedVids" key:@"noRelatedVids"],
+                    [self switchWithTitle:@"NoPromotionCards" key:@"noPromotionCards"],
+                    [self switchWithTitle:@"NoWatermarks" key:@"noWatermarks"],
+                    [self switchWithTitle:@"VideoEndTime" key:@"videoEndTime"],
+                    [self switchWithTitle:@"24hrFormat" key:@"24hrFormat"]
+                ];
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Overlay") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-            [settingsViewController pushViewController:picker];
-            return YES;
-        }];
+                YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Overlay") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                [settingsViewController pushViewController:picker];
+                return YES;
+            }];
 
         [sectionItems addObject:overlay];
 
         YTSettingsSectionItem *player = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Player")
-        accessibilityIdentifier:@"YTLiteSectionItem"
-        detailTextBlock:^NSString *() {
-            return @"‣";
-        }
-        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSArray <YTSettingsSectionItem *> *rows = @[
-                [self switchWithTitle:@"Miniplayer" key:@"miniplayer"],
-                [self switchWithTitle:@"PortraitFullscreen" key:@"portraitFullscreen"],
-                [self switchWithTitle:@"CopyWithTimestamp" key:@"copyWithTimestamp"],
-                [self switchWithTitle:@"DisableAutoplay" key:@"disableAutoplay"],
-                [self switchWithTitle:@"DisableAutoCaptions" key:@"disableAutoCaptions"],
-                [self switchWithTitle:@"NoContentWarning" key:@"noContentWarning"],
-                [self switchWithTitle:@"ClassicQuality" key:@"classicQuality"],
-                [self switchWithTitle:@"ExtraSpeedOptions" key:@"extraSpeedOptions"],
-                [self switchWithTitle:@"DontSnap2Chapter" key:@"dontSnapToChapter"],
-                [self switchWithTitle:@"NoTwoFingerSnapToChapter" key:@"noTwoFingerSnapToChapter"],
-                [self switchWithTitle:@"PauseOnOverlay" key:@"pauseOnOverlay"],
-                [self switchWithTitle:@"RedProgressBar" key:@"redProgressBar"],
-                [self switchWithTitle:@"NoPlayerRemixButton" key:@"noPlayerRemixButton"],
-                [self switchWithTitle:@"NoPlayerClipButton" key:@"noPlayerClipButton"],
-                [self switchWithTitle:@"NoPlayerDownloadButton" key:@"noPlayerDownloadButton"],
-                [self switchWithTitle:@"NoHints" key:@"noHints"],
-                [self switchWithTitle:@"NoFreeZoom" key:@"noFreeZoom"],
-                [self switchWithTitle:@"AutoFullscreen" key:@"autoFullscreen"],
-                [self switchWithTitle:@"ExitFullscreen" key:@"exitFullscreen"],
-                [self switchWithTitle:@"NoDoubleTap2Seek" key:@"noDoubleTapToSeek"]
-            ];
+            accessibilityIdentifier:@"YTLiteSectionItem"
+            detailTextBlock:^NSString *() {
+                return @"\u2023";
+            }
+            selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+                NSArray <YTSettingsSectionItem *> *rows = @[
+                    [self switchWithTitle:@"Miniplayer" key:@"miniplayer"],
+                    [self switchWithTitle:@"PortraitFullscreen" key:@"portraitFullscreen"],
+                    [self switchWithTitle:@"CopyWithTimestamp" key:@"copyWithTimestamp"],
+                    [self switchWithTitle:@"DisableAutoplay" key:@"disableAutoplay"],
+                    [self switchWithTitle:@"DisableAutoCaptions" key:@"disableAutoCaptions"],
+                    [self switchWithTitle:@"NoContentWarning" key:@"noContentWarning"],
+                    [self switchWithTitle:@"ClassicQuality" key:@"classicQuality"],
+                    [self switchWithTitle:@"ExtraSpeedOptions" key:@"extraSpeedOptions"],
+                    [self switchWithTitle:@"DontSnap2Chapter" key:@"dontSnapToChapter"],
+                    [self switchWithTitle:@"NoTwoFingerSnapToChapter" key:@"noTwoFingerSnapToChapter"],
+                    [self switchWithTitle:@"PauseOnOverlay" key:@"pauseOnOverlay"],
+                    [self switchWithTitle:@"RedProgressBar" key:@"redProgressBar"],
+                    [self switchWithTitle:@"NoPlayerRemixButton" key:@"noPlayerRemixButton"],
+                    [self switchWithTitle:@"NoPlayerClipButton" key:@"noPlayerClipButton"],
+                    [self switchWithTitle:@"NoPlayerDownloadButton" key:@"noPlayerDownloadButton"],
+                    [self switchWithTitle:@"NoHints" key:@"noHints"],
+                    [self switchWithTitle:@"NoFreeZoom" key:@"noFreeZoom"],
+                    [self switchWithTitle:@"AutoFullscreen" key:@"autoFullscreen"],
+                    [self switchWithTitle:@"ExitFullscreen" key:@"exitFullscreen"],
+                    [self switchWithTitle:@"NoDoubleTap2Seek" key:@"noDoubleTapToSeek"]
+                ];
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Player") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-            [settingsViewController pushViewController:picker];
-            return YES;
-        }];
+                YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Player") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                [settingsViewController pushViewController:picker];
+                return YES;
+            }];
 
         [sectionItems addObject:player];
 
         YTSettingsSectionItem *shorts = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Shorts")
-        accessibilityIdentifier:@"YTLiteSectionItem"
-        detailTextBlock:^NSString *() {
-            return @"‣";
-        }
-        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSArray <YTSettingsSectionItem *> *rows = @[
-                [self switchWithTitle:@"ShortsOnlyMode" key:@"shortsOnlyMode"],
-                [self switchWithTitle:@"AutoSkipShorts" key:@"autoSkipShorts"],
-                [self switchWithTitle:@"HideShorts" key:@"hideShorts"],
-                [self switchWithTitle:@"ShortsProgress" key:@"shortsProgress"],
-                [self switchWithTitle:@"PinchToFullscreenShorts" key:@"pinchToFullscreenShorts"],
-                [self switchWithTitle:@"ShortsToRegular" key:@"shortsToRegular"],
-                [self switchWithTitle:@"ResumeShorts" key:@"resumeShorts"],
-                [self switchWithTitle:@"HideShortsLogo" key:@"hideShortsLogo"],
-                [self switchWithTitle:@"HideShortsSearch" key:@"hideShortsSearch"],
-                [self switchWithTitle:@"HideShortsCamera" key:@"hideShortsCamera"],
-                [self switchWithTitle:@"HideShortsMore" key:@"hideShortsMore"],
-                [self switchWithTitle:@"HideShortsSubscriptions" key:@"hideShortsSubscriptions"],
-                [self switchWithTitle:@"HideShortsLike" key:@"hideShortsLike"],
-                [self switchWithTitle:@"HideShortsDislike" key:@"hideShortsDislike"],
-                [self switchWithTitle:@"HideShortsComments" key:@"hideShortsComments"],
-                [self switchWithTitle:@"HideShortsRemix" key:@"hideShortsRemix"],
-                [self switchWithTitle:@"HideShortsShare" key:@"hideShortsShare"],
-                [self switchWithTitle:@"HideShortsAvatars" key:@"hideShortsAvatars"],
-                [self switchWithTitle:@"HideShortsThanks" key:@"hideShortsThanks"],
-                [self switchWithTitle:@"HideShortsSource" key:@"hideShortsSource"],
-                [self switchWithTitle:@"HideShortsChannelName" key:@"hideShortsChannelName"],
-                [self switchWithTitle:@"HideShortsDescription" key:@"hideShortsDescription"],
-                [self switchWithTitle:@"HideShortsAudioTrack" key:@"hideShortsAudioTrack"],
-                [self switchWithTitle:@"NoPromotionCards" key:@"hideShortsPromoCards"]
-            ];
+            accessibilityIdentifier:@"YTLiteSectionItem"
+            detailTextBlock:^NSString *() {
+                return @"\u2023";
+            }
+            selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+                NSArray <YTSettingsSectionItem *> *rows = @[
+                    [self switchWithTitle:@"ShortsOnlyMode" key:@"shortsOnlyMode"],
+                    [self switchWithTitle:@"AutoSkipShorts" key:@"autoSkipShorts"],
+                    [self switchWithTitle:@"HideShorts" key:@"hideShorts"],
+                    [self switchWithTitle:@"ShortsProgress" key:@"shortsProgress"],
+                    [self switchWithTitle:@"PinchToFullscreenShorts" key:@"pinchToFullscreenShorts"],
+                    [self switchWithTitle:@"ShortsToRegular" key:@"shortsToRegular"],
+                    [self switchWithTitle:@"ResumeShorts" key:@"resumeShorts"],
+                    [self switchWithTitle:@"HideShortsLogo" key:@"hideShortsLogo"],
+                    [self switchWithTitle:@"HideShortsSearch" key:@"hideShortsSearch"],
+                    [self switchWithTitle:@"HideShortsCamera" key:@"hideShortsCamera"],
+                    [self switchWithTitle:@"HideShortsMore" key:@"hideShortsMore"],
+                    [self switchWithTitle:@"HideShortsSubscriptions" key:@"hideShortsSubscriptions"],
+                    [self switchWithTitle:@"HideShortsLike" key:@"hideShortsLike"],
+                    [self switchWithTitle:@"HideShortsDislike" key:@"hideShortsDislike"],
+                    [self switchWithTitle:@"HideShortsComments" key:@"hideShortsComments"],
+                    [self switchWithTitle:@"HideShortsRemix" key:@"hideShortsRemix"],
+                    [self switchWithTitle:@"HideShortsShare" key:@"hideShortsShare"],
+                    [self switchWithTitle:@"HideShortsAvatars" key:@"hideShortsAvatars"],
+                    [self switchWithTitle:@"HideShortsThanks" key:@"hideShortsThanks"],
+                    [self switchWithTitle:@"HideShortsSource" key:@"hideShortsSource"],
+                    [self switchWithTitle:@"HideShortsChannelName" key:@"hideShortsChannelName"],
+                    [self switchWithTitle:@"HideShortsDescription" key:@"hideShortsDescription"],
+                    [self switchWithTitle:@"HideShortsAudioTrack" key:@"hideShortsAudioTrack"],
+                    [self switchWithTitle:@"NoPromotionCards" key:@"hideShortsPromoCards"]
+                ];
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Shorts") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-            [settingsViewController pushViewController:picker];
-            return YES;
-        }];
+                YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Shorts") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                [settingsViewController pushViewController:picker];
+                return YES;
+            }];
 
         [sectionItems addObject:shorts];
     }
 
     YTSettingsSectionItem *tabbar = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Tabbar")
-    accessibilityIdentifier:@"YTLiteSectionItem"
-    detailTextBlock:^NSString *() {
-        return @"‣";
-    }
-    selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+        accessibilityIdentifier:@"YTLiteSectionItem"
+        detailTextBlock:^NSString *() {
+            return @"\u2023";
+        }
+        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
         NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
 
         [rows addObject:[self switchWithTitle:@"OpaqueBar" key:@"frostedPivot"]];
@@ -655,8 +678,7 @@ static NSString *GetCacheSize() {
         NSMutableArray *activeTabs = [[[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"] mutableCopy];
         if (!activeTabs) activeTabs = [@[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"] mutableCopy];
 
-        // Icon types for tabs
-        // YouTube icon types for tabs (from YTIcons browser)
+        // YouTube icon types for tabs
         NSDictionary *tabIconTypes = @{
             @"FEwhat_to_watch": @(65),   // TAB_HOME
             @"FEshorts": @(772),         // YOUTUBE_SHORTS_FILL_24
@@ -754,47 +776,47 @@ static NSString *GetCacheSize() {
 
     if (ytlBool(@"advancedMode")) {
         YTSettingsSectionItem *other = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Other")
-        accessibilityIdentifier:@"YTLiteSectionItem"
-        detailTextBlock:^NSString *() {
-            return @"‣";
-        }
-        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSArray <YTSettingsSectionItem *> *rows = @[
-                [self switchWithTitle:@"CopyVideoInfo" key:@"copyVideoInfo"],
-                [self switchWithTitle:@"PostManager" key:@"postManager"],
-                [self switchWithTitle:@"SaveProfilePhoto" key:@"saveProfilePhoto"],
-                [self switchWithTitle:@"CommentManager" key:@"commentManager"],
-                [self switchWithTitle:@"FixAlbums" key:@"fixAlbums"],
-                [self switchWithTitle:@"NativeShare" key:@"nativeShare"],
-                [self switchWithTitle:@"RemovePlayNext" key:@"removePlayNext"],
-                [self switchWithTitle:@"RemoveDownloadMenu" key:@"removeDownloadMenu"],
-                [self switchWithTitle:@"RemoveWatchLaterMenu" key:@"removeWatchLaterMenu"],
-                [self switchWithTitle:@"RemoveSaveToPlaylistMenu" key:@"removeSaveToPlaylistMenu"],
-                [self switchWithTitle:@"RemoveShareMenu" key:@"removeShareMenu"],
-                [self switchWithTitle:@"RemoveNotInterestedMenu" key:@"removeNotInterestedMenu"],
-                [self switchWithTitle:@"RemoveDontRecommendMenu" key:@"removeDontRecommendMenu"],
-                [self switchWithTitle:@"RemoveReportMenu" key:@"removeReportMenu"],
-                [self switchWithTitle:@"NoContinueWatching" key:@"noContinueWatching"],
-                [self switchWithTitle:@"NoSearchHistory" key:@"noSearchHistory"],
-                [self switchWithTitle:@"NoRelatedWatchNexts" key:@"noRelatedWatchNexts"],
-                [self switchWithTitle:@"StickSortComments" key:@"stickSortComments"],
-                [self switchWithTitle:@"HideSortComments" key:@"hideSortComments"],
-                [self switchWithTitle:@"PlaylistOldMinibar" key:@"playlistOldMinibar"],
-                [self switchWithTitle:@"DisableRTL" key:@"disableRTL"]
-            ];
+            accessibilityIdentifier:@"YTLiteSectionItem"
+            detailTextBlock:^NSString *() {
+                return @"\u2023";
+            }
+            selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+                NSArray <YTSettingsSectionItem *> *rows = @[
+                    [self switchWithTitle:@"CopyVideoInfo" key:@"copyVideoInfo"],
+                    [self switchWithTitle:@"PostManager" key:@"postManager"],
+                    [self switchWithTitle:@"SaveProfilePhoto" key:@"saveProfilePhoto"],
+                    [self switchWithTitle:@"CommentManager" key:@"commentManager"],
+                    [self switchWithTitle:@"FixAlbums" key:@"fixAlbums"],
+                    [self switchWithTitle:@"NativeShare" key:@"nativeShare"],
+                    [self switchWithTitle:@"RemovePlayNext" key:@"removePlayNext"],
+                    [self switchWithTitle:@"RemoveDownloadMenu" key:@"removeDownloadMenu"],
+                    [self switchWithTitle:@"RemoveWatchLaterMenu" key:@"removeWatchLaterMenu"],
+                    [self switchWithTitle:@"RemoveSaveToPlaylistMenu" key:@"removeSaveToPlaylistMenu"],
+                    [self switchWithTitle:@"RemoveShareMenu" key:@"removeShareMenu"],
+                    [self switchWithTitle:@"RemoveNotInterestedMenu" key:@"removeNotInterestedMenu"],
+                    [self switchWithTitle:@"RemoveDontRecommendMenu" key:@"removeDontRecommendMenu"],
+                    [self switchWithTitle:@"RemoveReportMenu" key:@"removeReportMenu"],
+                    [self switchWithTitle:@"NoContinueWatching" key:@"noContinueWatching"],
+                    [self switchWithTitle:@"NoSearchHistory" key:@"noSearchHistory"],
+                    [self switchWithTitle:@"NoRelatedWatchNexts" key:@"noRelatedWatchNexts"],
+                    [self switchWithTitle:@"StickSortComments" key:@"stickSortComments"],
+                    [self switchWithTitle:@"HideSortComments" key:@"hideSortComments"],
+                    [self switchWithTitle:@"PlaylistOldMinibar" key:@"playlistOldMinibar"],
+                    [self switchWithTitle:@"DisableRTL" key:@"disableRTL"]
+                ];
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Other") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-            [settingsViewController pushViewController:picker];
-            return YES;
-        }];
+                YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Other") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                [settingsViewController pushViewController:picker];
+                return YES;
+            }];
 
         [sectionItems addObject:other];
 
         [sectionItems addObject:space];
 
         YTSettingsSectionItem *speed = [YTSettingsSectionItemClass itemWithTitle:LOC(@"HoldToSpeed")
-        accessibilityIdentifier:@"YTLiteSectionItem"
-        detailTextBlock:^NSString *() {
+            accessibilityIdentifier:@"YTLiteSectionItem"
+            detailTextBlock:^NSString *() {
             NSArray *speedLabels = @[LOC(@"Disabled"), LOC(@"Default"), @"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
             return speedLabels[ytlInt(@"speedIndex")];
         }
@@ -821,8 +843,8 @@ static NSString *GetCacheSize() {
         [sectionItems addObject:speed];
 
         YTSettingsSectionItem *autoSpeed = [YTSettingsSectionItemClass itemWithTitle:LOC(@"DefaultPlaybackRate")
-        accessibilityIdentifier:@"YTLiteSectionItem"
-        detailTextBlock:^NSString *() {
+            accessibilityIdentifier:@"YTLiteSectionItem"
+            detailTextBlock:^NSString *() {
             NSArray *speedLabels = @[@"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
             return speedLabels[ytlInt(@"autoSpeedIndex")];
         }
@@ -848,8 +870,8 @@ static NSString *GetCacheSize() {
         [sectionItems addObject:autoSpeed];
 
         YTSettingsSectionItem *wifiQuality = [YTSettingsSectionItemClass itemWithTitle:LOC(@"PlaybackQualityOnWiFi")
-        accessibilityIdentifier:@"YTLiteSectionItem"
-        detailTextBlock:^NSString *() {
+            accessibilityIdentifier:@"YTLiteSectionItem"
+            detailTextBlock:^NSString *() {
             NSArray *qualityLabels = @[LOC(@"Default"), LOC(@"Best"), @"2160p60", @"2160p", @"1440p60", @"1440p", @"1080p60", @"1080p", @"720p60", @"720p", @"480p", @"360p"];
             return qualityLabels[ytlInt(@"wiFiQualityIndex")];
         }
@@ -876,8 +898,8 @@ static NSString *GetCacheSize() {
         [sectionItems addObject:wifiQuality];
 
         YTSettingsSectionItem *cellQuality = [YTSettingsSectionItemClass itemWithTitle:LOC(@"PlaybackQualityOnCellular")
-        accessibilityIdentifier:@"YTLiteSectionItem"
-        detailTextBlock:^NSString *() {
+            accessibilityIdentifier:@"YTLiteSectionItem"
+            detailTextBlock:^NSString *() {
             NSArray *qualityLabels = @[LOC(@"Default"), LOC(@"Best"), @"2160p60", @"2160p", @"1440p60", @"1440p", @"1080p60", @"1080p", @"720p60", @"720p", @"480p", @"360p"];
             return qualityLabels[ytlInt(@"cellQualityIndex")];
         }
@@ -904,8 +926,8 @@ static NSString *GetCacheSize() {
         [sectionItems addObject:cellQuality];
 
         YTSettingsSectionItem *startup = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Startup")
-        accessibilityIdentifier:@"YTLiteSectionItem"
-        detailTextBlock:^NSString *() {
+            accessibilityIdentifier:@"YTLiteSectionItem"
+            detailTextBlock:^NSString *() {
             NSString *tab = [[YTLUserDefaults standardUserDefaults] objectForKey:@"startupTab"];
             if (!tab) tab = @"FEwhat_to_watch";
             NSDictionary *names = @{@"FEwhat_to_watch": LOC(@"FEwhat_to_watch"), @"FEshorts": LOC(@"FEshorts"), @"FEsubscriptions": LOC(@"FEsubscriptions"), @"FElibrary": LOC(@"FElibrary"), @"FEexplore": LOC(@"FEexplore"), @"FEhistory": LOC(@"FEhistory"), @"VLWL": LOC(@"VLWL")};
@@ -983,11 +1005,11 @@ static NSString *GetCacheSize() {
     }];
 
     YTSettingsSectionItem *thanks = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Contributors")
-    accessibilityIdentifier:@"YTLiteSectionItem"
-    detailTextBlock:^NSString *() {
-        return @"‣";
-    }
-    selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+        accessibilityIdentifier:@"YTLiteSectionItem"
+        detailTextBlock:^NSString *() {
+            return @"\u2023";
+        }
+        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
         NSArray <YTSettingsSectionItem *> *rows = @[
             [self linkWithTitle:@"Dayanch96" description:LOC(@"Developer") link:@"https://github.com/Dayanch96/"],
             [self linkWithTitle:@"Dan Pashin" description:LOC(@"SpecialThanks") link:@"https://github.com/danpashin/"],
@@ -1006,11 +1028,11 @@ static NSString *GetCacheSize() {
     }];
 
     YTSettingsSectionItem *sources = [YTSettingsSectionItemClass itemWithTitle:LOC(@"OpenSourceLibs")
-    accessibilityIdentifier:@"YTLiteSectionItem"
-    detailTextBlock:^NSString *() {
-        return @"‣";
-    }
-    selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+        accessibilityIdentifier:@"YTLiteSectionItem"
+        detailTextBlock:^NSString *() {
+            return @"\u2023";
+        }
+        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
         NSArray <YTSettingsSectionItem *> *rows = @[
             [self linkWithTitle:@"PoomSmart" description:@"YouTube-X, YTNoPremium, YTClassicVideoQuality, YTShortsProgress, YTReExplore, SkipContentWarning, YTAutoFullscreen, YouTubeHeaders" link:@"https://github.com/PoomSmart/"],
             [self linkWithTitle:@"MiRO92" description:@"YTNoShorts" link:@"https://github.com/MiRO92/YTNoShorts"],
@@ -1089,7 +1111,6 @@ static NSString *GetCacheSize() {
 
 %new
 - (UIImage *)resizedImageNamed:(NSString *)iconName {
-
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(32, 32)];
     UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext * _Nonnull rendererContext) {
         UIView *imageView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 32, 32)];
