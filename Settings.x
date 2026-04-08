@@ -455,6 +455,18 @@ static NSString *GetCacheSize() {
                 [UIColor colorWithRed:0.95 green:0.4 blue:0.5 alpha:1.0]                 // accent (porange)
             );
 
+            // Afterglow Light — vaporwave sunrise
+            addPreset(@"Afterglow Light",
+                [UIColor colorWithRed:0.75 green:0.3 blue:0.45 alpha:1.0],               // overlay (muted pink)
+                [UIColor colorWithRed:0.7 green:0.3 blue:0.5 alpha:1.0],                 // tab icons (porange-pink)
+                [UIColor colorWithRed:0.95 green:0.35 blue:0.45 alpha:1.0],              // seek bar (hot coral)
+                [UIColor colorWithRed:1.0 green:0.95 blue:0.96 alpha:1.0],               // background (warm blush white)
+                [UIColor colorWithRed:0.2 green:0.08 blue:0.15 alpha:1.0],               // primary text (deep plum)
+                [UIColor colorWithRed:0.5 green:0.32 blue:0.45 alpha:1.0],               // secondary text (dusty purple)
+                [UIColor colorWithRed:0.97 green:0.9 blue:0.93 alpha:1.0],               // nav bar (light blush)
+                [UIColor colorWithRed:0.85 green:0.3 blue:0.45 alpha:1.0]                // accent (porange)
+            );
+
             // --- Individual Colors ---
             YTSettingsSectionItem *colorsHeader = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"— %@ —", LOC(@"CustomColors")] accessibilityIdentifier:nil detailTextBlock:nil selectBlock:nil];
             [rows addObject:colorsHeader];
