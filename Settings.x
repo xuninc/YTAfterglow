@@ -5,6 +5,12 @@ extern void ytl_clearThemeCache(void);
 
 @interface YTSettingsSectionItemManager (YTLite)
 - (void)updateYTLiteSectionWithEntry:(id)entry;
+- (NSString *)enabledSummaryForKeys:(NSArray<NSString *> *)keys;
+- (NSString *)themeCustomizationSummary;
+- (YTSettingsSectionItem *)holdToSpeedItemWithSettingsVC:(YTSettingsViewController *)settingsViewController;
+- (YTSettingsSectionItem *)defaultPlaybackRateItemWithSettingsVC:(YTSettingsViewController *)settingsViewController;
+- (YTSettingsSectionItem *)playbackQualityItemWithTitle:(NSString *)title key:(NSString *)key settingsVC:(YTSettingsViewController *)settingsViewController;
+- (YTSettingsSectionItem *)startupTabItemWithSettingsVC:(YTSettingsViewController *)settingsViewController;
 - (NSString *)themeHexFromColor:(UIColor *)color;
 - (UIColor *)themeLoadColorForKey:(NSString *)key;
 - (void)themePresentPickerForKey:(NSString *)themeKey startColor:(UIColor *)startColor settingsVC:(YTSettingsViewController *)settingsVC;
@@ -167,6 +173,165 @@ static NSString *GetCacheSize() {
     }];
 }
 
+%new
+- (NSString *)enabledSummaryForKeys:(NSArray<NSString *> *)keys {
+    NSUInteger enabledCount = 0;
+    for (NSString *key in keys) {
+        if (ytlBool(key)) enabledCount++;
+    }
+
+    if (enabledCount == 0) return LOC(@"Disabled");
+    if (enabledCount == 1) return @"1 on";
+    return [NSString stringWithFormat:@"%lu on", (unsigned long)enabledCount];
+}
+
+%new
+- (NSString *)themeCustomizationSummary {
+    NSArray *keys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar",
+                      @"theme_background", @"theme_textPrimary", @"theme_textSecondary",
+                      @"theme_navBar", @"theme_accent",
+                      @"theme_gradientStart", @"theme_gradientEnd"];
+    NSUInteger customizedCount = 0;
+
+    for (NSString *key in keys) {
+        if ([[YTLUserDefaults standardUserDefaults] objectForKey:key] != nil) customizedCount++;
+    }
+
+    if (customizedCount == 0) return LOC(@"Default");
+    if (customizedCount == 1) return @"1 custom";
+    return [NSString stringWithFormat:@"%lu custom", (unsigned long)customizedCount];
+}
+
+%new
+- (YTSettingsSectionItem *)holdToSpeedItemWithSettingsVC:(YTSettingsViewController *)settingsViewController {
+    Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
+
+    return [YTSettingsSectionItemClass itemWithTitle:LOC(@"HoldToSpeed")
+        accessibilityIdentifier:@"YTLiteSectionItem"
+        detailTextBlock:^NSString *() {
+            NSArray *speedLabels = @[LOC(@"Disabled"), LOC(@"Default"), @"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
+            return speedLabels[ytlInt(@"speedIndex")];
+        }
+        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
+            NSArray *speedLabels = @[LOC(@"Disable"), LOC(@"Default"), @"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
+
+            for (NSUInteger i = 0; i < speedLabels.count; i++) {
+                NSString *title = speedLabels[i];
+                YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
+                    [settingsViewController reloadData];
+                    ytlSetInt((int)innerArg1, @"speedIndex");
+                    return YES;
+                }];
+
+                [rows addObject:item];
+            }
+
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"HoldToSpeed") pickerSectionTitle:nil rows:rows selectedItemIndex:ytlInt(@"speedIndex") parentResponder:[self parentResponder]];
+            [settingsViewController pushViewController:picker];
+            return YES;
+        }];
+}
+
+%new
+- (YTSettingsSectionItem *)defaultPlaybackRateItemWithSettingsVC:(YTSettingsViewController *)settingsViewController {
+    Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
+
+    return [YTSettingsSectionItemClass itemWithTitle:LOC(@"DefaultPlaybackRate")
+        accessibilityIdentifier:@"YTLiteSectionItem"
+        detailTextBlock:^NSString *() {
+            NSArray *speedLabels = @[@"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
+            return speedLabels[ytlInt(@"autoSpeedIndex")];
+        }
+        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
+            NSArray *speedLabels = @[@"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
+
+            for (NSUInteger i = 0; i < speedLabels.count; i++) {
+                NSString *title = speedLabels[i];
+                YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
+                    [settingsViewController reloadData];
+                    ytlSetInt((int)innerArg1, @"autoSpeedIndex");
+                    return YES;
+                }];
+                [rows addObject:item];
+            }
+
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"DefaultPlaybackRate") pickerSectionTitle:nil rows:rows selectedItemIndex:ytlInt(@"autoSpeedIndex") parentResponder:[self parentResponder]];
+            [settingsViewController pushViewController:picker];
+            return YES;
+        }];
+}
+
+%new
+- (YTSettingsSectionItem *)playbackQualityItemWithTitle:(NSString *)title key:(NSString *)key settingsVC:(YTSettingsViewController *)settingsViewController {
+    Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
+
+    return [YTSettingsSectionItemClass itemWithTitle:LOC(title)
+        accessibilityIdentifier:@"YTLiteSectionItem"
+        detailTextBlock:^NSString *() {
+            NSArray *qualityLabels = @[LOC(@"Default"), LOC(@"Best"), @"2160p60", @"2160p", @"1440p60", @"1440p", @"1080p60", @"1080p", @"720p60", @"720p", @"480p", @"360p"];
+            return qualityLabels[ytlInt(key)];
+        }
+        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
+            NSArray *qualityLabels = @[LOC(@"Default"), LOC(@"Best"), @"2160p60", @"2160p", @"1440p60", @"1440p", @"1080p60", @"1080p", @"720p60", @"720p", @"480p", @"360p"];
+
+            for (NSUInteger i = 0; i < qualityLabels.count; i++) {
+                NSString *qualityTitle = qualityLabels[i];
+                YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:qualityTitle titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
+                    [settingsViewController reloadData];
+                    ytlSetInt((int)innerArg1, key);
+                    return YES;
+                }];
+
+                [rows addObject:item];
+            }
+
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"SelectQuality") pickerSectionTitle:nil rows:rows selectedItemIndex:ytlInt(key) parentResponder:[self parentResponder]];
+            [settingsViewController pushViewController:picker];
+            return YES;
+        }];
+}
+
+%new
+- (YTSettingsSectionItem *)startupTabItemWithSettingsVC:(YTSettingsViewController *)settingsViewController {
+    Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
+
+    return [YTSettingsSectionItemClass itemWithTitle:LOC(@"Startup")
+        accessibilityIdentifier:@"YTLiteSectionItem"
+        detailTextBlock:^NSString *() {
+            NSString *tab = [[YTLUserDefaults standardUserDefaults] currentStartupTab];
+            NSDictionary *names = @{@"FEwhat_to_watch": LOC(@"FEwhat_to_watch"), @"FEshorts": LOC(@"FEshorts"), @"FEsubscriptions": LOC(@"FEsubscriptions"), @"FElibrary": LOC(@"FElibrary"), @"FEexplore": LOC(@"FEexplore"), @"FEhistory": LOC(@"FEhistory"), @"VLWL": LOC(@"VLWL")};
+            return names[tab] ?: tab;
+        }
+        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+            NSArray *activeTabs = [[YTLUserDefaults standardUserDefaults] currentActiveTabs];
+            NSDictionary *names = @{@"FEwhat_to_watch": LOC(@"FEwhat_to_watch"), @"FEshorts": LOC(@"FEshorts"), @"FEsubscriptions": LOC(@"FEsubscriptions"), @"FElibrary": LOC(@"FElibrary"), @"FEexplore": LOC(@"FEexplore"), @"FEhistory": LOC(@"FEhistory"), @"VLWL": LOC(@"VLWL")};
+            NSString *currentTab = [[YTLUserDefaults standardUserDefaults] currentStartupTab];
+
+            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
+            NSInteger selectedIdx = 0;
+
+            for (NSUInteger i = 0; i < activeTabs.count; i++) {
+                NSString *tabId = activeTabs[i];
+                NSString *title = names[tabId] ?: tabId;
+                if ([tabId isEqualToString:currentTab]) selectedIdx = i;
+
+                YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
+                    [[YTLUserDefaults standardUserDefaults] setObject:tabId forKey:@"startupTab"];
+                    [settingsViewController reloadData];
+                    return YES;
+                }];
+                [rows addObject:item];
+            }
+
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Startup") pickerSectionTitle:nil rows:rows selectedItemIndex:selectedIdx parentResponder:[self parentResponder]];
+            [settingsViewController pushViewController:picker];
+            return YES;
+        }];
+}
+
 #pragma mark - Theme Helpers
 
 %new
@@ -286,7 +451,7 @@ static NSString *GetCacheSize() {
     YTSettingsSectionItem *general = [YTSettingsSectionItemClass itemWithTitle:LOC(@"General")
         accessibilityIdentifier:@"YTLiteSectionItem"
         detailTextBlock:^NSString *() {
-            return @"\u2023";
+            return [self enabledSummaryForKeys:@[@"noAds", @"backgroundPlayback"]];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSArray <YTSettingsSectionItem *> *rows = @[
@@ -304,7 +469,7 @@ static NSString *GetCacheSize() {
     YTSettingsSectionItem *navbar = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Navbar")
         accessibilityIdentifier:@"YTLiteSectionItem"
         detailTextBlock:^NSString *() {
-            return @"\u2023";
+            return [self enabledSummaryForKeys:@[@"noCast", @"noNotifsButton", @"noSearchButton", @"noVoiceSearchButton", @"stickyNavbar", @"noSubbar", @"noYTLogo", @"premiumYTLogo"]];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSArray <YTSettingsSectionItem *> *rows = @[
@@ -334,7 +499,7 @@ static NSString *GetCacheSize() {
     YTSettingsSectionItem *appearance = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Appearance")
         accessibilityIdentifier:@"YTLiteSectionItem"
         detailTextBlock:^NSString *() {
-            return @"\u2023";
+            return [self themeCustomizationSummary];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
@@ -545,7 +710,7 @@ static NSString *GetCacheSize() {
         YTSettingsSectionItem *overlay = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Overlay")
             accessibilityIdentifier:@"YTLiteSectionItem"
             detailTextBlock:^NSString *() {
-                return @"\u2023";
+                return [self enabledSummaryForKeys:@[@"hideAutoplay", @"hideSubs", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"endScreenCards", @"noFullscreenActions", @"persistentProgressBar", @"stockVolumeHUD", @"noRelatedVids", @"noPromotionCards", @"noWatermarks", @"videoEndTime", @"24hrFormat"]];
             }
             selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
                 NSArray <YTSettingsSectionItem *> *rows = @[
@@ -576,10 +741,10 @@ static NSString *GetCacheSize() {
         YTSettingsSectionItem *player = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Player")
             accessibilityIdentifier:@"YTLiteSectionItem"
             detailTextBlock:^NSString *() {
-                return @"\u2023";
+                return [self enabledSummaryForKeys:@[@"miniplayer", @"portraitFullscreen", @"copyWithTimestamp", @"disableAutoplay", @"disableAutoCaptions", @"noContentWarning", @"classicQuality", @"extraSpeedOptions", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"redProgressBar", @"noPlayerRemixButton", @"noPlayerClipButton", @"noPlayerDownloadButton", @"noHints", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"]];
             }
             selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-                NSArray <YTSettingsSectionItem *> *rows = @[
+                NSMutableArray <YTSettingsSectionItem *> *rows = [@[
                     [self switchWithTitle:@"Miniplayer" key:@"miniplayer"],
                     [self switchWithTitle:@"PortraitFullscreen" key:@"portraitFullscreen"],
                     [self switchWithTitle:@"CopyWithTimestamp" key:@"copyWithTimestamp"],
@@ -600,7 +765,19 @@ static NSString *GetCacheSize() {
                     [self switchWithTitle:@"AutoFullscreen" key:@"autoFullscreen"],
                     [self switchWithTitle:@"ExitFullscreen" key:@"exitFullscreen"],
                     [self switchWithTitle:@"NoDoubleTap2Seek" key:@"noDoubleTapToSeek"]
-                ];
+                ] mutableCopy];
+
+                YTSettingsSectionItem *defaultsHeader = [%c(YTSettingsSectionItem) itemWithTitle:@"Playback Defaults"
+                    accessibilityIdentifier:@"YTLiteSectionItem"
+                    detailTextBlock:nil
+                    selectBlock:nil];
+                defaultsHeader.enabled = NO;
+                [rows addObject:defaultsHeader];
+                [rows addObject:[self holdToSpeedItemWithSettingsVC:settingsViewController]];
+                [rows addObject:[self defaultPlaybackRateItemWithSettingsVC:settingsViewController]];
+                [rows addObject:[self playbackQualityItemWithTitle:@"PlaybackQualityOnWiFi" key:@"wiFiQualityIndex" settingsVC:settingsViewController]];
+                [rows addObject:[self playbackQualityItemWithTitle:@"PlaybackQualityOnCellular" key:@"cellQualityIndex" settingsVC:settingsViewController]];
+                [rows addObject:[self startupTabItemWithSettingsVC:settingsViewController]];
 
                 YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Player") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                 [settingsViewController pushViewController:picker];
@@ -612,7 +789,7 @@ static NSString *GetCacheSize() {
         YTSettingsSectionItem *shorts = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Shorts")
             accessibilityIdentifier:@"YTLiteSectionItem"
             detailTextBlock:^NSString *() {
-                return @"\u2023";
+                return [self enabledSummaryForKeys:@[@"shortsOnlyMode", @"autoSkipShorts", @"hideShorts", @"shortsProgress", @"pinchToFullscreenShorts", @"shortsToRegular", @"resumeShorts", @"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"]];
             }
             selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
                 NSArray <YTSettingsSectionItem *> *rows = @[
@@ -653,7 +830,7 @@ static NSString *GetCacheSize() {
     YTSettingsSectionItem *tabbar = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Tabbar")
         accessibilityIdentifier:@"YTLiteSectionItem"
         detailTextBlock:^NSString *() {
-            return @"\u2023";
+            return [NSString stringWithFormat:@"%lu tabs", (unsigned long)[[YTLUserDefaults standardUserDefaults] currentActiveTabs].count];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
         NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
@@ -775,7 +952,7 @@ static NSString *GetCacheSize() {
         YTSettingsSectionItem *other = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Other")
             accessibilityIdentifier:@"YTLiteSectionItem"
             detailTextBlock:^NSString *() {
-                return @"\u2023";
+                return [self enabledSummaryForKeys:@[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare", @"removePlayNext", @"removeDownloadMenu", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeShareMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu", @"noContinueWatching", @"noSearchHistory", @"noRelatedWatchNexts", @"stickSortComments", @"hideSortComments", @"playlistOldMinibar", @"disableRTL"]];
             }
             selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
                 NSArray <YTSettingsSectionItem *> *rows = @[
@@ -810,152 +987,6 @@ static NSString *GetCacheSize() {
         [sectionItems addObject:other];
 
         [sectionItems addObject:space];
-
-        YTSettingsSectionItem *speed = [YTSettingsSectionItemClass itemWithTitle:LOC(@"HoldToSpeed")
-            accessibilityIdentifier:@"YTLiteSectionItem"
-            detailTextBlock:^NSString *() {
-            NSArray *speedLabels = @[LOC(@"Disabled"), LOC(@"Default"), @"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
-            return speedLabels[ytlInt(@"speedIndex")];
-        }
-        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
-            NSArray *speedLabels = @[LOC(@"Disable"), LOC(@"Default"), @"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
-
-            for (NSUInteger i = 0; i < speedLabels.count; i++) {
-                NSString *title = speedLabels[i];
-                YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-                    [settingsViewController reloadData];
-                    ytlSetInt((int)arg1, @"speedIndex");
-                    return YES;
-                }];
-
-                [rows addObject:item];
-            }
-
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"HoldToSpeed") pickerSectionTitle:nil rows:rows selectedItemIndex:ytlInt(@"speedIndex") parentResponder:[self parentResponder]];
-            [settingsViewController pushViewController:picker];
-            return YES;
-        }];
-
-        [sectionItems addObject:speed];
-
-        YTSettingsSectionItem *autoSpeed = [YTSettingsSectionItemClass itemWithTitle:LOC(@"DefaultPlaybackRate")
-            accessibilityIdentifier:@"YTLiteSectionItem"
-            detailTextBlock:^NSString *() {
-            NSArray *speedLabels = @[@"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
-            return speedLabels[ytlInt(@"autoSpeedIndex")];
-        }
-        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
-            NSArray *speedLabels = @[@"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
-
-            for (NSUInteger i = 0; i < speedLabels.count; i++) {
-                NSString *title = speedLabels[i];
-                YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-                    [settingsViewController reloadData];
-                    ytlSetInt((int)arg1, @"autoSpeedIndex");
-                    return YES;
-                }];
-                [rows addObject:item];
-            }
-
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"DefaultPlaybackRate") pickerSectionTitle:nil rows:rows selectedItemIndex:ytlInt(@"autoSpeedIndex") parentResponder:[self parentResponder]];
-            [settingsViewController pushViewController:picker];
-            return YES;
-        }];
-
-        [sectionItems addObject:autoSpeed];
-
-        YTSettingsSectionItem *wifiQuality = [YTSettingsSectionItemClass itemWithTitle:LOC(@"PlaybackQualityOnWiFi")
-            accessibilityIdentifier:@"YTLiteSectionItem"
-            detailTextBlock:^NSString *() {
-            NSArray *qualityLabels = @[LOC(@"Default"), LOC(@"Best"), @"2160p60", @"2160p", @"1440p60", @"1440p", @"1080p60", @"1080p", @"720p60", @"720p", @"480p", @"360p"];
-            return qualityLabels[ytlInt(@"wiFiQualityIndex")];
-        }
-        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
-            NSArray *qualityLabels = @[LOC(@"Default"), LOC(@"Best"), @"2160p60", @"2160p", @"1440p60", @"1440p", @"1080p60", @"1080p", @"720p60", @"720p", @"480p", @"360p"];
-
-            for (NSUInteger i = 0; i < qualityLabels.count; i++) {
-                NSString *title = qualityLabels[i];
-                YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-                    [settingsViewController reloadData];
-                    ytlSetInt((int)arg1, @"wiFiQualityIndex");
-                    return YES;
-                }];
-
-                [rows addObject:item];
-            }
-
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"SelectQuality") pickerSectionTitle:nil rows:rows selectedItemIndex:ytlInt(@"wiFiQualityIndex") parentResponder:[self parentResponder]];
-            [settingsViewController pushViewController:picker];
-            return YES;
-        }];
-
-        [sectionItems addObject:wifiQuality];
-
-        YTSettingsSectionItem *cellQuality = [YTSettingsSectionItemClass itemWithTitle:LOC(@"PlaybackQualityOnCellular")
-            accessibilityIdentifier:@"YTLiteSectionItem"
-            detailTextBlock:^NSString *() {
-            NSArray *qualityLabels = @[LOC(@"Default"), LOC(@"Best"), @"2160p60", @"2160p", @"1440p60", @"1440p", @"1080p60", @"1080p", @"720p60", @"720p", @"480p", @"360p"];
-            return qualityLabels[ytlInt(@"cellQualityIndex")];
-        }
-        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
-            NSArray *qualityLabels = @[LOC(@"Default"), LOC(@"Best"), @"2160p60", @"2160p", @"1440p60", @"1440p", @"1080p60", @"1080p", @"720p60", @"720p", @"480p", @"360p"];
-
-            for (NSUInteger i = 0; i < qualityLabels.count; i++) {
-                NSString *title = qualityLabels[i];
-                YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-                    [settingsViewController reloadData];
-                    ytlSetInt((int)arg1, @"cellQualityIndex");
-                    return YES;
-                }];
-
-                [rows addObject:item];
-            }
-
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"SelectQuality") pickerSectionTitle:nil rows:rows selectedItemIndex:ytlInt(@"cellQualityIndex") parentResponder:[self parentResponder]];
-            [settingsViewController pushViewController:picker];
-            return YES;
-        }];
-
-        [sectionItems addObject:cellQuality];
-
-        YTSettingsSectionItem *startup = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Startup")
-            accessibilityIdentifier:@"YTLiteSectionItem"
-            detailTextBlock:^NSString *() {
-            NSString *tab = [[YTLUserDefaults standardUserDefaults] currentStartupTab];
-            NSDictionary *names = @{@"FEwhat_to_watch": LOC(@"FEwhat_to_watch"), @"FEshorts": LOC(@"FEshorts"), @"FEsubscriptions": LOC(@"FEsubscriptions"), @"FElibrary": LOC(@"FElibrary"), @"FEexplore": LOC(@"FEexplore"), @"FEhistory": LOC(@"FEhistory"), @"VLWL": LOC(@"VLWL")};
-            return names[tab] ?: tab;
-        }
-        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSArray *activeTabs = [[YTLUserDefaults standardUserDefaults] currentActiveTabs];
-            NSDictionary *names = @{@"FEwhat_to_watch": LOC(@"FEwhat_to_watch"), @"FEshorts": LOC(@"FEshorts"), @"FEsubscriptions": LOC(@"FEsubscriptions"), @"FElibrary": LOC(@"FElibrary"), @"FEexplore": LOC(@"FEexplore"), @"FEhistory": LOC(@"FEhistory"), @"VLWL": LOC(@"VLWL")};
-            NSString *currentTab = [[YTLUserDefaults standardUserDefaults] currentStartupTab];
-
-            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
-            NSInteger selectedIdx = 0;
-
-            for (NSUInteger i = 0; i < activeTabs.count; i++) {
-                NSString *tabId = activeTabs[i];
-                NSString *title = names[tabId] ?: tabId;
-                if ([tabId isEqualToString:currentTab]) selectedIdx = i;
-
-                YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *c, NSUInteger a) {
-                    [[YTLUserDefaults standardUserDefaults] setObject:tabId forKey:@"startupTab"];
-                    [settingsViewController reloadData];
-                    return YES;
-                }];
-                [rows addObject:item];
-            }
-
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Startup") pickerSectionTitle:nil rows:rows selectedItemIndex:selectedIdx parentResponder:[self parentResponder]];
-            [settingsViewController pushViewController:picker];
-            return YES;
-        }];
-
-        [sectionItems addObject:startup];
     }
     
     [sectionItems addObject:space];
@@ -1039,7 +1070,7 @@ static NSString *GetCacheSize() {
         return YES;
     }];
 
-    YTSettingsSectionItem *version = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Version")
+    YTSettingsSectionItem *version = [YTSettingsSectionItemClass itemWithTitle:LOC(@"About")
         accessibilityIdentifier:@"YTLiteSectionItem"
         detailTextBlock:^NSString *() {
             return @(OS_STRINGIFY(TWEAK_VERSION));
@@ -1082,13 +1113,13 @@ static NSString *GetCacheSize() {
         return YES;
     }];
 
+    [sectionItems addObject:version];
+
     [sectionItems addObject:thanks];
 
     [sectionItems addObject:sources];
 
     [sectionItems addObject:support];
-
-    [sectionItems addObject:version];
 
     BOOL isNew = [settingsViewController respondsToSelector:@selector(setSectionItems:forCategory:title:icon:titleDescription:headerHidden:)];
     isNew ? [settingsViewController setSectionItems:sectionItems forCategory:YTLiteSection title:@"YouTube Afterglow" icon:nil titleDescription:nil headerHidden:NO]
