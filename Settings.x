@@ -14,12 +14,13 @@ extern void ytl_clearThemeCache(void);
 - (YTSettingsSectionItem *)playbackQualityItemWithTitle:(NSString *)title key:(NSString *)key settingsVC:(YTSettingsViewController *)settingsViewController;
 - (YTSettingsSectionItem *)startupTabItemWithSettingsVC:(YTSettingsViewController *)settingsViewController;
 - (NSString *)themeHexFromColor:(UIColor *)color;
+- (NSString *)themeColorDetailForKey:(NSString *)key;
 - (UIColor *)themeLoadColorForKey:(NSString *)key;
 - (void)themePresentPickerForKey:(NSString *)themeKey startColor:(UIColor *)startColor settingsVC:(YTSettingsViewController *)settingsVC;
-- (void)themeAddColorRowWithTitle:(NSString *)title themeKey:(NSString *)themeKey toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC;
+- (void)themeAddColorRowWithTitle:(NSString *)title titleDescription:(NSString *)titleDescription themeKey:(NSString *)themeKey toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC;
 - (void)themeSaveColor:(UIColor *)color forKey:(NSString *)key;
 - (void)themeApplyPresetOverlay:(UIColor *)overlay tabIcons:(UIColor *)tabIcons seekBar:(UIColor *)seekBar bg:(UIColor *)bg textP:(UIColor *)textP textS:(UIColor *)textS nav:(UIColor *)nav accent:(UIColor *)accent;
-- (void)themeAddPresetRowWithName:(NSString *)name overlay:(UIColor *)overlay tabIcons:(UIColor *)tabIcons seekBar:(UIColor *)seekBar bg:(UIColor *)bg textP:(UIColor *)textP textS:(UIColor *)textS nav:(UIColor *)nav accent:(UIColor *)accent toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC;
+- (void)themeAddPresetRowWithName:(NSString *)name titleDescription:(NSString *)titleDescription overlay:(UIColor *)overlay tabIcons:(UIColor *)tabIcons seekBar:(UIColor *)seekBar bg:(UIColor *)bg textP:(UIColor *)textP textS:(UIColor *)textS nav:(UIColor *)nav accent:(UIColor *)accent toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC;
 @end
 
 #pragma clang diagnostic push
@@ -362,6 +363,12 @@ static NSString *GetCacheSize() {
 }
 
 %new
+- (NSString *)themeColorDetailForKey:(NSString *)key {
+    UIColor *color = [self themeLoadColorForKey:key];
+    return color ? [NSString stringWithFormat:@"Custom %@", [self themeHexFromColor:color]] : LOC(@"Default");
+}
+
+%new
 - (UIColor *)themeLoadColorForKey:(NSString *)key {
     NSData *data = [[YTLUserDefaults standardUserDefaults] objectForKey:key];
     if (!data) return nil;
@@ -389,14 +396,14 @@ static NSString *GetCacheSize() {
 }
 
 %new
-- (void)themeAddColorRowWithTitle:(NSString *)title themeKey:(NSString *)themeKey toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC {
+- (void)themeAddColorRowWithTitle:(NSString *)title titleDescription:(NSString *)titleDescription themeKey:(NSString *)themeKey toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC {
     Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
 
     YTSettingsSectionItem *item = [YTSettingsSectionItemClass itemWithTitle:LOC(title)
-        accessibilityIdentifier:nil
+        titleDescription:titleDescription
+        accessibilityIdentifier:@"YTLiteSectionItem"
         detailTextBlock:^NSString *() {
-            UIColor *c = [self themeLoadColorForKey:themeKey];
-            return c ? [self themeHexFromColor:c] : LOC(@"Default");
+            return [self themeColorDetailForKey:themeKey];
         }
         selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
             [self themePresentPickerForKey:themeKey startColor:[self themeLoadColorForKey:themeKey] settingsVC:settingsVC];
@@ -405,12 +412,16 @@ static NSString *GetCacheSize() {
     [rows addObject:item];
 
     if ([self themeLoadColorForKey:themeKey]) {
-        YTSettingsSectionItem *reset = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"    %@ %@", @"\u21BA", LOC(title)]
-            accessibilityIdentifier:nil
-            detailTextBlock:nil
+        YTSettingsSectionItem *reset = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"Reset %@", LOC(title)]
+            titleDescription:@"Restore the default color."
+            accessibilityIdentifier:@"YTLiteSectionItem"
+            detailTextBlock:^NSString *() {
+                return @"Undo custom color";
+            }
             selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
                 [[YTLUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
                 ytl_clearThemeCache();
+                [settingsVC reloadData];
                 [(UINavigationController *)settingsVC.navigationController popViewControllerAnimated:YES];
                 return YES;
             }];
@@ -438,12 +449,15 @@ static NSString *GetCacheSize() {
 }
 
 %new
-- (void)themeAddPresetRowWithName:(NSString *)name overlay:(UIColor *)overlay tabIcons:(UIColor *)tabIcons seekBar:(UIColor *)seekBar bg:(UIColor *)bg textP:(UIColor *)textP textS:(UIColor *)textS nav:(UIColor *)nav accent:(UIColor *)accent toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC {
+- (void)themeAddPresetRowWithName:(NSString *)name titleDescription:(NSString *)titleDescription overlay:(UIColor *)overlay tabIcons:(UIColor *)tabIcons seekBar:(UIColor *)seekBar bg:(UIColor *)bg textP:(UIColor *)textP textS:(UIColor *)textS nav:(UIColor *)nav accent:(UIColor *)accent toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC {
     Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
 
     YTSettingsSectionItem *item = [YTSettingsSectionItemClass itemWithTitle:name
-        accessibilityIdentifier:nil
-        detailTextBlock:nil
+        titleDescription:titleDescription
+        accessibilityIdentifier:@"YTLiteSectionItem"
+        detailTextBlock:^NSString *() {
+            return @"Ready to apply";
+        }
         selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
             [self themeApplyPresetOverlay:overlay tabIcons:tabIcons seekBar:seekBar bg:bg textP:textP textS:textS nav:nav accent:accent];
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"PresetApplied")
@@ -654,52 +668,79 @@ static NSString *GetCacheSize() {
                     NSArray *gradientKeys = @[@"theme_gradientStart", @"theme_gradientEnd"];
 
                     [appearanceRows addObject:[self pageItemWithTitle:LOC(@"Presets")
-                        titleDescription:@"Apply a full look in one tap."
+                        titleDescription:@"Apply a full look in one tap. Presets leave gradients untouched."
                         summary:^NSString *() {
-                            return @"11 looks";
+                            return @"11 themes";
                         }
                         selectBlock:^BOOL(YTSettingsCell *presetCell, NSUInteger presetArg1) {
-                            NSMutableArray <YTSettingsSectionItem *> *presetRows = [NSMutableArray array];
+                            NSMutableArray <YTSettingsSectionItem *> *presetGroups = [NSMutableArray array];
 
-                            [self themeAddPresetRowWithName:@"OLED Dark" overlay:[UIColor whiteColor] tabIcons:[UIColor whiteColor] seekBar:[UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:1.0] bg:[UIColor blackColor] textP:[UIColor whiteColor] textS:[UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:1.0] nav:[UIColor blackColor] accent:[UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                            [self themeAddPresetRowWithName:@"Midnight Blue" overlay:[UIColor colorWithRed:0.6 green:0.8 blue:1.0 alpha:1.0] tabIcons:[UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0] seekBar:[UIColor colorWithRed:0.2 green:0.5 blue:1.0 alpha:1.0] bg:[UIColor colorWithRed:0.05 green:0.05 blue:0.15 alpha:1.0] textP:[UIColor colorWithRed:0.85 green:0.9 blue:1.0 alpha:1.0] textS:[UIColor colorWithRed:0.5 green:0.6 blue:0.75 alpha:1.0] nav:[UIColor colorWithRed:0.08 green:0.08 blue:0.2 alpha:1.0] accent:[UIColor colorWithRed:0.2 green:0.5 blue:1.0 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                            [self themeAddPresetRowWithName:@"Solarized Dark" overlay:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0] tabIcons:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0] seekBar:[UIColor colorWithRed:0.52 green:0.60 blue:0.0 alpha:1.0] bg:[UIColor colorWithRed:0.0 green:0.17 blue:0.21 alpha:1.0] textP:[UIColor colorWithRed:0.93 green:0.91 blue:0.84 alpha:1.0] textS:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0] nav:[UIColor colorWithRed:0.03 green:0.21 blue:0.26 alpha:1.0] accent:[UIColor colorWithRed:0.15 green:0.55 blue:0.82 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                            [self themeAddPresetRowWithName:@"Monokai" overlay:[UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0] tabIcons:[UIColor colorWithRed:0.65 green:0.89 blue:0.18 alpha:1.0] seekBar:[UIColor colorWithRed:0.98 green:0.15 blue:0.45 alpha:1.0] bg:[UIColor colorWithRed:0.15 green:0.16 blue:0.13 alpha:1.0] textP:[UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0] textS:[UIColor colorWithRed:0.46 green:0.44 blue:0.37 alpha:1.0] nav:[UIColor colorWithRed:0.2 green:0.2 blue:0.17 alpha:1.0] accent:[UIColor colorWithRed:0.40 green:0.85 blue:0.94 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                            [self themeAddPresetRowWithName:@"Rose Gold" overlay:[UIColor colorWithRed:0.6 green:0.35 blue:0.35 alpha:1.0] tabIcons:[UIColor colorWithRed:0.7 green:0.4 blue:0.4 alpha:1.0] seekBar:[UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0] bg:[UIColor colorWithRed:1.0 green:0.95 blue:0.93 alpha:1.0] textP:[UIColor colorWithRed:0.25 green:0.15 blue:0.15 alpha:1.0] textS:[UIColor colorWithRed:0.55 green:0.4 blue:0.4 alpha:1.0] nav:[UIColor colorWithRed:0.95 green:0.88 blue:0.86 alpha:1.0] accent:[UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                            [self themeAddPresetRowWithName:@"Clean White" overlay:[UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:1.0] tabIcons:[UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1.0] seekBar:[UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0] bg:[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] textP:[UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:1.0] textS:[UIColor colorWithRed:0.45 green:0.45 blue:0.45 alpha:1.0] nav:[UIColor colorWithRed:0.97 green:0.97 blue:0.97 alpha:1.0] accent:[UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                            [self themeAddPresetRowWithName:@"Warm Sand" overlay:[UIColor colorWithRed:0.45 green:0.35 blue:0.25 alpha:1.0] tabIcons:[UIColor colorWithRed:0.5 green:0.38 blue:0.25 alpha:1.0] seekBar:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0] bg:[UIColor colorWithRed:0.98 green:0.96 blue:0.91 alpha:1.0] textP:[UIColor colorWithRed:0.2 green:0.15 blue:0.1 alpha:1.0] textS:[UIColor colorWithRed:0.5 green:0.42 blue:0.35 alpha:1.0] nav:[UIColor colorWithRed:0.95 green:0.92 blue:0.85 alpha:1.0] accent:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                            [self themeAddPresetRowWithName:@"Ocean Breeze" overlay:[UIColor colorWithRed:0.15 green:0.4 blue:0.55 alpha:1.0] tabIcons:[UIColor colorWithRed:0.1 green:0.45 blue:0.6 alpha:1.0] seekBar:[UIColor colorWithRed:0.0 green:0.6 blue:0.7 alpha:1.0] bg:[UIColor colorWithRed:0.94 green:0.97 blue:1.0 alpha:1.0] textP:[UIColor colorWithRed:0.1 green:0.15 blue:0.2 alpha:1.0] textS:[UIColor colorWithRed:0.35 green:0.45 blue:0.55 alpha:1.0] nav:[UIColor colorWithRed:0.9 green:0.94 blue:0.98 alpha:1.0] accent:[UIColor colorWithRed:0.0 green:0.55 blue:0.65 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                            [self themeAddPresetRowWithName:@"Forest" overlay:[UIColor colorWithRed:0.8 green:0.93 blue:0.8 alpha:1.0] tabIcons:[UIColor colorWithRed:0.4 green:0.75 blue:0.4 alpha:1.0] seekBar:[UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0] bg:[UIColor colorWithRed:0.06 green:0.1 blue:0.06 alpha:1.0] textP:[UIColor colorWithRed:0.85 green:0.95 blue:0.85 alpha:1.0] textS:[UIColor colorWithRed:0.5 green:0.65 blue:0.5 alpha:1.0] nav:[UIColor colorWithRed:0.08 green:0.14 blue:0.08 alpha:1.0] accent:[UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                            [self themeAddPresetRowWithName:@"Afterglow" overlay:[UIColor colorWithRed:1.0 green:0.55 blue:0.65 alpha:1.0] tabIcons:[UIColor colorWithRed:0.95 green:0.45 blue:0.55 alpha:1.0] seekBar:[UIColor colorWithRed:1.0 green:0.4 blue:0.5 alpha:1.0] bg:[UIColor colorWithRed:0.1 green:0.05 blue:0.18 alpha:1.0] textP:[UIColor colorWithRed:1.0 green:0.9 blue:0.92 alpha:1.0] textS:[UIColor colorWithRed:0.65 green:0.5 blue:0.7 alpha:1.0] nav:[UIColor colorWithRed:0.12 green:0.07 blue:0.22 alpha:1.0] accent:[UIColor colorWithRed:0.95 green:0.4 blue:0.5 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                            [self themeAddPresetRowWithName:@"Afterglow Light" overlay:[UIColor colorWithRed:0.75 green:0.3 blue:0.45 alpha:1.0] tabIcons:[UIColor colorWithRed:0.7 green:0.3 blue:0.5 alpha:1.0] seekBar:[UIColor colorWithRed:0.95 green:0.35 blue:0.45 alpha:1.0] bg:[UIColor colorWithRed:1.0 green:0.95 blue:0.96 alpha:1.0] textP:[UIColor colorWithRed:0.2 green:0.08 blue:0.15 alpha:1.0] textS:[UIColor colorWithRed:0.5 green:0.32 blue:0.45 alpha:1.0] nav:[UIColor colorWithRed:0.97 green:0.9 blue:0.93 alpha:1.0] accent:[UIColor colorWithRed:0.85 green:0.3 blue:0.45 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                            [presetGroups addObject:[self pageItemWithTitle:@"Dark"
+                                titleDescription:@"High-contrast looks built for dark surfaces."
+                                summary:^NSString *() {
+                                    return @"6 themes";
+                                }
+                                selectBlock:^BOOL(YTSettingsCell *darkCell, NSUInteger darkArg1) {
+                                    NSMutableArray <YTSettingsSectionItem *> *presetRows = [NSMutableArray array];
+                                    [self themeAddPresetRowWithName:@"OLED Dark" titleDescription:@"Pure black with sharp red accents." overlay:[UIColor whiteColor] tabIcons:[UIColor whiteColor] seekBar:[UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:1.0] bg:[UIColor blackColor] textP:[UIColor whiteColor] textS:[UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:1.0] nav:[UIColor blackColor] accent:[UIColor colorWithRed:1.0 green:0.0 blue:0.0 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                                    [self themeAddPresetRowWithName:@"Midnight Blue" titleDescription:@"Cool navy with bright blue controls." overlay:[UIColor colorWithRed:0.6 green:0.8 blue:1.0 alpha:1.0] tabIcons:[UIColor colorWithRed:0.4 green:0.7 blue:1.0 alpha:1.0] seekBar:[UIColor colorWithRed:0.2 green:0.5 blue:1.0 alpha:1.0] bg:[UIColor colorWithRed:0.05 green:0.05 blue:0.15 alpha:1.0] textP:[UIColor colorWithRed:0.85 green:0.9 blue:1.0 alpha:1.0] textS:[UIColor colorWithRed:0.5 green:0.6 blue:0.75 alpha:1.0] nav:[UIColor colorWithRed:0.08 green:0.08 blue:0.2 alpha:1.0] accent:[UIColor colorWithRed:0.2 green:0.5 blue:1.0 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                                    [self themeAddPresetRowWithName:@"Solarized Dark" titleDescription:@"Muted solarized tones with teal and gold." overlay:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0] tabIcons:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0] seekBar:[UIColor colorWithRed:0.52 green:0.60 blue:0.0 alpha:1.0] bg:[UIColor colorWithRed:0.0 green:0.17 blue:0.21 alpha:1.0] textP:[UIColor colorWithRed:0.93 green:0.91 blue:0.84 alpha:1.0] textS:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0] nav:[UIColor colorWithRed:0.03 green:0.21 blue:0.26 alpha:1.0] accent:[UIColor colorWithRed:0.15 green:0.55 blue:0.82 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                                    [self themeAddPresetRowWithName:@"Monokai" titleDescription:@"High contrast editor-style greens and pinks." overlay:[UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0] tabIcons:[UIColor colorWithRed:0.65 green:0.89 blue:0.18 alpha:1.0] seekBar:[UIColor colorWithRed:0.98 green:0.15 blue:0.45 alpha:1.0] bg:[UIColor colorWithRed:0.15 green:0.16 blue:0.13 alpha:1.0] textP:[UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0] textS:[UIColor colorWithRed:0.46 green:0.44 blue:0.37 alpha:1.0] nav:[UIColor colorWithRed:0.2 green:0.2 blue:0.17 alpha:1.0] accent:[UIColor colorWithRed:0.40 green:0.85 blue:0.94 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                                    [self themeAddPresetRowWithName:@"Forest" titleDescription:@"Deep green with a calm natural feel." overlay:[UIColor colorWithRed:0.8 green:0.93 blue:0.8 alpha:1.0] tabIcons:[UIColor colorWithRed:0.4 green:0.75 blue:0.4 alpha:1.0] seekBar:[UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0] bg:[UIColor colorWithRed:0.06 green:0.1 blue:0.06 alpha:1.0] textP:[UIColor colorWithRed:0.85 green:0.95 blue:0.85 alpha:1.0] textS:[UIColor colorWithRed:0.5 green:0.65 blue:0.5 alpha:1.0] nav:[UIColor colorWithRed:0.08 green:0.14 blue:0.08 alpha:1.0] accent:[UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                                    [self themeAddPresetRowWithName:@"Afterglow" titleDescription:@"The original dark magenta palette." overlay:[UIColor colorWithRed:1.0 green:0.55 blue:0.65 alpha:1.0] tabIcons:[UIColor colorWithRed:0.95 green:0.45 blue:0.55 alpha:1.0] seekBar:[UIColor colorWithRed:1.0 green:0.4 blue:0.5 alpha:1.0] bg:[UIColor colorWithRed:0.1 green:0.05 blue:0.18 alpha:1.0] textP:[UIColor colorWithRed:1.0 green:0.9 blue:0.92 alpha:1.0] textS:[UIColor colorWithRed:0.65 green:0.5 blue:0.7 alpha:1.0] nav:[UIColor colorWithRed:0.12 green:0.07 blue:0.22 alpha:1.0] accent:[UIColor colorWithRed:0.95 green:0.4 blue:0.5 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
 
-                            YTSettingsPickerViewController *presetPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Presets") pickerSectionTitle:nil rows:presetRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-                            [settingsViewController pushViewController:presetPicker];
+                                    YTSettingsPickerViewController *presetPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Dark" pickerSectionTitle:nil rows:presetRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                                    [settingsViewController pushViewController:presetPicker];
+                                    return YES;
+                                }]];
+
+                            [presetGroups addObject:[self pageItemWithTitle:@"Light"
+                                titleDescription:@"Brighter palettes for a cleaner app feel."
+                                summary:^NSString *() {
+                                    return @"5 themes";
+                                }
+                                selectBlock:^BOOL(YTSettingsCell *lightCell, NSUInteger lightArg1) {
+                                    NSMutableArray <YTSettingsSectionItem *> *presetRows = [NSMutableArray array];
+                                    [self themeAddPresetRowWithName:@"Clean White" titleDescription:@"Minimal white surfaces with blue accents." overlay:[UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:1.0] tabIcons:[UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1.0] seekBar:[UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0] bg:[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] textP:[UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:1.0] textS:[UIColor colorWithRed:0.45 green:0.45 blue:0.45 alpha:1.0] nav:[UIColor colorWithRed:0.97 green:0.97 blue:0.97 alpha:1.0] accent:[UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                                    [self themeAddPresetRowWithName:@"Warm Sand" titleDescription:@"Cream tones with soft amber highlights." overlay:[UIColor colorWithRed:0.45 green:0.35 blue:0.25 alpha:1.0] tabIcons:[UIColor colorWithRed:0.5 green:0.38 blue:0.25 alpha:1.0] seekBar:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0] bg:[UIColor colorWithRed:0.98 green:0.96 blue:0.91 alpha:1.0] textP:[UIColor colorWithRed:0.2 green:0.15 blue:0.1 alpha:1.0] textS:[UIColor colorWithRed:0.5 green:0.42 blue:0.35 alpha:1.0] nav:[UIColor colorWithRed:0.95 green:0.92 blue:0.85 alpha:1.0] accent:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                                    [self themeAddPresetRowWithName:@"Ocean Breeze" titleDescription:@"Light blue surfaces with teal energy." overlay:[UIColor colorWithRed:0.15 green:0.4 blue:0.55 alpha:1.0] tabIcons:[UIColor colorWithRed:0.1 green:0.45 blue:0.6 alpha:1.0] seekBar:[UIColor colorWithRed:0.0 green:0.6 blue:0.7 alpha:1.0] bg:[UIColor colorWithRed:0.94 green:0.97 blue:1.0 alpha:1.0] textP:[UIColor colorWithRed:0.1 green:0.15 blue:0.2 alpha:1.0] textS:[UIColor colorWithRed:0.35 green:0.45 blue:0.55 alpha:1.0] nav:[UIColor colorWithRed:0.9 green:0.94 blue:0.98 alpha:1.0] accent:[UIColor colorWithRed:0.0 green:0.55 blue:0.65 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                                    [self themeAddPresetRowWithName:@"Rose Gold" titleDescription:@"Soft blush tones with warm chrome." overlay:[UIColor colorWithRed:0.6 green:0.35 blue:0.35 alpha:1.0] tabIcons:[UIColor colorWithRed:0.7 green:0.4 blue:0.4 alpha:1.0] seekBar:[UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0] bg:[UIColor colorWithRed:1.0 green:0.95 blue:0.93 alpha:1.0] textP:[UIColor colorWithRed:0.25 green:0.15 blue:0.15 alpha:1.0] textS:[UIColor colorWithRed:0.55 green:0.4 blue:0.4 alpha:1.0] nav:[UIColor colorWithRed:0.95 green:0.88 blue:0.86 alpha:1.0] accent:[UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                                    [self themeAddPresetRowWithName:@"Afterglow Light" titleDescription:@"The Afterglow palette translated into daylight." overlay:[UIColor colorWithRed:0.75 green:0.3 blue:0.45 alpha:1.0] tabIcons:[UIColor colorWithRed:0.7 green:0.3 blue:0.5 alpha:1.0] seekBar:[UIColor colorWithRed:0.95 green:0.35 blue:0.45 alpha:1.0] bg:[UIColor colorWithRed:1.0 green:0.95 blue:0.96 alpha:1.0] textP:[UIColor colorWithRed:0.2 green:0.08 blue:0.15 alpha:1.0] textS:[UIColor colorWithRed:0.5 green:0.32 blue:0.45 alpha:1.0] nav:[UIColor colorWithRed:0.97 green:0.9 blue:0.93 alpha:1.0] accent:[UIColor colorWithRed:0.85 green:0.3 blue:0.45 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+
+                                    YTSettingsPickerViewController *presetPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Light" pickerSectionTitle:nil rows:presetRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                                    [settingsViewController pushViewController:presetPicker];
+                                    return YES;
+                                }]];
+
+                            YTSettingsPickerViewController *presetGroupsPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Presets") pickerSectionTitle:nil rows:presetGroups selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                            [settingsViewController pushViewController:presetGroupsPicker];
                             return YES;
                         }]];
 
                     [appearanceRows addObject:[self pageItemWithTitle:LOC(@"CustomColors")
-                        titleDescription:@"Fine-tune specific surfaces and text."
+                        titleDescription:@"Fine-tune the parts of the app that actually change color."
                         summary:^NSString *() {
-                            return [self customizationSummaryForKeys:[surfaceKeys arrayByAddingObjectsFromArray:textKeys]];
+                            NSArray *colorKeys = [surfaceKeys arrayByAddingObjectsFromArray:textKeys];
+                            colorKeys = [colorKeys arrayByAddingObjectsFromArray:gradientKeys];
+                            return [self customizationSummaryForKeys:colorKeys];
                         }
                         selectBlock:^BOOL(YTSettingsCell *colorCell, NSUInteger colorArg1) {
                             NSMutableArray <YTSettingsSectionItem *> *colorPages = [NSMutableArray array];
 
-                            [colorPages addObject:[self pageItemWithTitle:@"Surfaces"
-                                titleDescription:@"Backgrounds, controls, navigation, and tab icons."
+                            [colorPages addObject:[self pageItemWithTitle:@"Background & Chrome"
+                                titleDescription:@"Backgrounds, navigation, tab chrome, overlay buttons, and the seek bar."
                                 summary:^NSString *() {
                                     return [self customizationSummaryForKeys:surfaceKeys];
                                 }
                                 selectBlock:^BOOL (YTSettingsCell *surfaceCell, NSUInteger surfaceArg1) {
                                     NSMutableArray <YTSettingsSectionItem *> *surfaceRows = [NSMutableArray array];
-                                    [self themeAddColorRowWithTitle:@"Background" themeKey:@"theme_background" toRows:surfaceRows settingsVC:settingsViewController];
-                                    [self themeAddColorRowWithTitle:@"NavigationBar" themeKey:@"theme_navBar" toRows:surfaceRows settingsVC:settingsViewController];
-                                    [self themeAddColorRowWithTitle:@"OverlayButtons" themeKey:@"theme_overlayButtons" toRows:surfaceRows settingsVC:settingsViewController];
-                                    [self themeAddColorRowWithTitle:@"TabBarIcons" themeKey:@"theme_tabBarIcons" toRows:surfaceRows settingsVC:settingsViewController];
-                                    [self themeAddColorRowWithTitle:@"SeekBar" themeKey:@"theme_seekBar" toRows:surfaceRows settingsVC:settingsViewController];
+                                    [self themeAddColorRowWithTitle:@"Background" titleDescription:@"Main app surfaces and cards." themeKey:@"theme_background" toRows:surfaceRows settingsVC:settingsViewController];
+                                    [self themeAddColorRowWithTitle:@"NavigationBar" titleDescription:@"Top navigation and header chrome." themeKey:@"theme_navBar" toRows:surfaceRows settingsVC:settingsViewController];
+                                    [self themeAddColorRowWithTitle:@"TabBarIcons" titleDescription:@"Pivot tab icons and active tab tint." themeKey:@"theme_tabBarIcons" toRows:surfaceRows settingsVC:settingsViewController];
+                                    [self themeAddColorRowWithTitle:@"OverlayButtons" titleDescription:@"On-video action buttons and controls." themeKey:@"theme_overlayButtons" toRows:surfaceRows settingsVC:settingsViewController];
+                                    [self themeAddColorRowWithTitle:@"SeekBar" titleDescription:@"Played and buffered progress color." themeKey:@"theme_seekBar" toRows:surfaceRows settingsVC:settingsViewController];
 
-                                    YTSettingsPickerViewController *surfacePicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Surfaces" pickerSectionTitle:nil rows:surfaceRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                                    YTSettingsPickerViewController *surfacePicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Background & Chrome" pickerSectionTitle:nil rows:surfaceRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                                     [settingsViewController pushViewController:surfacePicker];
                                     return YES;
                                 }]];
@@ -711,9 +752,9 @@ static NSString *GetCacheSize() {
                                 }
                                 selectBlock:^BOOL (YTSettingsCell *textCell, NSUInteger textArg1) {
                                     NSMutableArray <YTSettingsSectionItem *> *textRows = [NSMutableArray array];
-                                    [self themeAddColorRowWithTitle:@"PrimaryText" themeKey:@"theme_textPrimary" toRows:textRows settingsVC:settingsViewController];
-                                    [self themeAddColorRowWithTitle:@"SecondaryText" themeKey:@"theme_textSecondary" toRows:textRows settingsVC:settingsViewController];
-                                    [self themeAddColorRowWithTitle:@"AccentColor" themeKey:@"theme_accent" toRows:textRows settingsVC:settingsViewController];
+                                    [self themeAddColorRowWithTitle:@"PrimaryText" titleDescription:@"Main titles and prominent labels." themeKey:@"theme_textPrimary" toRows:textRows settingsVC:settingsViewController];
+                                    [self themeAddColorRowWithTitle:@"SecondaryText" titleDescription:@"Supporting text and muted labels." themeKey:@"theme_textSecondary" toRows:textRows settingsVC:settingsViewController];
+                                    [self themeAddColorRowWithTitle:@"AccentColor" titleDescription:@"Highlights, links, and action color." themeKey:@"theme_accent" toRows:textRows settingsVC:settingsViewController];
 
                                     YTSettingsPickerViewController *textPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Text & Accent" pickerSectionTitle:nil rows:textRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                                     [settingsViewController pushViewController:textPicker];
@@ -732,8 +773,8 @@ static NSString *GetCacheSize() {
                         }
                         selectBlock:^BOOL(YTSettingsCell *gradientCell, NSUInteger gradientArg1) {
                             NSMutableArray <YTSettingsSectionItem *> *gradientRows = [NSMutableArray array];
-                            [self themeAddColorRowWithTitle:@"GradientStart" themeKey:@"theme_gradientStart" toRows:gradientRows settingsVC:settingsViewController];
-                            [self themeAddColorRowWithTitle:@"GradientEnd" themeKey:@"theme_gradientEnd" toRows:gradientRows settingsVC:settingsViewController];
+                            [self themeAddColorRowWithTitle:@"GradientStart" titleDescription:@"Start of the background gradient." themeKey:@"theme_gradientStart" toRows:gradientRows settingsVC:settingsViewController];
+                            [self themeAddColorRowWithTitle:@"GradientEnd" titleDescription:@"End of the background gradient." themeKey:@"theme_gradientEnd" toRows:gradientRows settingsVC:settingsViewController];
 
                             YTSettingsPickerViewController *gradientPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Gradient") pickerSectionTitle:nil rows:gradientRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                             [settingsViewController pushViewController:gradientPicker];
@@ -741,11 +782,11 @@ static NSString *GetCacheSize() {
                         }]];
 
                     [appearanceRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ResetAllColors")
-                        titleDescription:@"Remove every custom theme override and restart."
+                        titleDescription:@"Restore all theme colors to defaults and restart."
                         accessibilityIdentifier:@"YTLiteSectionItem"
                         detailTextBlock:nil
                         selectBlock:^BOOL(YTSettingsCell *resetCell, NSUInteger resetArg1) {
-                            UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"ResetAllColors") message:LOC(@"ResetAllColorsConfirm") preferredStyle:UIAlertControllerStyleAlert];
+                            UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"ResetAllColors") message:@"This clears every custom color, preset, and gradient value in Appearance. You will need to restart YouTube to see the defaults again." preferredStyle:UIAlertControllerStyleAlert];
                             [alert addAction:[UIAlertAction actionWithTitle:LOC(@"ResetAndRestart") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
                                 NSArray *keys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar", @"theme_background", @"theme_textPrimary", @"theme_textSecondary", @"theme_navBar", @"theme_accent", @"theme_gradientStart", @"theme_gradientEnd"];
                                 for (NSString *key in keys) {
