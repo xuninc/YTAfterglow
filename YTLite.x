@@ -1163,14 +1163,14 @@ static NSString *ytlPivotId(YTIPivotBarSupportedRenderers *r) {
 
 // Tab Management - Get default active tabs
 static NSArray *ytlDefaultTabs() {
-    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"];
+    return [YTLUserDefaults defaultActiveTabs];
 }
 
 // Tab Management - Filter and reorder pivot bar items based on activeTabs
 %hook YTPivotBarView
 - (void)setRenderer:(YTIPivotBarRenderer *)renderer {
     NSMutableArray <YTIPivotBarSupportedRenderers *> *items = [renderer itemsArray];
-    NSArray *activeTabs = [[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"];
+    NSArray *activeTabs = [[YTLUserDefaults standardUserDefaults] currentActiveTabs];
     if (!activeTabs) activeTabs = ytlDefaultTabs();
 
     // Remove tabs not in activeTabs
@@ -1296,8 +1296,7 @@ BOOL isTabSelected = NO;
     %orig;
 
     if (!isTabSelected && !ytlBool(@"shortsOnlyMode")) {
-        NSString *startupTab = [[YTLUserDefaults standardUserDefaults] objectForKey:@"startupTab"];
-        if (!startupTab) startupTab = @"FEwhat_to_watch";
+        NSString *startupTab = [[YTLUserDefaults standardUserDefaults] currentStartupTab];
         [self selectItemWithPivotIdentifier:startupTab];
         isTabSelected = YES;
     }
@@ -1457,10 +1456,11 @@ static NSURL *newCoverURL(NSURL *originalURL) {
 %ctor {
     // Ensure Shorts tab is active if shortsOnlyMode is enabled
     if (ytlBool(@"shortsOnlyMode")) {
-        NSMutableArray *tabs = [[[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"] mutableCopy];
-        if (tabs && ![tabs containsObject:@"FEshorts"]) {
+        NSMutableArray *tabs = [[[YTLUserDefaults standardUserDefaults] currentActiveTabs] mutableCopy];
+        if (![tabs containsObject:@"FEshorts"]) {
+            if (tabs.count >= 6) [tabs removeLastObject];
             [tabs addObject:@"FEshorts"];
-            [[YTLUserDefaults standardUserDefaults] setObject:tabs forKey:@"activeTabs"];
+            [[YTLUserDefaults standardUserDefaults] setActiveTabs:tabs];
         }
     }
 
