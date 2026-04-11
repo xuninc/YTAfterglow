@@ -38,7 +38,7 @@ A flexible enhancer for YouTube on iOS, featuring over hundred customizable opti
 ## Main Features
 <li>Download videos, audio (including audio track selection), thumbnails, posts, and profile pictures</li>
 <li>Copy video, comment, and post information</li>
-<li>Interface customization: Remove feed elements, reorder tabs, enable OLED mode, and as use Shorts-only mode</li>
+<li>Interface customization: Remove feed elements, reorder tabs, enable OLED mode and use Shorts-only mode</li>
 <li>Player settings: Gestures, default quality, preferred audio track</li>
 <li>Save, Load and Restore settings. Clear cache once or automatically on app startup</li>
 <li>Built-in SponsorBlock</li>
@@ -50,6 +50,10 @@ A flexible enhancer for YouTube on iOS, featuring over hundred customizable opti
 
 **All contributors are listed in the Contributors section**
 **Used open-source libraries are listed in the Open Source Libraries section**
+
+## Project Maintenance
+- Run `scripts/maintenance_audit.sh` before releases to catch stale metadata and potential dead modules.
+- See [`docs/modernization-roadmap.md`](docs/modernization-roadmap.md) for a structured cleanup + feature roadmap.
 
 ## FAQ
 - [🇺🇸 English FAQ](FAQs/FAQ_EN.md)
