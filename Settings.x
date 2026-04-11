@@ -675,8 +675,7 @@ static NSString *GetCacheSize() {
             @"FEpost_home": @"Posts",
             @"FEuploads": @"Create"
         };
-        NSMutableArray *activeTabs = [[[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"] mutableCopy];
-        if (!activeTabs) activeTabs = [@[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"] mutableCopy];
+        NSMutableArray *activeTabs = [[[YTLUserDefaults standardUserDefaults] currentActiveTabs] mutableCopy];
 
         // YouTube icon types for tabs
         NSDictionary *tabIconTypes = @{
@@ -700,8 +699,7 @@ static NSString *GetCacheSize() {
             NSString *name = tabNames[tabId] ?: tabId;
 
             YTSettingsSectionItem *item = [%c(YTSettingsSectionItem) itemWithTitle:name accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
-                NSMutableArray *current = [[[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"] mutableCopy];
-                if (!current) current = [@[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"] mutableCopy];
+                NSMutableArray *current = [[[YTLUserDefaults standardUserDefaults] currentActiveTabs] mutableCopy];
                 if (current.count <= 2) {
                     YTAlertView *alert = [%c(YTAlertView) infoDialog];
                     alert.title = LOC(@"Warning");
@@ -710,7 +708,7 @@ static NSString *GetCacheSize() {
                     return NO;
                 }
                 [current removeObject:tabId];
-                [[YTLUserDefaults standardUserDefaults] setObject:current forKey:@"activeTabs"];
+                [[YTLUserDefaults standardUserDefaults] setActiveTabs:current];
                 [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
                 [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
                 return YES;
@@ -737,8 +735,7 @@ static NSString *GetCacheSize() {
             NSString *name = tabNames[tabId] ?: tabId;
 
             YTSettingsSectionItem *item = [%c(YTSettingsSectionItem) itemWithTitle:name accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
-                NSMutableArray *current = [[[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"] mutableCopy];
-                if (!current) current = [@[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"] mutableCopy];
+                NSMutableArray *current = [[[YTLUserDefaults standardUserDefaults] currentActiveTabs] mutableCopy];
                 if ([current containsObject:tabId]) return NO;
                 if (current.count >= 6) {
                     YTAlertView *alert = [%c(YTAlertView) infoDialog];
@@ -748,7 +745,7 @@ static NSString *GetCacheSize() {
                     return NO;
                 }
                 [current addObject:tabId];
-                [[YTLUserDefaults standardUserDefaults] setObject:current forKey:@"activeTabs"];
+                [[YTLUserDefaults standardUserDefaults] setActiveTabs:current];
                 [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
                 [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
                 return YES;
@@ -928,17 +925,14 @@ static NSString *GetCacheSize() {
         YTSettingsSectionItem *startup = [YTSettingsSectionItemClass itemWithTitle:LOC(@"Startup")
             accessibilityIdentifier:@"YTLiteSectionItem"
             detailTextBlock:^NSString *() {
-            NSString *tab = [[YTLUserDefaults standardUserDefaults] objectForKey:@"startupTab"];
-            if (!tab) tab = @"FEwhat_to_watch";
+            NSString *tab = [[YTLUserDefaults standardUserDefaults] currentStartupTab];
             NSDictionary *names = @{@"FEwhat_to_watch": LOC(@"FEwhat_to_watch"), @"FEshorts": LOC(@"FEshorts"), @"FEsubscriptions": LOC(@"FEsubscriptions"), @"FElibrary": LOC(@"FElibrary"), @"FEexplore": LOC(@"FEexplore"), @"FEhistory": LOC(@"FEhistory"), @"VLWL": LOC(@"VLWL")};
             return names[tab] ?: tab;
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSArray *activeTabs = [[YTLUserDefaults standardUserDefaults] objectForKey:@"activeTabs"];
-            if (!activeTabs) activeTabs = @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"];
+            NSArray *activeTabs = [[YTLUserDefaults standardUserDefaults] currentActiveTabs];
             NSDictionary *names = @{@"FEwhat_to_watch": LOC(@"FEwhat_to_watch"), @"FEshorts": LOC(@"FEshorts"), @"FEsubscriptions": LOC(@"FEsubscriptions"), @"FElibrary": LOC(@"FElibrary"), @"FEexplore": LOC(@"FEexplore"), @"FEhistory": LOC(@"FEhistory"), @"VLWL": LOC(@"VLWL")};
-            NSString *currentTab = [[YTLUserDefaults standardUserDefaults] objectForKey:@"startupTab"];
-            if (!currentTab) currentTab = @"FEwhat_to_watch";
+            NSString *currentTab = [[YTLUserDefaults standardUserDefaults] currentStartupTab];
 
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
             NSInteger selectedIdx = 0;
