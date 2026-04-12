@@ -9,6 +9,8 @@ static void ytl_presentThemeRefreshAlert(UIViewController *presenter, NSString *
 - (YTSettingsSectionItem *)pageItemWithTitle:(NSString *)title titleDescription:(NSString *)titleDescription summary:(NSString *(^)(void))summaryBlock selectBlock:(BOOL (^)(YTSettingsCell *cell, NSUInteger arg1))selectBlock;
 - (NSString *)enabledSummaryForKeys:(NSArray<NSString *> *)keys;
 - (NSString *)customizationSummaryForKeys:(NSArray<NSString *> *)keys;
+- (NSArray<NSString *> *)ytl_allTabs;
+- (NSDictionary<NSString *, NSString *> *)ytl_tabNames;
 - (NSString *)themeCustomizationSummary;
 - (YTSettingsSectionItem *)holdToSpeedItemWithSettingsVC:(YTSettingsViewController *)settingsViewController;
 - (YTSettingsSectionItem *)defaultPlaybackRateItemWithSettingsVC:(YTSettingsViewController *)settingsViewController;
@@ -111,6 +113,200 @@ static NSString *GetCacheSize() {
 
     return [formatter stringFromByteCount:folderSize];
 }
+
+@interface YTLTabBarEditorController : UITableViewController
+@property (nonatomic, weak) YTSettingsViewController *settingsViewController;
+@property (nonatomic, strong) NSMutableArray<NSString *> *activeTabs;
+@property (nonatomic, strong) NSMutableArray<NSString *> *inactiveTabs;
+@property (nonatomic, strong) NSDictionary<NSString *, NSString *> *tabNames;
+- (instancetype)initWithSettingsViewController:(YTSettingsViewController *)settingsViewController activeTabs:(NSArray<NSString *> *)activeTabs allTabs:(NSArray<NSString *> *)allTabs tabNames:(NSDictionary<NSString *, NSString *> *)tabNames;
+@end
+
+@implementation YTLTabBarEditorController
+
+- (instancetype)initWithSettingsViewController:(YTSettingsViewController *)settingsViewController activeTabs:(NSArray<NSString *> *)activeTabs allTabs:(NSArray<NSString *> *)allTabs tabNames:(NSDictionary<NSString *,NSString *> *)tabNames {
+    self = [super initWithStyle:UITableViewStyleInsetGrouped];
+    if (self) {
+        _settingsViewController = settingsViewController;
+        _activeTabs = [activeTabs mutableCopy];
+        _tabNames = [tabNames copy];
+
+        NSMutableArray<NSString *> *inactive = [NSMutableArray array];
+        for (NSString *tabId in allTabs) {
+            if (![_activeTabs containsObject:tabId]) [inactive addObject:tabId];
+        }
+        _inactiveTabs = inactive;
+        self.title = LOC(@"Tabbar");
+    }
+    return self;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    self.tableView.tintColor = YTLAfterglowTintColor();
+    self.tableView.editing = YES;
+    self.tableView.allowsSelectionDuringEditing = YES;
+    self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
+
+    if (@available(iOS 15.0, *)) {
+        self.tableView.sectionHeaderTopPadding = 0.0;
+    }
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    [self.settingsViewController reloadData];
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    return 2;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return section == 0 ? self.activeTabs.count : self.inactiveTabs.count;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    return section == 0 ? LOC(@"ActiveTabs") : LOC(@"InactiveTabs");
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+    if (section == 0) {
+        return @"Drag to reorder your active tabs or move them down to disable them. Keep between 2 and 6 active tabs.";
+    }
+    return @"Drag a tab into Active Tabs to enable it, or tap a row to add it to the end.";
+}
+
+- (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
+    return UITableViewCellEditingStyleNone;
+}
+
+- (BOOL)tableView:(UITableView *)tableView shouldIndentWhileEditingRowAtIndexPath:(NSIndexPath *)indexPath {
+    return NO;
+}
+
+- (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath {
+    return YES;
+}
+
+- (UIImage *)ytl_imageForTabId:(NSString *)tabId {
+    NSString *symbolName = nil;
+
+    if ([tabId isEqualToString:@"FEwhat_to_watch"]) symbolName = @"house.fill";
+    else if ([tabId isEqualToString:@"FEshorts"]) symbolName = @"play.square.fill";
+    else if ([tabId isEqualToString:@"FEsubscriptions"]) symbolName = @"play.rectangle.on.rectangle.fill";
+    else if ([tabId isEqualToString:@"FElibrary"]) symbolName = @"books.vertical.fill";
+    else if ([tabId isEqualToString:@"FEexplore"]) symbolName = @"safari.fill";
+    else if ([tabId isEqualToString:@"FEhistory"]) symbolName = @"clock.fill";
+    else if ([tabId isEqualToString:@"VLWL"]) symbolName = @"bookmark.fill";
+    else if ([tabId isEqualToString:@"FEpost_home"]) symbolName = @"text.bubble.fill";
+    else if ([tabId isEqualToString:@"FEuploads"]) symbolName = @"plus.app.fill";
+
+    if (!symbolName) return nil;
+
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIImageSymbolWeightSemibold];
+    return [[UIImage systemImageNamed:symbolName withConfiguration:config] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+}
+
+- (void)ytl_showLimitAlertWithMessage:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"Warning")
+        message:message
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)ytl_persistTabsAndRefresh {
+    [[YTLUserDefaults standardUserDefaults] setActiveTabs:self.activeTabs];
+    [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
+    [self.settingsViewController reloadData];
+}
+
+- (void)ytl_moveTabFromIndexPath:(NSIndexPath *)sourceIndexPath toIndexPath:(NSIndexPath *)destinationIndexPath {
+    NSMutableArray<NSString *> *sourceArray = sourceIndexPath.section == 0 ? self.activeTabs : self.inactiveTabs;
+    NSMutableArray<NSString *> *destinationArray = destinationIndexPath.section == 0 ? self.activeTabs : self.inactiveTabs;
+    NSString *tabId = sourceArray[sourceIndexPath.row];
+
+    [sourceArray removeObjectAtIndex:sourceIndexPath.row];
+    NSInteger destinationRow = MIN((NSInteger)destinationIndexPath.row, (NSInteger)destinationArray.count);
+    [destinationArray insertObject:tabId atIndex:destinationRow];
+
+    [self ytl_persistTabsAndRefresh];
+}
+
+- (NSIndexPath *)tableView:(UITableView *)tableView targetIndexPathForMoveFromRowAtIndexPath:(NSIndexPath *)sourceIndexPath toProposedIndexPath:(NSIndexPath *)proposedDestinationIndexPath {
+    BOOL movingFromActive = sourceIndexPath.section == 0;
+    BOOL movingToActive = proposedDestinationIndexPath.section == 0;
+
+    if (movingFromActive && !movingToActive && self.activeTabs.count <= 2) {
+        return sourceIndexPath;
+    }
+
+    if (!movingFromActive && movingToActive && self.activeTabs.count >= 6) {
+        return sourceIndexPath;
+    }
+
+    NSInteger maxRow = [self tableView:tableView numberOfRowsInSection:proposedDestinationIndexPath.section];
+    NSInteger clampedRow = MIN((NSInteger)proposedDestinationIndexPath.row, maxRow);
+    return [NSIndexPath indexPathForRow:clampedRow inSection:proposedDestinationIndexPath.section];
+}
+
+- (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)sourceIndexPath toIndexPath:(NSIndexPath *)destinationIndexPath {
+    [self ytl_moveTabFromIndexPath:sourceIndexPath toIndexPath:destinationIndexPath];
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+
+    if (indexPath.section == 0) {
+        if (self.activeTabs.count <= 2) {
+            [self ytl_showLimitAlertWithMessage:LOC(@"AtLeastOneTab")];
+            return;
+        }
+
+        NSString *tabId = self.activeTabs[indexPath.row];
+        [self.activeTabs removeObjectAtIndex:indexPath.row];
+        [self.inactiveTabs insertObject:tabId atIndex:0];
+        [self ytl_persistTabsAndRefresh];
+        [tableView reloadData];
+        return;
+    }
+
+    if (self.activeTabs.count >= 6) {
+        [self ytl_showLimitAlertWithMessage:LOC(@"TabsCountRestricted")];
+        return;
+    }
+
+    NSString *tabId = self.inactiveTabs[indexPath.row];
+    [self.inactiveTabs removeObjectAtIndex:indexPath.row];
+    [self.activeTabs addObject:tabId];
+    [self ytl_persistTabsAndRefresh];
+    [tableView reloadData];
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *identifier = @"YTLTabEditorCell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
+    }
+
+    NSString *tabId = indexPath.section == 0 ? self.activeTabs[indexPath.row] : self.inactiveTabs[indexPath.row];
+    cell.textLabel.text = self.tabNames[tabId] ?: tabId;
+    cell.textLabel.textColor = [UIColor labelColor];
+    cell.detailTextLabel.text = indexPath.section == 0 ? @"Visible in the pivot bar" : @"Drag into Active Tabs to enable";
+    cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+    cell.imageView.image = [self ytl_imageForTabId:tabId];
+    cell.imageView.tintColor = YTLAfterglowTintColor();
+    cell.showsReorderControl = YES;
+    cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+    cell.accessoryType = UITableViewCellAccessoryNone;
+
+    return cell;
+}
+
+@end
 
 // Settings
 %hook YTSettingsSectionController
@@ -336,12 +532,12 @@ static NSString *GetCacheSize() {
         accessibilityIdentifier:@"YTLiteSectionItem"
         detailTextBlock:^NSString *() {
             NSString *tab = [[YTLUserDefaults standardUserDefaults] currentStartupTab];
-            NSDictionary *names = @{@"FEwhat_to_watch": LOC(@"FEwhat_to_watch"), @"FEshorts": LOC(@"FEshorts"), @"FEsubscriptions": LOC(@"FEsubscriptions"), @"FElibrary": LOC(@"FElibrary"), @"FEexplore": LOC(@"FEexplore"), @"FEhistory": LOC(@"FEhistory"), @"VLWL": LOC(@"VLWL")};
+            NSDictionary *names = [self ytl_tabNames];
             return names[tab] ?: tab;
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSArray *activeTabs = [[YTLUserDefaults standardUserDefaults] currentActiveTabs];
-            NSDictionary *names = @{@"FEwhat_to_watch": LOC(@"FEwhat_to_watch"), @"FEshorts": LOC(@"FEshorts"), @"FEsubscriptions": LOC(@"FEsubscriptions"), @"FElibrary": LOC(@"FElibrary"), @"FEexplore": LOC(@"FEexplore"), @"FEhistory": LOC(@"FEhistory"), @"VLWL": LOC(@"VLWL")};
+            NSDictionary *names = [self ytl_tabNames];
             NSString *currentTab = [[YTLUserDefaults standardUserDefaults] currentStartupTab];
 
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
@@ -364,6 +560,28 @@ static NSString *GetCacheSize() {
             [settingsViewController pushViewController:picker];
             return YES;
         }];
+}
+
+#pragma mark - Tab Helpers
+
+%new
+- (NSArray<NSString *> *)ytl_allTabs {
+    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEexplore", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
+}
+
+%new
+- (NSDictionary<NSString *, NSString *> *)ytl_tabNames {
+    return @{
+        @"FEwhat_to_watch": LOC(@"FEwhat_to_watch"),
+        @"FEshorts": LOC(@"FEshorts"),
+        @"FEsubscriptions": LOC(@"FEsubscriptions"),
+        @"FElibrary": LOC(@"FElibrary"),
+        @"FEexplore": LOC(@"FEexplore"),
+        @"FEhistory": LOC(@"FEhistory"),
+        @"VLWL": LOC(@"VLWL"),
+        @"FEpost_home": @"Posts",
+        @"FEuploads": @"Create"
+    };
 }
 
 #pragma mark - Theme Helpers
@@ -541,8 +759,8 @@ static NSString *GetCacheSize() {
     NSArray *adsKeys = @[@"noAds", @"noPromotionCards"];
     NSArray *navbarKeys = @[@"noCast", @"noNotifsButton", @"noSearchButton", @"noVoiceSearchButton", @"stickyNavbar", @"noSubbar", @"noYTLogo", @"premiumYTLogo"];
     NSArray *tabbarKeys = @[@"frostedPivot", @"removeLabels", @"removeIndicators"];
-    NSArray *overlayKeys = @[@"hideAutoplay", @"hideSubs", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"endScreenCards", @"noFullscreenActions", @"persistentProgressBar", @"stockVolumeHUD", @"noRelatedVids", @"noWatermarks", @"videoEndTime", @"24hrFormat"];
-    NSArray *playerKeys = @[@"backgroundPlayback", @"miniplayer", @"portraitFullscreen", @"copyWithTimestamp", @"disableAutoplay", @"disableAutoCaptions", @"noContentWarning", @"classicQuality", @"extraSpeedOptions", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"redProgressBar", @"noPlayerRemixButton", @"noPlayerClipButton", @"noHints", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
+    NSArray *overlayKeys = @[@"hideAutoplay", @"hideSubs", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"endScreenCards", @"noFullscreenActions", @"persistentProgressBar", @"stockVolumeHUD", @"noRelatedVids", @"noWatermarks", @"videoEndTime", @"24hrFormat", @"hideHeatwaves", @"noContinueWatchingPrompt"];
+    NSArray *playerKeys = @[@"backgroundPlayback", @"miniplayer", @"portraitFullscreen", @"copyWithTimestamp", @"disableAutoplay", @"disableAutoCaptions", @"rememberCaptionState", @"noContentWarning", @"classicQuality", @"extraSpeedOptions", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"redProgressBar", @"noPlayerRemixButton", @"noPlayerClipButton", @"noHints", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
     NSArray *shortsBehaviorKeys = @[@"shortsOnlyMode", @"autoSkipShorts", @"hideShorts", @"shortsProgress", @"pinchToFullscreenShorts", @"shortsToRegular", @"resumeShorts"];
     NSArray *shortsUIKeys = @[@"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"];
     NSArray *downloadUIKeys = @[@"removeDownloadMenu", @"noPlayerDownloadButton", @"removeShareMenu"];
@@ -615,96 +833,19 @@ static NSString *GetCacheSize() {
                     [tabRows addObject:[self switchWithTitle:@"OpaqueBar" key:@"frostedPivot"]];
                     [tabRows addObject:[self switchWithTitle:@"RemoveLabels" key:@"removeLabels"]];
                     [tabRows addObject:[self switchWithTitle:@"RemoveIndicators" key:@"removeIndicators"]];
-
-                    NSArray *allTabs = @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEexplore", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
-                    NSDictionary *tabNames = @{
-                        @"FEwhat_to_watch": LOC(@"FEwhat_to_watch"),
-                        @"FEshorts": LOC(@"FEshorts"),
-                        @"FEsubscriptions": LOC(@"FEsubscriptions"),
-                        @"FElibrary": LOC(@"FElibrary"),
-                        @"FEexplore": LOC(@"FEexplore"),
-                        @"FEhistory": LOC(@"FEhistory"),
-                        @"VLWL": LOC(@"VLWL"),
-                        @"FEpost_home": @"Posts",
-                        @"FEuploads": @"Create"
-                    };
-                    NSDictionary *tabIconTypes = @{
-                        @"FEwhat_to_watch": @(65),
-                        @"FEshorts": @(772),
-                        @"FEsubscriptions": @(66),
-                        @"FElibrary": @(68),
-                        @"FEexplore": @(67),
-                        @"FEhistory": @(2),
-                        @"VLWL": @(3),
-                        @"FEpost_home": @(267),
-                        @"FEuploads": @(1136)
-                    };
-                    NSMutableArray *activeTabs = [[[YTLUserDefaults standardUserDefaults] currentActiveTabs] mutableCopy];
-
-                    YTSettingsSectionItem *activeHeader = [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ActiveTabs") accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:nil];
-                    activeHeader.enabled = NO;
-                    [tabRows addObject:activeHeader];
-
-                    for (NSString *tabId in activeTabs) {
-                        NSString *name = tabNames[tabId] ?: tabId;
-                        YTSettingsSectionItem *item = [%c(YTSettingsSectionItem) itemWithTitle:name accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:^BOOL(YTSettingsCell *tabCell, NSUInteger tabArg1) {
-                            NSMutableArray *current = [[[YTLUserDefaults standardUserDefaults] currentActiveTabs] mutableCopy];
-                            if (current.count <= 2) {
-                                YTAlertView *alert = [%c(YTAlertView) infoDialog];
-                                alert.title = LOC(@"Warning");
-                                alert.subtitle = LOC(@"AtLeastOneTab");
-                                [alert show];
-                                return NO;
-                            }
-                            [current removeObject:tabId];
-                            [[YTLUserDefaults standardUserDefaults] setActiveTabs:current];
-                            [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
-                            [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
-                            return YES;
-                        }];
-
-                        NSNumber *iconType = tabIconTypes[tabId];
-                        if (iconType) {
-                            YTIIcon *icon = [%c(YTIIcon) new];
-                            icon.iconType = [iconType intValue];
-                            item.settingIcon = icon;
+                    [tabRows addObject:[self pageItemWithTitle:@"Manage Tabs"
+                        titleDescription:@"Drag tabs between active and inactive sections, or tap a row to toggle it."
+                        summary:^NSString *() {
+                            return [NSString stringWithFormat:@"%lu active", (unsigned long)[[YTLUserDefaults standardUserDefaults] currentActiveTabs].count];
                         }
-                        [tabRows addObject:item];
-                    }
-
-                    YTSettingsSectionItem *inactiveHeader = [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"InactiveTabs") accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:nil];
-                    inactiveHeader.enabled = NO;
-                    [tabRows addObject:inactiveHeader];
-
-                    for (NSString *tabId in allTabs) {
-                        if ([activeTabs containsObject:tabId]) continue;
-                        NSString *name = tabNames[tabId] ?: tabId;
-                        YTSettingsSectionItem *item = [%c(YTSettingsSectionItem) itemWithTitle:name accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:^BOOL(YTSettingsCell *tabCell, NSUInteger tabArg1) {
-                            NSMutableArray *current = [[[YTLUserDefaults standardUserDefaults] currentActiveTabs] mutableCopy];
-                            if ([current containsObject:tabId]) return NO;
-                            if (current.count >= 6) {
-                                YTAlertView *alert = [%c(YTAlertView) infoDialog];
-                                alert.title = LOC(@"Warning");
-                                alert.subtitle = LOC(@"TabsCountRestricted");
-                                [alert show];
-                                return NO;
-                            }
-                            [current addObject:tabId];
-                            [[YTLUserDefaults standardUserDefaults] setActiveTabs:current];
-                            [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
-                            [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
+                        selectBlock:^BOOL (YTSettingsCell *manageCell, NSUInteger manageArg1) {
+                            YTLTabBarEditorController *editor = [[YTLTabBarEditorController alloc] initWithSettingsViewController:settingsViewController
+                                activeTabs:[[YTLUserDefaults standardUserDefaults] currentActiveTabs]
+                                allTabs:[self ytl_allTabs]
+                                tabNames:[self ytl_tabNames]];
+                            [settingsViewController pushViewController:editor];
                             return YES;
-                        }];
-
-                        NSNumber *iconType = tabIconTypes[tabId];
-                        if (iconType) {
-                            YTIIcon *icon = [%c(YTIIcon) new];
-                            icon.iconType = [iconType intValue];
-                            item.settingIcon = icon;
-                        }
-                        [tabRows addObject:item];
-                    }
-
+                        }]];
                     [tabRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:nil titleDescription:LOC(@"HideLibraryFooter") accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:nil]];
 
                     YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Tabbar") pickerSectionTitle:nil rows:tabRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
@@ -881,6 +1022,7 @@ static NSString *GetCacheSize() {
                         [self switchWithTitle:@"CopyWithTimestamp" key:@"copyWithTimestamp"],
                         [self switchWithTitle:@"DisableAutoplay" key:@"disableAutoplay"],
                         [self switchWithTitle:@"DisableAutoCaptions" key:@"disableAutoCaptions"],
+                        [self switchWithTitle:@"RememberCaptionState" key:@"rememberCaptionState"],
                         [self switchWithTitle:@"NoContentWarning" key:@"noContentWarning"],
                         [self switchWithTitle:@"ClassicQuality" key:@"classicQuality"],
                         [self switchWithTitle:@"ExtraSpeedOptions" key:@"extraSpeedOptions"],
@@ -923,7 +1065,9 @@ static NSString *GetCacheSize() {
                             [self switchWithTitle:@"NoRelatedVids" key:@"noRelatedVids"],
                             [self switchWithTitle:@"NoWatermarks" key:@"noWatermarks"],
                             [self switchWithTitle:@"VideoEndTime" key:@"videoEndTime"],
-                            [self switchWithTitle:@"24hrFormat" key:@"24hrFormat"]
+                            [self switchWithTitle:@"24hrFormat" key:@"24hrFormat"],
+                            [self switchWithTitle:@"HideHeatwaves" key:@"hideHeatwaves"],
+                            [self switchWithTitle:@"NoContinueWatchingPrompt" key:@"noContinueWatchingPrompt"]
                         ];
 
                         YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Overlay") pickerSectionTitle:nil rows:overlayRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];

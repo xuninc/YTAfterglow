@@ -172,6 +172,12 @@ static UIImage *YTImageNamed(NSString *imageName) {
 }
 %end
 
+%hook YTYouThereController
+- (BOOL)shouldShowYouTherePrompt {
+    return ytlBool(@"noContinueWatchingPrompt") ? NO : %orig;
+}
+%end
+
 %hook YTHeaderView
 // Stick Navigation bar
 - (BOOL)stickyNavHeaderEnabled { return ytlBool(@"stickyNavbar") ? YES : %orig; }
@@ -343,16 +349,31 @@ static UIImage *YTImageNamed(NSString *imageName) {
 }
 %end
 
+%hook YTColdConfig
+- (BOOL)respectDeviceCaptionSetting { return ytlBool(@"rememberCaptionState") ? NO : %orig; }
+- (BOOL)iosEnableVideoPlayerScrubber { return ytlBool(@"shortsProgress") ? YES : %orig; }
+- (BOOL)mobileShortsTabInlined { return ytlBool(@"shortsProgress") ? YES : %orig; }
+- (BOOL)iosUseSystemVolumeControlInFullscreen { return ytlBool(@"stockVolumeHUD") ? YES : %orig; }
+%end
+
 // Extra Speed Options
 %hook YTVarispeedSwitchController
 - (void)setDelegate:(id)arg1 {
-    NSMutableArray *optionsCopy = [[self valueForKey:@"_options"] mutableCopy];
+    NSMutableArray *optionsCopy = [[[self valueForKey:@"_options"] mutableCopy] ?: [NSMutableArray array] mutableCopy];
     NSArray *speedOptions = @[@"2.5", @"3", @"3.5", @"4", @"5"];
+    NSMutableSet<NSString *> *existingTitles = [NSMutableSet set];
+
+    for (id option in optionsCopy) {
+        NSString *existingTitle = [option valueForKey:@"title"];
+        if (existingTitle.length > 0) [existingTitles addObject:existingTitle];
+    }
 
     for (NSString *title in speedOptions) {
+        if ([existingTitles containsObject:title]) continue;
         float rate = [title floatValue];
         YTVarispeedSwitchControllerOption *option = [[%c(YTVarispeedSwitchControllerOption) alloc] initWithTitle:title rate:rate];
         [optionsCopy addObject:option];
+        [existingTitles addObject:title];
     }
 
     if (ytlBool(@"extraSpeedOptions")) [self setValue:[optionsCopy copy] forKey:@"_options"];
@@ -684,10 +705,9 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
                     return YES;
             }
 
-            return findCell(child, identifiers);
+            if (findCell((ASNodeController *)child, identifiers))
+                return YES;
         }
-
-        return NO;
     }
     return NO;
 }
@@ -721,9 +741,9 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
     UICollectionViewCell *cell = %orig;
 
     if ([cell isKindOfClass:objc_lookUpClass("_ASCollectionViewCell")]) {
-        _ASCollectionViewCell *cell = %orig;
-        if ([cell respondsToSelector:@selector(node)]) {
-            NSString *idToRemove = [[cell node] accessibilityIdentifier];
+        _ASCollectionViewCell *asCell = (_ASCollectionViewCell *)cell;
+        if ([asCell respondsToSelector:@selector(node)]) {
+            NSString *idToRemove = [[asCell node] accessibilityIdentifier];
             if ([idToRemove isEqualToString:@"statement_banner.view"] ||
                 (([idToRemove isEqualToString:@"eml.shorts-grid"] || [idToRemove isEqualToString:@"eml.shorts-shelf"]) && ytlBool(@"hideShorts"))) {
                 [self removeCellsAtIndexPath:indexPath];
@@ -732,7 +752,8 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
     } else if (([cell isKindOfClass:objc_lookUpClass("YTReelShelfCell")] && ytlBool(@"hideShorts")) ||
         ([cell isKindOfClass:objc_lookUpClass("YTHorizontalCardListCell")] && ytlBool(@"noContinueWatching"))) {
         [self removeCellsAtIndexPath:indexPath];
-    } return %orig;
+    }
+    return cell;
 }
 
 %new
@@ -759,14 +780,12 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
 - (BOOL)shouldEnablePlayerBarOnlyOnPause { return ytlBool(@"shortsProgress") ? NO : YES; }
 %end
 
-%hook YTColdConfig
-- (BOOL)iosEnableVideoPlayerScrubber { return ytlBool(@"shortsProgress") ? YES : NO; }
-- (BOOL)mobileShortsTabInlined { return ytlBool(@"shortsProgress") ? YES : NO; }
-- (BOOL)iosUseSystemVolumeControlInFullscreen { return ytlBool(@"stockVolumeHUD") ? YES : NO; }
-%end
-
 %hook YTHotConfig
 - (BOOL)enablePlayerBarForVerticalVideoWhenControlsHiddenInFullscreen { return ytlBool(@"shortsProgress") ? YES : NO; }
+%end
+
+%hook YTInlinePlayerBarContainerView
+- (BOOL)canShowHeatwave { return ytlBool(@"hideHeatwaves") ? NO : %orig; }
 %end
 
 // Dont Startup Shorts
