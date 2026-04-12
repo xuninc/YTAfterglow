@@ -1,4 +1,5 @@
 #import "YTLite.h"
+#import <objc/message.h>
 
 static UIImage *YTImageNamed(NSString *imageName) {
     return [UIImage imageNamed:imageName inBundle:[NSBundle mainBundle] compatibleWithTraitCollection:nil];
@@ -57,15 +58,11 @@ static NSURL *ytlSanitizedOpenURL(NSURL *url) {
 }
 %end
 
-// Floating Keyboard
-%hook UITextView
-- (BOOL)acceptsFloatingKeyboard { return ytlBool(@"floatingKeyboard") ? YES : %orig; }
-- (BOOL)forceFloatingKeyboard { return ytlBool(@"floatingKeyboard") ? YES : %orig; }
-%end
+static BOOL canRememberLoopMode = NO;
 
-%hook UITextField
-- (BOOL)acceptsFloatingKeyboard { return ytlBool(@"floatingKeyboard") ? YES : %orig; }
-- (BOOL)forceFloatingKeyboard { return ytlBool(@"floatingKeyboard") ? YES : %orig; }
+// Floating Keyboard
+%hook UIKeyboardImpl
+- (BOOL)floatingForced { return ytlBool(@"floatingKeyboard") ? YES : %orig; }
 %end
 
 // YouTube-X (https://github.com/PoomSmart/YouTube-X/)
@@ -601,6 +598,13 @@ void autoSkipShorts(YTPlayerViewController *self, YTSingleVideoController *video
     if (ytlBool(@"disableAutoCaptions")) [self performSelector:@selector(turnOffCaptions) withObject:nil afterDelay:1.0];
 }
 
+- (void)playbackController:(id)arg1 didActivateVideo:(id)arg2 withPlaybackData:(id)arg3 {
+    canRememberLoopMode = NO;
+    %orig;
+
+    if (ytlBool(@"rememberLoop")) [self performSelector:@selector(restoreLoopMode) withObject:nil afterDelay:3.0];
+}
+
 %new
 - (void)autoFullscreen {
     YTWatchController *watchController = [self valueForKey:@"_UIDelegate"];
@@ -633,6 +637,27 @@ void autoSkipShorts(YTPlayerViewController *self, YTSingleVideoController *video
         NSArray *speedLabels = @[@0.25, @0.5, @0.75, @1.0, @1.25, @1.5, @1.75, @2.0, @3.0, @4.0, @5.0];
         [overlayVC setPlaybackRate:[speedLabels[ytlInt(@"autoSpeedIndex")] floatValue]];
     }
+}
+
+%new
+- (void)restoreLoopMode {
+    id overlay = self.activeVideoPlayerOverlay;
+    if ([overlay isKindOfClass:NSClassFromString(@"YTMainAppVideoPlayerOverlayViewController")] &&
+        [overlay respondsToSelector:@selector(loopMode)] &&
+        [overlay respondsToSelector:@selector(setLoopMode:)]) {
+        [overlay setLoopMode:ytlInt(@"loopMode")];
+    }
+
+    id activeVideo = [self activeVideo];
+    id delegate = [activeVideo delegate];
+    if ([delegate isKindOfClass:NSClassFromString(@"YTLocalPlaybackController")] &&
+        [delegate respondsToSelector:@selector(loopingEnabled)] &&
+        ytlInt(@"loopMode") != 0 &&
+        [delegate respondsToSelector:@selector(setLoopingEnabled:)]) {
+        [delegate setLoopingEnabled:YES];
+    }
+
+    canRememberLoopMode = YES;
 }
 
 %new
@@ -748,6 +773,12 @@ void autoSkipShorts(YTPlayerViewController *self, YTSingleVideoController *video
         pasteboard.string = currentTimeLink;
     }
 }
+
+- (void)setLoopMode:(NSInteger)mode {
+    %orig;
+
+    if (canRememberLoopMode) [[NSUserDefaults standardUserDefaults] setInteger:mode forKey:@"loopMode"];
+}
 %end
 
 // Fit 'Play All' Buttons Text For Localizations
@@ -849,11 +880,19 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
             return CGSizeZero;
         }
 
+        if (ytlBool(@"playerNoShare") && findCell(nodeController, @[@"id.video.share.button"])) {
+            return CGSizeZero;
+        }
+
         if (ytlBool(@"noPlayerClipButton") && findCell(nodeController, @[@"clip_button.eml"])) {
             return CGSizeZero;
         }
 
         if (ytlBool(@"noPlayerDownloadButton") && findCell(nodeController, @[@"id.ui.add_to.offline.button"])) {
+            return CGSizeZero;
+        }
+
+        if (ytlBool(@"playerNoSave") && findCell(nodeController, @[@"id.video.add_to.button"])) {
             return CGSizeZero;
         }
     }
@@ -917,6 +956,20 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
 
 %hook YTInlinePlayerBarContainerView
 - (BOOL)canShowHeatwave { return ytlBool(@"hideHeatwaves") ? NO : %orig; }
+- (void)didPressScrubber:(id)gesture {
+    %orig;
+
+    if (!ytlBool(@"tapToSeek")) return;
+
+    id ancestor = [self _viewControllerForAncestor];
+    id parent = [ancestor parentViewController];
+    if (![parent isKindOfClass:NSClassFromString(@"YTPlayerViewController")]) return;
+
+    CGPoint location = [gesture locationInView:self];
+    CGFloat scrubRange = [self scrubRangeForScrubX:location.x];
+    CGFloat totalMediaTime = ((CGFloat (*)(id, SEL))objc_msgSend)(parent, @selector(currentVideoTotalMediaTime));
+    ((void (*)(id, SEL, CGFloat))objc_msgSend)(parent, @selector(seekToTime:), scrubRange * totalMediaTime);
+}
 %end
 
 // Dont Startup Shorts
