@@ -127,6 +127,10 @@
 "HideAutoplayDesc" = "Hides Autoplay switch from the overlay.";
 "HideSubs" = "Hide Subtitles button";
 "HideSubsDesc" = "Hides Subtitles button from the overlay.";
+"ShowPlayerShareButton" = "Always show Share button";
+"ShowPlayerShareButtonDesc" = "Keeps the Share button available in the player overlay when YouTube would normally hide it.";
+"ShowPlayerSaveButton" = "Always show Save button";
+"ShowPlayerSaveButtonDesc" = "Keeps the Save/Add To button available in the player overlay when YouTube would normally hide it.";
 "HidePrevNext" = "Hide Previous and Next buttons";
 "HidePrevNextDesc" = "Hides Previous and Next video buttons from overlay.";
 "ReplacePrevNext" = "Fast forward and Rewind buttons";
