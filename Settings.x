@@ -759,7 +759,9 @@ static NSString *GetCacheSize() {
     NSArray *adsKeys = @[@"noAds", @"noPromotionCards"];
     NSArray *navbarKeys = @[@"noCast", @"noNotifsButton", @"noSearchButton", @"noVoiceSearchButton", @"stickyNavbar", @"noSubbar", @"noYTLogo", @"premiumYTLogo"];
     NSArray *tabbarKeys = @[@"frostedPivot", @"removeLabels", @"removeIndicators"];
-    NSArray *overlayKeys = @[@"hideAutoplay", @"hideSubs", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"endScreenCards", @"noFullscreenActions", @"persistentProgressBar", @"stockVolumeHUD", @"noRelatedVids", @"noWatermarks", @"videoEndTime", @"24hrFormat", @"hideHeatwaves", @"noContinueWatchingPrompt"];
+    NSArray *legacyKeys = @[@"oldYTUI"];
+    NSArray *interfaceKeys = [[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObjectsFromArray:legacyKeys];
+    NSArray *overlayKeys = @[@"hideAutoplay", @"hideSubs", @"showPlayerShareButton", @"showPlayerSaveButton", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"endScreenCards", @"noFullscreenActions", @"persistentProgressBar", @"stockVolumeHUD", @"noRelatedVids", @"noWatermarks", @"disableAmbientMode", @"videoEndTime", @"24hrFormat", @"hideHeatwaves", @"noContinueWatchingPrompt"];
     NSArray *playerKeys = @[@"backgroundPlayback", @"miniplayer", @"portraitFullscreen", @"copyWithTimestamp", @"disableAutoplay", @"disableAutoCaptions", @"rememberCaptionState", @"noContentWarning", @"classicQuality", @"extraSpeedOptions", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"redProgressBar", @"noPlayerRemixButton", @"noPlayerClipButton", @"noHints", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
     NSArray *shortsBehaviorKeys = @[@"shortsOnlyMode", @"autoSkipShorts", @"hideShorts", @"shortsProgress", @"pinchToFullscreenShorts", @"shortsToRegular", @"resumeShorts"];
     NSArray *shortsUIKeys = @[@"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"];
@@ -768,6 +770,7 @@ static NSString *GetCacheSize() {
     NSArray *downloadKeys = [downloadUIKeys arrayByAddingObjectsFromArray:downloadToolKeys];
     NSArray *menuKeys = @[@"removePlayNext", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu"];
     NSArray *feedKeys = @[@"noContinueWatching", @"noSearchHistory", @"noRelatedWatchNexts"];
+    NSArray *linkKeys = @[@"noLinkTracking", @"noShareChunk"];
     NSArray *commentKeys = @[@"stickSortComments", @"hideSortComments", @"playlistOldMinibar", @"disableRTL"];
 
     YTSettingsSectionItem *ads = [self pageItemWithTitle:LOC(@"Ads")
@@ -790,7 +793,7 @@ static NSString *GetCacheSize() {
     YTSettingsSectionItem *interface = [self pageItemWithTitle:LOC(@"Interface")
         titleDescription:@"App chrome, tabs, and startup behavior."
         summary:^NSString *() {
-            NSArray *controlKeys = [navbarKeys arrayByAddingObjectsFromArray:tabbarKeys];
+            NSArray *controlKeys = [navbarKeys arrayByAddingObjectsFromArray:interfaceKeys];
             return [self enabledSummaryForKeys:controlKeys];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
@@ -854,6 +857,24 @@ static NSString *GetCacheSize() {
                 }]];
 
             [rows addObject:[self startupTabItemWithSettingsVC:settingsViewController]];
+            [rows addObject:[self switchWithTitle:@"StartupAnimation" key:@"startupAnimation"]];
+
+            if (isAdvanced) {
+                [rows addObject:[self pageItemWithTitle:@"Legacy"
+                    titleDescription:@"Experimental fallbacks for older YouTube UI behavior."
+                    summary:^NSString *() {
+                        return [self enabledSummaryForKeys:legacyKeys];
+                    }
+                    selectBlock:^BOOL (YTSettingsCell *legacyCell, NSUInteger legacyArg1) {
+                        NSArray <YTSettingsSectionItem *> *legacyRows = @[
+                            [self switchWithTitle:@"OldYTUI" key:@"oldYTUI"]
+                        ];
+
+                        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Legacy" pickerSectionTitle:nil rows:legacyRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                        [settingsViewController pushViewController:picker];
+                        return YES;
+                    }]];
+            }
 
             YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Interface") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
@@ -1054,6 +1075,8 @@ static NSString *GetCacheSize() {
                         NSArray <YTSettingsSectionItem *> *overlayRows = @[
                             [self switchWithTitle:@"HideAutoplay" key:@"hideAutoplay"],
                             [self switchWithTitle:@"HideSubs" key:@"hideSubs"],
+                            [self switchWithTitle:@"ShowPlayerShareButton" key:@"showPlayerShareButton"],
+                            [self switchWithTitle:@"ShowPlayerSaveButton" key:@"showPlayerSaveButton"],
                             [self switchWithTitle:@"NoHUDMsgs" key:@"noHUDMsgs"],
                             [self switchWithTitle:@"HidePrevNext" key:@"hidePrevNext"],
                             [self switchWithTitle:@"ReplacePrevNext" key:@"replacePrevNext"],
@@ -1064,6 +1087,7 @@ static NSString *GetCacheSize() {
                             [self switchWithTitle:@"StockVolumeHUD" key:@"stockVolumeHUD"],
                             [self switchWithTitle:@"NoRelatedVids" key:@"noRelatedVids"],
                             [self switchWithTitle:@"NoWatermarks" key:@"noWatermarks"],
+                            [self switchWithTitle:@"DisableAmbientMode" key:@"disableAmbientMode"],
                             [self switchWithTitle:@"VideoEndTime" key:@"videoEndTime"],
                             [self switchWithTitle:@"24hrFormat" key:@"24hrFormat"],
                             [self switchWithTitle:@"HideHeatwaves" key:@"hideHeatwaves"],
@@ -1179,7 +1203,7 @@ static NSString *GetCacheSize() {
     YTSettingsSectionItem *feed = [self pageItemWithTitle:LOC(@"Feed")
         titleDescription:@"Home surfaces, menus, comments, and browse cleanup."
         summary:^NSString *() {
-            NSArray *feedContentKeys = [[feedKeys arrayByAddingObjectsFromArray:menuKeys] arrayByAddingObjectsFromArray:commentKeys];
+            NSArray *feedContentKeys = [[[feedKeys arrayByAddingObjectsFromArray:linkKeys] arrayByAddingObjectsFromArray:menuKeys] arrayByAddingObjectsFromArray:commentKeys];
             return [self enabledSummaryForKeys:feedContentKeys];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
@@ -1198,6 +1222,22 @@ static NSString *GetCacheSize() {
                     ];
 
                     YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Home" pickerSectionTitle:nil rows:feedRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:picker];
+                    return YES;
+                }]];
+
+            [rows addObject:[self pageItemWithTitle:@"Links"
+                titleDescription:@"Open cleaner links and strip YouTube's extra share parameters."
+                summary:^NSString *() {
+                    return [self enabledSummaryForKeys:linkKeys];
+                }
+                selectBlock:^BOOL (YTSettingsCell *linksCell, NSUInteger linksArg1) {
+                    NSArray <YTSettingsSectionItem *> *linkRows = @[
+                        [self switchWithTitle:@"NoLinkTracking" key:@"noLinkTracking"],
+                        [self switchWithTitle:@"NoShareChunk" key:@"noShareChunk"]
+                    ];
+
+                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Links" pickerSectionTitle:nil rows:linkRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
                     return YES;
                 }]];

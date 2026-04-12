@@ -4,6 +4,59 @@ static UIImage *YTImageNamed(NSString *imageName) {
     return [UIImage imageNamed:imageName inBundle:[NSBundle mainBundle] compatibleWithTraitCollection:nil];
 }
 
+static NSURL *ytlSanitizedOpenURL(NSURL *url) {
+    if (!url) return nil;
+
+    NSURL *candidate = url;
+    NSURLComponents *components = [NSURLComponents componentsWithURL:candidate resolvingAgainstBaseURL:NO];
+    NSString *host = components.host.lowercaseString ?: @"";
+
+    if (ytlBool(@"noLinkTracking") && ([host isEqualToString:@"www.google.com"] || [host isEqualToString:@"google.com"])) {
+        NSMutableDictionary<NSString *, NSString *> *queryValues = [NSMutableDictionary dictionary];
+        for (NSURLQueryItem *item in components.queryItems ?: @[]) {
+            if (item.name.length > 0 && item.value.length > 0) queryValues[item.name] = item.value;
+        }
+
+        NSString *redirectURLString = queryValues[@"q"] ?: queryValues[@"url"];
+        NSURL *redirectURL = redirectURLString.length > 0 ? [NSURL URLWithString:redirectURLString] : nil;
+        if (redirectURL) return ytlSanitizedOpenURL(redirectURL);
+    }
+
+    if (ytlBool(@"noShareChunk")) {
+        BOOL isYouTubeURL = [host hasSuffix:@"youtube.com"] || [host isEqualToString:@"youtu.be"];
+        if (isYouTubeURL && components.queryItems.count > 0) {
+            NSMutableArray<NSURLQueryItem *> *filteredQueryItems = [NSMutableArray array];
+            BOOL removedShareIdentifier = NO;
+
+            for (NSURLQueryItem *item in components.queryItems) {
+                if ([item.name isEqualToString:@"si"]) {
+                    removedShareIdentifier = YES;
+                    continue;
+                }
+                [filteredQueryItems addObject:item];
+            }
+
+            if (removedShareIdentifier) {
+                components.queryItems = filteredQueryItems.count > 0 ? filteredQueryItems : nil;
+                NSURL *cleanURL = components.URL;
+                if (cleanURL) candidate = cleanURL;
+            }
+        }
+    }
+
+    return candidate;
+}
+
+%hook UIApplication
+- (BOOL)openURL:(NSURL *)url {
+    return %orig(ytlSanitizedOpenURL(url));
+}
+
+- (void)openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenExternalURLOptionsKey, id> *)options completionHandler:(void (^)(BOOL success))completion {
+    %orig(ytlSanitizedOpenURL(url), options, completion);
+}
+%end
+
 // YouTube-X (https://github.com/PoomSmart/YouTube-X/)
 // Background Playback
 %hook YTIPlayabilityStatus
@@ -232,6 +285,10 @@ static UIImage *YTImageNamed(NSString *imageName) {
 // Hide Subs Button
 - (void)setClosedCaptionsOrSubtitlesButtonAvailable:(BOOL)arg1 { ytlBool(@"hideSubs") ? %orig(NO) : %orig; }
 
+// Force Share / Save buttons to stay available in the overlay.
+- (void)setShareButtonAvailable:(BOOL)arg1 { %orig(ytlBool(@"showPlayerShareButton") ? YES : arg1); }
+- (void)setAddToButtonAvailable:(BOOL)arg1 { %orig(ytlBool(@"showPlayerSaveButton") ? YES : arg1); }
+
 // Pause On Overlay
 - (void)setOverlayVisible:(BOOL)visible {
     %orig;
@@ -264,6 +321,48 @@ static UIImage *YTImageNamed(NSString *imageName) {
 - (BOOL)enableHideChipsInTheCommentsHeaderOnScrollIos { return ytlBool(@"stickSortComments") ? NO : %orig; }
 // Hide Sort Buttons in Comments Section
 - (BOOL)enableChipsInTheCommentsHeaderIos { return ytlBool(@"hideSortComments") ? NO : %orig; }
+// Disable Ambient Mode
+- (BOOL)disableCinematicForLowPowerMode { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+- (BOOL)enableCinematicContainer { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+- (BOOL)enableCinematicContainerOnClient { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+- (BOOL)enableCinematicContainerOnTablet { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+- (BOOL)enableTurnOffCinematicForFrameWithBlackBars { return ytlBool(@"disableAmbientMode") ? YES : %orig; }
+- (BOOL)enableTurnOffCinematicForVideoWithBlackBars { return ytlBool(@"disableAmbientMode") ? YES : %orig; }
+- (BOOL)iosCinematicContainerClientImprovement { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+- (BOOL)iosEnableGhostCardInlineTitleCinematicContainerFix { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+- (BOOL)iosUseFineScrubberMosaicStoreForCinematic { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+- (BOOL)mainAppCoreClientEnableClientCinematicPlaylists { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+- (BOOL)mainAppCoreClientEnableClientCinematicPlaylistsPostMvp { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+- (BOOL)mainAppCoreClientEnableClientCinematicTablets { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+- (BOOL)iosEnableFullScreenAmbientMode { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+// Startup Animation
+- (BOOL)mainAppCoreClientIosEnableStartupAnimation { return ytlBool(@"startupAnimation") ? YES : %orig; }
+// Experimental Old UI fallback.
+- (BOOL)creatorClientConfigEnableStudioModernizedMdeThumbnailPickerForClient { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)cxClientEnableModernizedActionSheet { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)enableClientShortsSheetsModernization { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)enableTimestampModernizationForNative { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)modernizeElementsTextColor { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)modernizeElementsBgColor { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)modernizeCollectionLockups { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)uiSystemsClientGlobalConfigEnableModernButtonsForNative { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)uiSystemsClientGlobalConfigIosEnableModernTabsForNative { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)uiSystemsClientGlobalConfigIosEnableEpUxUpdates { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)uiSystemsClientGlobalConfigIosEnableSheetsUxUpdates { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)uiSystemsClientGlobalConfigIosEnableSnackbarModernization { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)iosDownloadsPageRoundedThumbs { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)iosRoundedSearchBarSuggestZeroPadding { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)uiSystemsClientGlobalConfigEnableRoundedDialogForNative { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)uiSystemsClientGlobalConfigEnableRoundedThumbnailsForNative { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)uiSystemsClientGlobalConfigEnableRoundedThumbnailsForNativeLongTail { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)uiSystemsClientGlobalConfigEnableRoundedTimestampForNative { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)elementsClientIosElementsEnableLayoutUpdateForIob { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)supportElementsInMenuItemSupportedRenderers { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)isNewRadioButtonStyleEnabled { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)uiSystemsClientGlobalConfigEnableButtonSentenceCasingForNative { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)mainAppCoreClientEnableClientYouTab { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)mainAppCoreClientEnableClientYouLatency { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)mainAppCoreClientEnableClientYouTabTablet { return ytlBool(@"oldYTUI") ? NO : %orig; }
 // Use System Theme
 - (BOOL)shouldUseAppThemeSetting { return YES; }
 // Dismiss Panel By Swiping in Fullscreen Mode
@@ -277,6 +376,11 @@ static UIImage *YTImageNamed(NSString *imageName) {
 // Remove Dark Background in Overlay
 %hook YTMainAppVideoPlayerOverlayView
 - (void)setBackgroundVisible:(BOOL)arg1 isGradientBackground:(BOOL)arg2 { ytlBool(@"noDarkBg") ? %orig(NO, arg2) : %orig; }
+%end
+
+%hook YTCinematicContainerView
+- (BOOL)watchFullScreenCinematicSupported { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
+- (BOOL)watchFullScreenCinematicEnabled { return ytlBool(@"disableAmbientMode") ? NO : %orig; }
 %end
 
 // No Endscreen Cards
@@ -360,7 +464,7 @@ static UIImage *YTImageNamed(NSString *imageName) {
 %hook YTVarispeedSwitchController
 - (void)setDelegate:(id)arg1 {
     NSMutableArray *optionsCopy = [[[self valueForKey:@"_options"] mutableCopy] ?: [NSMutableArray array] mutableCopy];
-    NSArray *speedOptions = @[@"2.5", @"3", @"3.5", @"4", @"5"];
+    NSArray *speedOptions = @[@"2.25", @"2.5", @"2.75", @"3", @"3.25", @"3.5", @"3.75", @"4", @"5"];
     NSMutableSet<NSString *> *existingTitles = [NSMutableSet set];
 
     for (id option in optionsCopy) {
@@ -386,9 +490,12 @@ static UIImage *YTImageNamed(NSString *imageName) {
 %hook YTVersionUtils
 + (NSString *)appVersion {
     NSString *originalVersion = %orig;
-    NSString *fakeVersion = @"18.18.2";
+    NSString *qualityCompatibilityVersion = @"18.18.2";
+    NSString *legacyUIVersion = @"17.38.10";
 
-    return (!ytlBool(@"classicQuality") && !ytlBool(@"extraSpeedOptions") && [originalVersion compare:fakeVersion options:NSNumericSearch] == NSOrderedDescending) ? originalVersion : fakeVersion;
+    if (ytlBool(@"oldYTUI")) return legacyUIVersion;
+    if (ytlBool(@"classicQuality") || ytlBool(@"extraSpeedOptions")) return qualityCompatibilityVersion;
+    return originalVersion;
 }
 %end
 
@@ -398,10 +505,19 @@ static UIImage *YTImageNamed(NSString *imageName) {
     NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
     NSString *appVersion = infoDictionary[@"CFBundleShortVersionString"];
 
-    if ([arg1 isEqualToString:@"18.18.2"]) {
+    if ([arg1 isEqualToString:@"18.18.2"] || [arg1 isEqualToString:@"17.38.10"]) {
         arg1 = appVersion;
     } %orig(arg1);
 }
+%end
+
+// Experimental legacy UI mode.
+%hook YTQTMButton
++ (BOOL)buttonModernizationEnabled { return ytlBool(@"oldYTUI") ? NO : %orig; }
+%end
+
+%hook YTBubbleHintView
++ (BOOL)modernRoundedCornersEnabled { return ytlBool(@"oldYTUI") ? NO : %orig; }
 %end
 
 // Disable Snap To Chapter (https://github.com/qnblackcat/uYouPlus/blob/main/uYouPlus.xm#L457-464)
@@ -782,6 +898,10 @@ static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *ide
 
 %hook YTHotConfig
 - (BOOL)enablePlayerBarForVerticalVideoWhenControlsHiddenInFullscreen { return ytlBool(@"shortsProgress") ? YES : NO; }
+- (BOOL)liveChatIosUseModernRotationDetection { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)liveChatModernizeClassicElementizeTextMessage { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)iosShouldRepositionChannelBar { return ytlBool(@"oldYTUI") ? NO : %orig; }
+- (BOOL)enableElementRendererOnChannelCreation { return ytlBool(@"oldYTUI") ? NO : %orig; }
 %end
 
 %hook YTInlinePlayerBarContainerView
