@@ -57,6 +57,17 @@ static NSURL *ytlSanitizedOpenURL(NSURL *url) {
 }
 %end
 
+// Floating Keyboard
+%hook UITextView
+- (BOOL)acceptsFloatingKeyboard { return ytlBool(@"floatingKeyboard") ? YES : %orig; }
+- (BOOL)forceFloatingKeyboard { return ytlBool(@"floatingKeyboard") ? YES : %orig; }
+%end
+
+%hook UITextField
+- (BOOL)acceptsFloatingKeyboard { return ytlBool(@"floatingKeyboard") ? YES : %orig; }
+- (BOOL)forceFloatingKeyboard { return ytlBool(@"floatingKeyboard") ? YES : %orig; }
+%end
+
 // YouTube-X (https://github.com/PoomSmart/YouTube-X/)
 // Background Playback
 %hook YTIPlayabilityStatus

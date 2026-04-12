@@ -760,7 +760,7 @@ static NSString *GetCacheSize() {
     NSArray *navbarKeys = @[@"noCast", @"noNotifsButton", @"noSearchButton", @"noVoiceSearchButton", @"stickyNavbar", @"noSubbar", @"noYTLogo", @"premiumYTLogo"];
     NSArray *tabbarKeys = @[@"frostedPivot", @"removeLabels", @"removeIndicators"];
     NSArray *legacyKeys = @[@"oldYTUI"];
-    NSArray *interfaceKeys = [[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObjectsFromArray:legacyKeys];
+    NSArray *interfaceKeys = [[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObjectsFromArray:legacyKeys];
     NSArray *overlayKeys = @[@"hideAutoplay", @"hideSubs", @"showPlayerShareButton", @"showPlayerSaveButton", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"endScreenCards", @"noFullscreenActions", @"persistentProgressBar", @"stockVolumeHUD", @"noRelatedVids", @"noWatermarks", @"disableAmbientMode", @"videoEndTime", @"24hrFormat", @"hideHeatwaves", @"noContinueWatchingPrompt"];
     NSArray *playerKeys = @[@"backgroundPlayback", @"miniplayer", @"portraitFullscreen", @"copyWithTimestamp", @"disableAutoplay", @"disableAutoCaptions", @"rememberCaptionState", @"noContentWarning", @"classicQuality", @"extraSpeedOptions", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"redProgressBar", @"noPlayerRemixButton", @"noPlayerClipButton", @"noHints", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
     NSArray *shortsBehaviorKeys = @[@"shortsOnlyMode", @"autoSkipShorts", @"hideShorts", @"shortsProgress", @"pinchToFullscreenShorts", @"shortsToRegular", @"resumeShorts"];
@@ -858,6 +858,7 @@ static NSString *GetCacheSize() {
 
             [rows addObject:[self startupTabItemWithSettingsVC:settingsViewController]];
             [rows addObject:[self switchWithTitle:@"StartupAnimation" key:@"startupAnimation"]];
+            [rows addObject:[self switchWithTitle:@"FloatingKeyboard" key:@"floatingKeyboard"]];
 
             if (isAdvanced) {
                 [rows addObject:[self pageItemWithTitle:@"Legacy"
