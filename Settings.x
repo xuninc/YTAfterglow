@@ -762,10 +762,10 @@ static NSString *GetCacheSize() {
     NSArray *legacyKeys = @[@"oldYTUI"];
     NSArray *interfaceKeys = [[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObjectsFromArray:legacyKeys];
     NSArray *overlayKeys = @[@"hideAutoplay", @"hideSubs", @"showPlayerShareButton", @"showPlayerSaveButton", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"endScreenCards", @"noFullscreenActions", @"persistentProgressBar", @"stockVolumeHUD", @"noRelatedVids", @"noWatermarks", @"disableAmbientMode", @"videoEndTime", @"24hrFormat", @"hideHeatwaves", @"noContinueWatchingPrompt"];
-    NSArray *playerKeys = @[@"backgroundPlayback", @"miniplayer", @"portraitFullscreen", @"copyWithTimestamp", @"disableAutoplay", @"disableAutoCaptions", @"rememberCaptionState", @"noContentWarning", @"classicQuality", @"extraSpeedOptions", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"redProgressBar", @"noPlayerRemixButton", @"noPlayerClipButton", @"noHints", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
+    NSArray *playerKeys = @[@"backgroundPlayback", @"miniplayer", @"portraitFullscreen", @"copyWithTimestamp", @"disableAutoplay", @"disableAutoCaptions", @"rememberCaptionState", @"rememberLoop", @"noContentWarning", @"classicQuality", @"extraSpeedOptions", @"tapToSeek", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"redProgressBar", @"noPlayerRemixButton", @"noPlayerClipButton", @"noHints", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
     NSArray *shortsBehaviorKeys = @[@"shortsOnlyMode", @"autoSkipShorts", @"hideShorts", @"shortsProgress", @"pinchToFullscreenShorts", @"shortsToRegular", @"resumeShorts"];
     NSArray *shortsUIKeys = @[@"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"];
-    NSArray *downloadUIKeys = @[@"removeDownloadMenu", @"noPlayerDownloadButton", @"removeShareMenu"];
+    NSArray *downloadUIKeys = @[@"removeDownloadMenu", @"noPlayerDownloadButton", @"playerNoShare", @"playerNoSave", @"removeShareMenu"];
     NSArray *downloadToolKeys = @[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare"];
     NSArray *downloadKeys = [downloadUIKeys arrayByAddingObjectsFromArray:downloadToolKeys];
     NSArray *menuKeys = @[@"removePlayNext", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu"];
@@ -1045,9 +1045,11 @@ static NSString *GetCacheSize() {
                         [self switchWithTitle:@"DisableAutoplay" key:@"disableAutoplay"],
                         [self switchWithTitle:@"DisableAutoCaptions" key:@"disableAutoCaptions"],
                         [self switchWithTitle:@"RememberCaptionState" key:@"rememberCaptionState"],
+                        [self switchWithTitle:@"RememberLoopMode" key:@"rememberLoop"],
                         [self switchWithTitle:@"NoContentWarning" key:@"noContentWarning"],
                         [self switchWithTitle:@"ClassicQuality" key:@"classicQuality"],
                         [self switchWithTitle:@"ExtraSpeedOptions" key:@"extraSpeedOptions"],
+                        [self switchWithTitle:@"TapToSeek" key:@"tapToSeek"],
                         [self switchWithTitle:@"DontSnap2Chapter" key:@"dontSnapToChapter"],
                         [self switchWithTitle:@"NoTwoFingerSnapToChapter" key:@"noTwoFingerSnapToChapter"],
                         [self switchWithTitle:@"PauseOnOverlay" key:@"pauseOnOverlay"],
@@ -1185,6 +1187,8 @@ static NSString *GetCacheSize() {
             [rows addObject:[self themeSectionHeaderWithTitle:@"Download UI" description:@"Hide the download and share entry points when you do not want them."]];
             [rows addObject:[self switchWithTitle:@"RemoveDownloadMenu" key:@"removeDownloadMenu"]];
             [rows addObject:[self switchWithTitle:@"NoPlayerDownloadButton" key:@"noPlayerDownloadButton"]];
+            [rows addObject:[self switchWithTitle:@"PlayerNoShare" key:@"playerNoShare"]];
+            [rows addObject:[self switchWithTitle:@"PlayerNoSave" key:@"playerNoSave"]];
             [rows addObject:[self switchWithTitle:@"RemoveShareMenu" key:@"removeShareMenu"]];
             [rows addObject:space];
             [rows addObject:[self themeSectionHeaderWithTitle:@"Save & Share" description:@"Copy, save, and replace content export actions."]];

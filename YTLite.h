@@ -143,6 +143,7 @@
 - (void)turnOffCaptions;
 - (void)setAutoSpeed;
 - (void)autoQuality;
+- (CGFloat)currentVideoTotalMediaTime;
 - (void)play;
 - (void)pause;
 @end
@@ -299,11 +300,15 @@
 @interface YTMainAppVideoPlayerOverlayViewController : UIViewController
 @property (nonatomic, weak, readwrite) YTPlayerViewController *parentViewController;
 - (CGFloat)currentPlaybackRate;
+- (NSInteger)loopMode;
+- (void)setLoopMode:(NSInteger)mode;
 @end
 
 @interface YTInlinePlayerBarContainerView : UIView
 @property (nonatomic, strong, readwrite) YTLabel *durationLabel;
 @property (nonatomic, strong, readwrite) NSString *endTimeString;
+- (id)_viewControllerForAncestor;
+- (CGFloat)scrubRangeForScrubX:(CGFloat)x;
 @end
 
 @interface YTMainAppVideoPlayerOverlayView : UIView
