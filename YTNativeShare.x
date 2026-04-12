@@ -62,6 +62,40 @@ typedef NS_ENUM(NSInteger, ShareEntityType) {
     ShareEntityFieldClip = 8
 };
 
+static NSString *ytlSanitizedShareURLString(NSString *shareURLString) {
+    if (shareURLString.length == 0) return shareURLString;
+
+    NSURL *url = [NSURL URLWithString:shareURLString];
+    if (!url) return shareURLString;
+
+    NSURLComponents *components = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:NO];
+    NSString *host = components.host.lowercaseString ?: @"";
+
+    if (ytlBool(@"noShareChunk")) {
+        BOOL isYouTubeURL = [host hasSuffix:@"youtube.com"] || [host isEqualToString:@"youtu.be"];
+        if (isYouTubeURL && components.queryItems.count > 0) {
+            NSMutableArray<NSURLQueryItem *> *filteredQueryItems = [NSMutableArray array];
+            BOOL removedShareIdentifier = NO;
+
+            for (NSURLQueryItem *item in components.queryItems) {
+                if ([item.name isEqualToString:@"si"]) {
+                    removedShareIdentifier = YES;
+                    continue;
+                }
+                [filteredQueryItems addObject:item];
+            }
+
+            if (removedShareIdentifier) {
+                components.queryItems = filteredQueryItems.count > 0 ? filteredQueryItems : nil;
+                NSURL *cleanURL = components.URL;
+                if (cleanURL) return cleanURL.absoluteString ?: shareURLString;
+            }
+        }
+    }
+
+    return shareURLString;
+}
+
 static inline NSString* extractIdWithFormat(GPBUnknownFieldSet *fields, NSInteger fieldNumber, NSString *format) {
     if (![fields hasField:fieldNumber])
         return nil;
@@ -119,6 +153,8 @@ static inline NSString* extractIdWithFormat(GPBUnknownFieldSet *fields, NSIntege
 
     if (!shareUrl)
         return %orig;
+
+    shareUrl = ytlSanitizedShareURLString(shareUrl);
 
     UIActivityViewController *activityViewController = [[UIActivityViewController alloc]initWithActivityItems:@[shareUrl] applicationActivities:nil];
     [[%c(YTUIUtils) topViewControllerForPresenting] presentViewController:activityViewController animated:YES completion:^{}];
