@@ -53,13 +53,13 @@ on:
 
       bundle_id:
         description: "BundleID (Optional)"
-        default: "i.am.kain.ytag"
+        default: "i.am.kain.ytafterglow"
         required: true
         type: string
 
       info_note:
         description: "TIP: Learn more about integrations in the README via the link below"
-        default: "https://github.com/dayanch96/YTAfterglow#tweak-integration-details"
+        default: "https://github.com/xuninc/YTAfterglow#tweak-integration-details"
         type: string
         required: false
 
@@ -82,8 +82,6 @@ jobs:
     name: Package IPA
     runs-on: macos-latest
     needs: build-tweaks
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout source
@@ -98,7 +96,7 @@ jobs:
       - name: Hide sensitive inputs
         uses: levibostian/action-hide-sensitive-inputs@v1
         with:
-          exclude_inputs: bundle_id,display_name,enable_demc,enable_ryd,enable_ytabc,enable_youpip,enable_yq,enable_ytuhd,info_note,tweak_version
+          exclude_inputs: bundle_id,display_name,enable_demc,enable_ryd,enable_ytabc,enable_youpip,enable_yq,enable_ytuhd,info_note
 
       - name: Download and validate IPA
         run: |
@@ -121,119 +119,20 @@ jobs:
           done
           cyan -i youtube.ipa -o YTAfterglow_unsigned.ipa -uwef $tweaks -n "${{ github.event.inputs.display_name }}" -b ${{ github.event.inputs.bundle_id }}
 
+      - name: Fix Substrate load paths
+        run: |
+          mkdir -p ipa_contents
+          unzip -q YTAfterglow_unsigned.ipa -d ipa_contents
+          APP_DIR=$(find ipa_contents/Payload -maxdepth 1 -name "*.app" -type d | head -1)
+          bash scripts/fix_substrate_load_paths.sh "$APP_DIR"
+          cd ipa_contents
+          zip -qr ../YTAfterglow_unsigned_fixed.ipa Payload
+          cd ..
+          mv YTAfterglow_unsigned_fixed.ipa YTAfterglow_unsigned.ipa
+          rm -rf ipa_contents
+
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
           name: YTAfterglow-unsigned
           path: YTAfterglow_unsigned.ipa
-
-      - name: Sign IPA
-        env:
-          P12_BASE64: ${{ secrets.P12_BASE64 }}
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
-          MOBILEPROVISION_BASE64: ${{ secrets.MOBILEPROVISION_BASE64 }}
-        run: |
-          set -euo pipefail
-
-          printf '%s' "$P12_BASE64" | base64 --decode > cert.p12
-          printf '%s' "$MOBILEPROVISION_BASE64" | base64 --decode > profile.mobileprovision
-
-          KEYCHAIN="build.keychain"
-          KEYCHAIN_PASSWORD="actions"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security default-keychain -s "$KEYCHAIN"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security set-keychain-settings -t 3600 "$KEYCHAIN"
-          security import cert.p12 -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-
-          SIGNING_IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | head -1 | grep -o '".*"' | tr -d '"')
-          echo "Signing with: $SIGNING_IDENTITY"
-
-          mkdir -p Payload
-          unzip -q YTAfterglow_unsigned.ipa -d ipa_contents
-          APP_DIR=$(find ipa_contents/Payload -maxdepth 1 -name "*.app" -type d | head -1)
-
-          cp profile.mobileprovision "$APP_DIR/embedded.mobileprovision"
-
-          bash scripts/fix_substrate_load_paths.sh "$APP_DIR"
-
-          # Extract entitlements from provisioning profile
-          security cms -D -i profile.mobileprovision > profile_full.plist
-          /usr/libexec/PlistBuddy -x -c "Print :Entitlements" profile_full.plist > entitlements.plist
-          echo "Entitlements:"
-          cat entitlements.plist
-
-          # Sign frameworks and plugins first, then the app itself
-          find "$APP_DIR" -name "*.framework" -o -name "*.appex" -o -name "*.dylib" | while read item; do
-            codesign --force --sign "$SIGNING_IDENTITY" --timestamp=none "$item" || true
-          done
-
-          codesign --force --sign "$SIGNING_IDENTITY" --timestamp=none --entitlements entitlements.plist "$APP_DIR"
-
-          cd ipa_contents
-          zip -qr ../YTAfterglow.ipa Payload
-          cd ..
-
-          rm -rf ipa_contents cert.p12 profile.mobileprovision YTAfterglow_unsigned.ipa
-          echo "Signed IPA ready"
-
-      - name: Generate OTA manifest
-        run: |
-          IPA_URL="https://github.com/${{ github.repository }}/releases/download/ytp-${{ github.run_number }}/YTAfterglow.ipa"
-          BUNDLE_ID="${{ github.event.inputs.bundle_id }}"
-          DISPLAY_NAME="${{ github.event.inputs.display_name }}"
-
-          cat > manifest.plist <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>items</key>
-              <array>
-                  <dict>
-                      <key>assets</key>
-                      <array>
-                          <dict>
-                              <key>kind</key>
-                              <string>software-package</string>
-                              <key>url</key>
-                              <string>${IPA_URL}</string>
-                          </dict>
-                      </array>
-                      <key>metadata</key>
-                      <dict>
-                          <key>bundle-identifier</key>
-                          <string>${BUNDLE_ID}</string>
-                          <key>bundle-version</key>
-                          <string>1.0</string>
-                          <key>kind</key>
-                          <string>software</string>
-                          <key>title</key>
-                          <string>${DISPLAY_NAME}</string>
-                      </dict>
-                  </dict>
-              </array>
-          </dict>
-          </plist>
-          PLIST
-
-      - name: Upload to GitHub Releases
-        uses: softprops/action-gh-release@v2.5.0
-        with:
-          tag_name: ytp-${{ github.run_number }}
-          name: YTAfterglow (${{ github.run_number }})
-          files: |
-            YTAfterglow.ipa
-            manifest.plist
-
-      - name: Output Install Links
-        run: |
-          MANIFEST_URL="https://github.com/${{ github.repository }}/releases/download/ytp-${{ github.run_number }}/manifest.plist"
-          OTA_LINK="itms-services://?action=download-manifest&url=${MANIFEST_URL}"
-          echo "::notice::Release: https://github.com/${{ github.repository }}/releases"
-          echo "::notice::OTA Install: ${OTA_LINK}"
-          echo "## OTA Install" >> $GITHUB_STEP_SUMMARY
-          echo "Tap this link on your iPhone to install:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[Install YTAfterglow](${OTA_LINK})" >> $GITHUB_STEP_SUMMARY
