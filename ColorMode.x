@@ -12,6 +12,7 @@ static NSString *const kThemeNavBar         = @"theme_navBar";
 static NSString *const kThemeAccent         = @"theme_accent";
 static NSString *const kThemeGradientStart  = @"theme_gradientStart";
 static NSString *const kThemeGradientEnd    = @"theme_gradientEnd";
+static NSString *const kThemeGlowEnabled    = @"theme_glowEnabled";
 
 // Thread-safe color cache
 static NSMutableDictionary *colorCache = nil;
@@ -57,6 +58,28 @@ static inline UIColor *themed(NSString *key, CGFloat alpha) {
     UIColor *c = themeColor(key);
     if (!c) return nil;
     return alpha < 1.0 ? [c colorWithAlphaComponent:alpha] : c;
+}
+
+static inline BOOL ytl_themeGlowEnabled(void) {
+    return [[YTLUserDefaults standardUserDefaults] boolForKey:kThemeGlowEnabled];
+}
+
+static void ytl_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity, CGFloat radius) {
+    if (!layer) return;
+
+    if (!ytl_themeGlowEnabled() || !color) {
+        layer.shadowOpacity = 0.0;
+        layer.shadowRadius = 0.0;
+        return;
+    }
+
+    layer.masksToBounds = NO;
+    layer.shadowColor = color.CGColor;
+    layer.shadowOffset = CGSizeZero;
+    layer.shadowOpacity = opacity;
+    layer.shadowRadius = radius;
+    layer.shouldRasterize = YES;
+    layer.rasterizationScale = UIScreen.mainScreen.scale;
 }
 
 #pragma mark - YTCommonColorPalette
@@ -139,6 +162,12 @@ static inline UIColor *themed(NSString *key, CGFloat alpha) {
         %orig([UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:0.60]);
     else %orig(color);
 }
+
+- (void)layoutSubviews {
+    %orig;
+    UIColor *glowColor = themeColor(kThemeSeekBar) ?: themeColor(kThemeAccent);
+    ytl_applyGlowToLayer(self.layer, glowColor, 0.85, 8.0);
+}
 %end
 
 #pragma mark - Navigation Bar
@@ -207,5 +236,32 @@ static void ytl_applyGradient(UIView *view) {
     if (themeColor(kThemeGradientStart) && themeColor(kThemeGradientEnd)) {
         self.backgroundColor = [UIColor clearColor];
     }
+}
+%end
+
+%hook YTPivotBarItemView
+- (void)layoutSubviews {
+    %orig;
+
+    UIColor *glowColor = themeColor(kThemeAccent) ?: themeColor(kThemeTabBarIcons);
+    CALayer *targetLayer = self.navigationButton ? self.navigationButton.layer : self.layer;
+    CGFloat opacity = self.navigationButton.alpha > 0.9 ? 0.40 : 0.16;
+    ytl_applyGlowToLayer(targetLayer, glowColor, opacity, 7.0);
+}
+%end
+
+static void ytl_applyGlowToButtonsInView(UIView *view, UIColor *color) {
+    for (UIView *subview in view.subviews) {
+        if ([subview isKindOfClass:%c(YTQTMButton)] || [subview isKindOfClass:[UIButton class]]) {
+            ytl_applyGlowToLayer(subview.layer, color, 0.32, 6.0);
+        }
+        if (subview.subviews.count > 0) ytl_applyGlowToButtonsInView(subview, color);
+    }
+}
+
+%hook YTMainAppVideoPlayerOverlayView
+- (void)layoutSubviews {
+    %orig;
+    ytl_applyGlowToButtonsInView(self, themeColor(kThemeAccent) ?: themeColor(kThemeOverlayButtons));
 }
 %end
