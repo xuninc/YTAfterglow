@@ -28,7 +28,7 @@
 #import "../protobuf/objectivec/GPBUnknownField.h"
 #import "../protobuf/objectivec/GPBUnknownFieldSet.h"
 
-#define ytlBool(key)  [[[NSUserDefaults alloc] initWithSuiteName:@"com.dvntm.ytlite"] boolForKey:key]
+#define ytagBool(key)  [[[NSUserDefaults alloc] initWithSuiteName:@"com.dvntm.ytafterglow"] boolForKey:key]
 
 @interface CustomGPBMessage : GPBMessage
 + (instancetype)deserializeFromString:(NSString *)string;
@@ -62,7 +62,7 @@ typedef NS_ENUM(NSInteger, ShareEntityType) {
     ShareEntityFieldClip = 8
 };
 
-static NSString *ytlSanitizedShareURLString(NSString *shareURLString) {
+static NSString *ytagSanitizedShareURLString(NSString *shareURLString) {
     if (shareURLString.length == 0) return shareURLString;
 
     NSURL *url = [NSURL URLWithString:shareURLString];
@@ -71,7 +71,7 @@ static NSString *ytlSanitizedShareURLString(NSString *shareURLString) {
     NSURLComponents *components = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:NO];
     NSString *host = components.host.lowercaseString ?: @"";
 
-    if (ytlBool(@"noShareChunk")) {
+    if (ytagBool(@"noShareChunk")) {
         BOOL isYouTubeURL = [host hasSuffix:@"youtube.com"] || [host isEqualToString:@"youtu.be"];
         if (isYouTubeURL && components.queryItems.count > 0) {
             NSMutableArray<NSURLQueryItem *> *filteredQueryItems = [NSMutableArray array];
@@ -108,7 +108,7 @@ static inline NSString* extractIdWithFormat(GPBUnknownFieldSet *fields, NSIntege
 
 %hook ELMPBShowActionSheetCommand
 - (void)executeWithCommandContext:(id)_context handler:(id)_handler {
-    if (!ytlBool(@"nativeShare"))
+    if (!ytagBool(@"nativeShare"))
         return %orig;
 
     if (!self.hasOnAppear)
@@ -154,7 +154,7 @@ static inline NSString* extractIdWithFormat(GPBUnknownFieldSet *fields, NSIntege
     if (!shareUrl)
         return %orig;
 
-    shareUrl = ytlSanitizedShareURLString(shareUrl);
+    shareUrl = ytagSanitizedShareURLString(shareUrl);
 
     UIActivityViewController *activityViewController = [[UIActivityViewController alloc]initWithActivityItems:@[shareUrl] applicationActivities:nil];
     [[%c(YTUIUtils) topViewControllerForPresenting] presentViewController:activityViewController animated:YES completion:^{}];

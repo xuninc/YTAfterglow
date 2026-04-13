@@ -1,4 +1,4 @@
-#import "YTLite.h"
+#import "YTAfterglow.h"
 #import <QuartzCore/QuartzCore.h>
 
 // Theme color keys
@@ -35,7 +35,7 @@ static UIColor *themeColor(NSString *key) {
     if (found) return (cached == [NSNull null]) ? nil : (UIColor *)cached;
 
     // Cache miss — decode from user defaults
-    NSData *data = [[YTLUserDefaults standardUserDefaults] objectForKey:key];
+    NSData *data = [[YTAGUserDefaults standardUserDefaults] objectForKey:key];
     if (!data) {
         dispatch_barrier_async(cacheQueue, ^{ colorCache[key] = [NSNull null]; });
         return nil;
@@ -48,7 +48,7 @@ static UIColor *themeColor(NSString *key) {
     return color;
 }
 
-void ytl_clearThemeCache(void) {
+void ytag_clearThemeCache(void) {
     if (cacheQueue && colorCache)
         dispatch_barrier_async(cacheQueue, ^{ [colorCache removeAllObjects]; });
 }
@@ -60,14 +60,25 @@ static inline UIColor *themed(NSString *key, CGFloat alpha) {
     return alpha < 1.0 ? [c colorWithAlphaComponent:alpha] : c;
 }
 
-static inline BOOL ytl_themeGlowEnabled(void) {
-    return [[YTLUserDefaults standardUserDefaults] boolForKey:kThemeGlowEnabled];
+static inline BOOL ytag_themeGlowEnabled(void) {
+    return [[YTAGUserDefaults standardUserDefaults] boolForKey:kThemeGlowEnabled];
 }
 
-static void ytl_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity, CGFloat radius) {
+static inline BOOL ytag_themeGradientEnabled(void) {
+    return themeColor(kThemeGradientStart) && themeColor(kThemeGradientEnd);
+}
+
+static UIColor *ytag_surfaceBackgroundColor(CGFloat fallbackAlpha) {
+    UIColor *background = themeColor(kThemeBackground);
+    if (!background) return nil;
+    if (!ytag_themeGradientEnabled()) return background;
+    return [background colorWithAlphaComponent:fallbackAlpha];
+}
+
+static void ytag_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity, CGFloat radius) {
     if (!layer) return;
 
-    if (!ytl_themeGlowEnabled() || !color) {
+    if (!ytag_themeGlowEnabled() || !color) {
         layer.shadowOpacity = 0.0;
         layer.shadowRadius = 0.0;
         return;
@@ -109,17 +120,17 @@ static void ytl_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity
 - (UIColor *)brandIconInactive   { return themed(kThemeTabBarIcons, 0.5) ?: %orig; }
 
 // --- Backgrounds ---
-- (UIColor *)background1             { return themed(kThemeBackground, 1.0) ?: %orig; }
-- (UIColor *)background2             { return themed(kThemeBackground, 1.0) ?: %orig; }
-- (UIColor *)background3             { return themed(kThemeBackground, 1.0) ?: %orig; }
-- (UIColor *)baseBackground          { return themed(kThemeBackground, 1.0) ?: %orig; }
-- (UIColor *)raisedBackground        { return themed(kThemeBackground, 1.0) ?: %orig; }
-- (UIColor *)menuBackground          { return themed(kThemeBackground, 1.0) ?: %orig; }
-- (UIColor *)generalBackgroundA      { return themed(kThemeBackground, 1.0) ?: %orig; }
-- (UIColor *)generalBackgroundB      { return themed(kThemeBackground, 1.0) ?: %orig; }
-- (UIColor *)brandBackgroundSolid    { return themed(kThemeBackground, 1.0) ?: %orig; }
-- (UIColor *)brandBackgroundPrimary  { return themed(kThemeBackground, 1.0) ?: %orig; }
-- (UIColor *)brandBackgroundSecondary { return themed(kThemeBackground, 1.0) ?: %orig; }
+- (UIColor *)background1             { return ytag_surfaceBackgroundColor(0.82) ?: %orig; }
+- (UIColor *)background2             { return ytag_surfaceBackgroundColor(0.80) ?: %orig; }
+- (UIColor *)background3             { return ytag_surfaceBackgroundColor(0.78) ?: %orig; }
+- (UIColor *)baseBackground          { return ytag_surfaceBackgroundColor(0.86) ?: %orig; }
+- (UIColor *)raisedBackground        { return ytag_surfaceBackgroundColor(0.88) ?: %orig; }
+- (UIColor *)menuBackground          { return ytag_surfaceBackgroundColor(0.90) ?: %orig; }
+- (UIColor *)generalBackgroundA      { return ytag_surfaceBackgroundColor(0.84) ?: %orig; }
+- (UIColor *)generalBackgroundB      { return ytag_surfaceBackgroundColor(0.80) ?: %orig; }
+- (UIColor *)brandBackgroundSolid    { return ytag_surfaceBackgroundColor(0.92) ?: %orig; }
+- (UIColor *)brandBackgroundPrimary  { return ytag_surfaceBackgroundColor(0.86) ?: %orig; }
+- (UIColor *)brandBackgroundSecondary { return ytag_surfaceBackgroundColor(0.82) ?: %orig; }
 
 // --- Accent ---
 - (UIColor *)callToAction        { return themed(kThemeAccent, 1.0) ?: %orig; }
@@ -147,7 +158,7 @@ static void ytl_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity
 - (id)quietProgressBarColor {
     UIColor *c = themeColor(kThemeSeekBar);
     if (c) return c;
-    if (ytlBool(@"redProgressBar")) return [UIColor redColor];
+    if (ytagBool(@"redProgressBar")) return [UIColor redColor];
     return %orig;
 }
 %end
@@ -158,7 +169,7 @@ static void ytl_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity
     %orig(c ?: color);
 }
 - (void)setBufferedProgressBarColor:(id)color {
-    if (themeColor(kThemeSeekBar) || ytlBool(@"redProgressBar"))
+    if (themeColor(kThemeSeekBar) || ytagBool(@"redProgressBar"))
         %orig([UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:0.60]);
     else %orig(color);
 }
@@ -166,7 +177,7 @@ static void ytl_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity
 - (void)layoutSubviews {
     %orig;
     UIColor *glowColor = themeColor(kThemeSeekBar) ?: themeColor(kThemeAccent);
-    ytl_applyGlowToLayer(self.layer, glowColor, 0.85, 8.0);
+    ytag_applyGlowToLayer(self.layer, glowColor, 0.85, 8.0);
 }
 %end
 
@@ -195,7 +206,7 @@ static void ytl_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity
 
 #pragma mark - Gradient Background
 
-static CAGradientLayer *ytl_createGradient(CGRect bounds) {
+static CAGradientLayer *ytag_createGradient(CGRect bounds) {
     UIColor *start = themeColor(kThemeGradientStart);
     UIColor *end = themeColor(kThemeGradientEnd);
     if (!start || !end) return nil;
@@ -205,19 +216,22 @@ static CAGradientLayer *ytl_createGradient(CGRect bounds) {
     gradient.colors = @[(id)start.CGColor, (id)end.CGColor];
     gradient.startPoint = CGPointMake(0.5, 0.0);
     gradient.endPoint = CGPointMake(0.5, 1.0);
-    gradient.name = @"ytl_gradient";
+    gradient.name = @"ytag_gradient";
     return gradient;
 }
 
-static void ytl_applyGradient(UIView *view) {
-    if (!themeColor(kThemeGradientStart) || !themeColor(kThemeGradientEnd)) return;
+static void ytag_applyGradient(UIView *view) {
+    if (!ytag_themeGradientEnabled()) return;
 
     // Remove existing gradient
     for (CALayer *layer in [view.layer.sublayers copy]) {
-        if ([layer.name isEqualToString:@"ytl_gradient"]) [layer removeFromSuperlayer];
+        if ([layer.name isEqualToString:@"ytag_gradient"]) [layer removeFromSuperlayer];
     }
 
-    CAGradientLayer *gradient = ytl_createGradient(view.bounds);
+    view.backgroundColor = [UIColor clearColor];
+    view.opaque = NO;
+
+    CAGradientLayer *gradient = ytag_createGradient(view.bounds);
     if (gradient) [view.layer insertSublayer:gradient atIndex:0];
 }
 
@@ -225,7 +239,7 @@ static void ytl_applyGradient(UIView *view) {
 %hook YTAppView
 - (void)layoutSubviews {
     %orig;
-    ytl_applyGradient((UIView *)self);
+    ytag_applyGradient((UIView *)self);
 }
 %end
 
@@ -233,8 +247,20 @@ static void ytl_applyGradient(UIView *view) {
 %hook YTAsyncCollectionView
 - (void)layoutSubviews {
     %orig;
-    if (themeColor(kThemeGradientStart) && themeColor(kThemeGradientEnd)) {
+    if (ytag_themeGradientEnabled()) {
         self.backgroundColor = [UIColor clearColor];
+        self.opaque = NO;
+    }
+}
+%end
+
+%hook UIScrollView
+- (void)didMoveToWindow {
+    %orig;
+    if (!ytag_themeGradientEnabled()) return;
+    if ([self isKindOfClass:[UITableView class]] || [self isKindOfClass:[UICollectionView class]]) {
+        self.backgroundColor = [UIColor clearColor];
+        self.opaque = NO;
     }
 }
 %end
@@ -246,22 +272,22 @@ static void ytl_applyGradient(UIView *view) {
     UIColor *glowColor = themeColor(kThemeAccent) ?: themeColor(kThemeTabBarIcons);
     CALayer *targetLayer = self.navigationButton ? self.navigationButton.layer : self.layer;
     CGFloat opacity = self.navigationButton.alpha > 0.9 ? 0.40 : 0.16;
-    ytl_applyGlowToLayer(targetLayer, glowColor, opacity, 7.0);
+    ytag_applyGlowToLayer(targetLayer, glowColor, opacity, 7.0);
 }
 %end
 
-static void ytl_applyGlowToButtonsInView(UIView *view, UIColor *color) {
+static void ytag_applyGlowToButtonsInView(UIView *view, UIColor *color) {
     for (UIView *subview in view.subviews) {
         if ([subview isKindOfClass:%c(YTQTMButton)] || [subview isKindOfClass:[UIButton class]]) {
-            ytl_applyGlowToLayer(subview.layer, color, 0.32, 6.0);
+            ytag_applyGlowToLayer(subview.layer, color, 0.32, 6.0);
         }
-        if (subview.subviews.count > 0) ytl_applyGlowToButtonsInView(subview, color);
+        if (subview.subviews.count > 0) ytag_applyGlowToButtonsInView(subview, color);
     }
 }
 
 %hook YTMainAppVideoPlayerOverlayView
 - (void)layoutSubviews {
     %orig;
-    ytl_applyGlowToButtonsInView(self, themeColor(kThemeAccent) ?: themeColor(kThemeOverlayButtons));
+    ytag_applyGlowToButtonsInView(self, themeColor(kThemeAccent) ?: themeColor(kThemeOverlayButtons));
 }
 %end

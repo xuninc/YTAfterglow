@@ -1,16 +1,16 @@
-#import "YTLite.h"
+#import "YTAfterglow.h"
 #import <objc/runtime.h>
 
-extern void ytl_clearThemeCache(void);
-static void ytl_presentThemeRefreshAlert(UIViewController *presenter, NSString *title, NSString *message);
+extern void ytag_clearThemeCache(void);
+static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString *title, NSString *message);
 
-@interface YTSettingsSectionItemManager (YTLite)
-- (void)updateYTLiteSectionWithEntry:(id)entry;
+@interface YTSettingsSectionItemManager (YTAfterglow)
+- (void)updateYTAfterglowSectionWithEntry:(id)entry;
 - (YTSettingsSectionItem *)pageItemWithTitle:(NSString *)title titleDescription:(NSString *)titleDescription summary:(NSString *(^)(void))summaryBlock selectBlock:(BOOL (^)(YTSettingsCell *cell, NSUInteger arg1))selectBlock;
 - (NSString *)enabledSummaryForKeys:(NSArray<NSString *> *)keys;
 - (NSString *)customizationSummaryForKeys:(NSArray<NSString *> *)keys;
-- (NSArray<NSString *> *)ytl_allTabs;
-- (NSDictionary<NSString *, NSString *> *)ytl_tabNames;
+- (NSArray<NSString *> *)ytag_allTabs;
+- (NSDictionary<NSString *, NSString *> *)ytag_tabNames;
 - (NSString *)themeCustomizationSummary;
 - (YTSettingsSectionItem *)holdToSpeedItemWithSettingsVC:(YTSettingsViewController *)settingsViewController;
 - (YTSettingsSectionItem *)defaultPlaybackRateItemWithSettingsVC:(YTSettingsViewController *)settingsViewController;
@@ -34,14 +34,14 @@ static void ytl_presentThemeRefreshAlert(UIViewController *presenter, NSString *
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
 
 // Color picker delegate — guarded by @available(iOS 14.0, *) at call sites
-@interface YTLColorPickerDelegate : NSObject <UIColorPickerViewControllerDelegate>
+@interface YTAGColorPickerDelegate : NSObject <UIColorPickerViewControllerDelegate>
 @property (nonatomic, copy) NSString *themeKey;
 @property (nonatomic, weak) YTSettingsViewController *settingsVC;
 @property (nonatomic, assign) BOOL didSelect;
 @property (nonatomic, assign) CFAbsoluteTime lastSave;
 @end
 
-@implementation YTLColorPickerDelegate
+@implementation YTAGColorPickerDelegate
 - (void)colorPickerViewController:(UIColorPickerViewController *)vc didSelectColor:(UIColor *)color continuously:(BOOL)continuously {
     if (!color || !self.themeKey) return;
     self.didSelect = YES;
@@ -52,16 +52,16 @@ static void ytl_presentThemeRefreshAlert(UIViewController *presenter, NSString *
     self.lastSave = now;
 
     NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
-    [[YTLUserDefaults standardUserDefaults] setObject:data forKey:self.themeKey];
-    ytl_clearThemeCache();
+    [[YTAGUserDefaults standardUserDefaults] setObject:data forKey:self.themeKey];
+    ytag_clearThemeCache();
 }
 - (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)vc {
     // Final save on dismiss
     UIColor *color = vc.selectedColor;
     if (color && self.themeKey) {
         NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
-        [[YTLUserDefaults standardUserDefaults] setObject:data forKey:self.themeKey];
-        ytl_clearThemeCache();
+        [[YTAGUserDefaults standardUserDefaults] setObject:data forKey:self.themeKey];
+        ytag_clearThemeCache();
     }
 
     // Reload settings + show alert
@@ -71,7 +71,7 @@ static void ytl_presentThemeRefreshAlert(UIViewController *presenter, NSString *
         [weakVC reloadData];
         if (selected && weakVC) {
             UIViewController *presenter = weakVC.navigationController.topViewController ?: weakVC;
-            ytl_presentThemeRefreshAlert(presenter, LOC(@"ColorSaved"), @"Some surfaces refresh immediately. Restart YouTube for a full theme refresh across the app.");
+            ytag_presentThemeRefreshAlert(presenter, LOC(@"ColorSaved"), @"Some surfaces refresh immediately. Restart YouTube for a full theme refresh across the app.");
         }
     });
 }
@@ -79,14 +79,14 @@ static void ytl_presentThemeRefreshAlert(UIViewController *presenter, NSString *
 
 #pragma clang diagnostic pop
 
-static const NSInteger YTLiteSection = 789;
-static YTLColorPickerDelegate *_colorPickerDelegate = nil;
+static const NSInteger YTAfterglowSection = 789;
+static YTAGColorPickerDelegate *_colorPickerDelegate = nil;
 
-static UIColor *YTLAfterglowTintColor(void) {
+static UIColor *YTAGAfterglowTintColor(void) {
     return [UIColor colorWithRed:0.95 green:0.41 blue:0.50 alpha:1.0];
 }
 
-static void ytl_presentThemeRefreshAlert(UIViewController *presenter, NSString *title, NSString *message) {
+static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString *title, NSString *message) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
         message:message
         preferredStyle:UIAlertControllerStyleAlert];
@@ -114,7 +114,7 @@ static NSString *GetCacheSize() {
     return [formatter stringFromByteCount:folderSize];
 }
 
-@interface YTLTabBarEditorController : UITableViewController
+@interface YTAGTabBarEditorController : UITableViewController
 @property (nonatomic, weak) YTSettingsViewController *settingsViewController;
 @property (nonatomic, strong) NSMutableArray<NSString *> *activeTabs;
 @property (nonatomic, strong) NSMutableArray<NSString *> *inactiveTabs;
@@ -122,7 +122,7 @@ static NSString *GetCacheSize() {
 - (instancetype)initWithSettingsViewController:(YTSettingsViewController *)settingsViewController activeTabs:(NSArray<NSString *> *)activeTabs allTabs:(NSArray<NSString *> *)allTabs tabNames:(NSDictionary<NSString *, NSString *> *)tabNames;
 @end
 
-@implementation YTLTabBarEditorController
+@implementation YTAGTabBarEditorController
 
 - (instancetype)initWithSettingsViewController:(YTSettingsViewController *)settingsViewController activeTabs:(NSArray<NSString *> *)activeTabs allTabs:(NSArray<NSString *> *)allTabs tabNames:(NSDictionary<NSString *,NSString *> *)tabNames {
     self = [super initWithStyle:UITableViewStyleInsetGrouped];
@@ -144,7 +144,7 @@ static NSString *GetCacheSize() {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.tableView.tintColor = YTLAfterglowTintColor();
+    self.tableView.tintColor = YTAGAfterglowTintColor();
     self.tableView.editing = YES;
     self.tableView.allowsSelectionDuringEditing = YES;
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
@@ -190,7 +190,7 @@ static NSString *GetCacheSize() {
     return YES;
 }
 
-- (UIImage *)ytl_imageForTabId:(NSString *)tabId {
+- (UIImage *)ytag_imageForTabId:(NSString *)tabId {
     NSString *symbolName = nil;
 
     if ([tabId isEqualToString:@"FEwhat_to_watch"]) symbolName = @"house.fill";
@@ -209,7 +209,7 @@ static NSString *GetCacheSize() {
     return [[UIImage systemImageNamed:symbolName withConfiguration:config] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
-- (void)ytl_showLimitAlertWithMessage:(NSString *)message {
+- (void)ytag_showLimitAlertWithMessage:(NSString *)message {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"Warning")
         message:message
         preferredStyle:UIAlertControllerStyleAlert];
@@ -217,13 +217,13 @@ static NSString *GetCacheSize() {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)ytl_persistTabsAndRefresh {
-    [[YTLUserDefaults standardUserDefaults] setActiveTabs:self.activeTabs];
+- (void)ytag_persistTabsAndRefresh {
+    [[YTAGUserDefaults standardUserDefaults] setActiveTabs:self.activeTabs];
     [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
     [self.settingsViewController reloadData];
 }
 
-- (void)ytl_moveTabFromIndexPath:(NSIndexPath *)sourceIndexPath toIndexPath:(NSIndexPath *)destinationIndexPath {
+- (void)ytag_moveTabFromIndexPath:(NSIndexPath *)sourceIndexPath toIndexPath:(NSIndexPath *)destinationIndexPath {
     NSMutableArray<NSString *> *sourceArray = sourceIndexPath.section == 0 ? self.activeTabs : self.inactiveTabs;
     NSMutableArray<NSString *> *destinationArray = destinationIndexPath.section == 0 ? self.activeTabs : self.inactiveTabs;
     NSString *tabId = sourceArray[sourceIndexPath.row];
@@ -232,7 +232,7 @@ static NSString *GetCacheSize() {
     NSInteger destinationRow = MIN((NSInteger)destinationIndexPath.row, (NSInteger)destinationArray.count);
     [destinationArray insertObject:tabId atIndex:destinationRow];
 
-    [self ytl_persistTabsAndRefresh];
+    [self ytag_persistTabsAndRefresh];
 }
 
 - (NSIndexPath *)tableView:(UITableView *)tableView targetIndexPathForMoveFromRowAtIndexPath:(NSIndexPath *)sourceIndexPath toProposedIndexPath:(NSIndexPath *)proposedDestinationIndexPath {
@@ -253,7 +253,7 @@ static NSString *GetCacheSize() {
 }
 
 - (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)sourceIndexPath toIndexPath:(NSIndexPath *)destinationIndexPath {
-    [self ytl_moveTabFromIndexPath:sourceIndexPath toIndexPath:destinationIndexPath];
+    [self ytag_moveTabFromIndexPath:sourceIndexPath toIndexPath:destinationIndexPath];
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -261,32 +261,32 @@ static NSString *GetCacheSize() {
 
     if (indexPath.section == 0) {
         if (self.activeTabs.count <= 2) {
-            [self ytl_showLimitAlertWithMessage:LOC(@"AtLeastOneTab")];
+            [self ytag_showLimitAlertWithMessage:LOC(@"AtLeastOneTab")];
             return;
         }
 
         NSString *tabId = self.activeTabs[indexPath.row];
         [self.activeTabs removeObjectAtIndex:indexPath.row];
         [self.inactiveTabs insertObject:tabId atIndex:0];
-        [self ytl_persistTabsAndRefresh];
+        [self ytag_persistTabsAndRefresh];
         [tableView reloadData];
         return;
     }
 
     if (self.activeTabs.count >= 6) {
-        [self ytl_showLimitAlertWithMessage:LOC(@"TabsCountRestricted")];
+        [self ytag_showLimitAlertWithMessage:LOC(@"TabsCountRestricted")];
         return;
     }
 
     NSString *tabId = self.inactiveTabs[indexPath.row];
     [self.inactiveTabs removeObjectAtIndex:indexPath.row];
     [self.activeTabs addObject:tabId];
-    [self ytl_persistTabsAndRefresh];
+    [self ytag_persistTabsAndRefresh];
     [tableView reloadData];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    static NSString *identifier = @"YTLTabEditorCell";
+    static NSString *identifier = @"YTAGTabEditorCell";
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
@@ -297,8 +297,8 @@ static NSString *GetCacheSize() {
     cell.textLabel.textColor = [UIColor labelColor];
     cell.detailTextLabel.text = indexPath.section == 0 ? @"Visible in the pivot bar" : @"Drag into Active Tabs to enable";
     cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
-    cell.imageView.image = [self ytl_imageForTabId:tabId];
-    cell.imageView.tintColor = YTLAfterglowTintColor();
+    cell.imageView.image = [self ytag_imageForTabId:tabId];
+    cell.imageView.tintColor = YTAGAfterglowTintColor();
     cell.showsReorderControl = YES;
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     cell.accessoryType = UITableViewCellAccessoryNone;
@@ -319,13 +319,13 @@ static NSString *GetCacheSize() {
 - (void)layoutSubviews {
     %orig;
 
-    BOOL isYTLite = [self.accessibilityIdentifier isEqualToString:@"YTLiteSectionItem"];
+    BOOL isYTAfterglow = [self.accessibilityIdentifier isEqualToString:@"YTAfterglowSectionItem"];
     YTTouchFeedbackController *feedback = [self valueForKey:@"_touchFeedbackController"];
     ABCSwitch *abcSwitch = [self valueForKey:@"_switch"];
 
-    if (isYTLite) {
-        feedback.feedbackColor = YTLAfterglowTintColor();
-        abcSwitch.onTintColor = YTLAfterglowTintColor();
+    if (isYTAfterglow) {
+        feedback.feedbackColor = YTAGAfterglowTintColor();
+        abcSwitch.onTintColor = YTAGAfterglowTintColor();
     }
 }
 %end
@@ -339,12 +339,12 @@ static NSString *GetCacheSize() {
 
     YTSettingsSectionItem *item = [YTSettingsSectionItemClass switchItemWithTitle:LOC(title)
     titleDescription:LOC(titleDesc)
-    accessibilityIdentifier:@"YTLiteSectionItem"
-    switchOn:ytlBool(key)
+    accessibilityIdentifier:@"YTAfterglowSectionItem"
+    switchOn:ytagBool(key)
     switchBlock:^BOOL(YTSettingsCell *cell, BOOL enabled) {
         if ([key isEqualToString:@"shortsOnlyMode"]) {
             YTAlertView *alertView = [YTAlertViewClass confirmationDialogWithAction:^{
-                ytlSetBool(enabled, @"shortsOnlyMode");
+                ytagSetBool(enabled, @"shortsOnlyMode");
             }
             actionTitle:LOC(@"Yes")
             cancelAction:^{
@@ -355,7 +355,7 @@ static NSString *GetCacheSize() {
             alertView.subtitle = LOC(@"ShortsOnlyWarning");
             [alertView show];
         } else {
-            ytlSetBool(enabled, key);
+            ytagSetBool(enabled, key);
 
             NSArray *keys = @[@"removeLabels", @"removeIndicators", @"frostedPivot",
                 @"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar",
@@ -378,7 +378,7 @@ static NSString *GetCacheSize() {
 - (YTSettingsSectionItem *)linkWithTitle:(NSString *)title description:(NSString *)description link:(NSString *)link {
     return [%c(YTSettingsSectionItem) itemWithTitle:title
     titleDescription:description
-    accessibilityIdentifier:@"YTLiteSectionItem"
+    accessibilityIdentifier:@"YTAfterglowSectionItem"
     detailTextBlock:nil
     selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
         return [%c(YTUIUtils) openURL:[NSURL URLWithString:link]];
@@ -391,7 +391,7 @@ static NSString *GetCacheSize() {
 
     return [YTSettingsSectionItemClass itemWithTitle:title
         titleDescription:titleDescription
-        accessibilityIdentifier:@"YTLiteSectionItem"
+        accessibilityIdentifier:@"YTAfterglowSectionItem"
         detailTextBlock:^NSString *() {
             return summaryBlock ? summaryBlock() : @"\u2023";
         }
@@ -402,7 +402,7 @@ static NSString *GetCacheSize() {
 - (NSString *)enabledSummaryForKeys:(NSArray<NSString *> *)keys {
     NSUInteger enabledCount = 0;
     for (NSString *key in keys) {
-        if (ytlBool(key)) enabledCount++;
+        if (ytagBool(key)) enabledCount++;
     }
 
     if (enabledCount == 0) return LOC(@"Disabled");
@@ -415,7 +415,7 @@ static NSString *GetCacheSize() {
     NSUInteger customizedCount = 0;
 
     for (NSString *key in keys) {
-        if ([[YTLUserDefaults standardUserDefaults] objectForKey:key] != nil) customizedCount++;
+        if ([[YTAGUserDefaults standardUserDefaults] objectForKey:key] != nil) customizedCount++;
     }
 
     if (customizedCount == 0) return LOC(@"Default");
@@ -437,10 +437,10 @@ static NSString *GetCacheSize() {
     Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
 
     return [YTSettingsSectionItemClass itemWithTitle:LOC(@"HoldToSpeed")
-        accessibilityIdentifier:@"YTLiteSectionItem"
+        accessibilityIdentifier:@"YTAfterglowSectionItem"
         detailTextBlock:^NSString *() {
             NSArray *speedLabels = @[LOC(@"Disabled"), LOC(@"Default"), @"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
-            return speedLabels[ytlInt(@"speedIndex")];
+            return speedLabels[ytagInt(@"speedIndex")];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
@@ -450,14 +450,14 @@ static NSString *GetCacheSize() {
                 NSString *title = speedLabels[i];
                 YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
                     [settingsViewController reloadData];
-                    ytlSetInt((int)innerArg1, @"speedIndex");
+                    ytagSetInt((int)innerArg1, @"speedIndex");
                     return YES;
                 }];
 
                 [rows addObject:item];
             }
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"HoldToSpeed") pickerSectionTitle:nil rows:rows selectedItemIndex:ytlInt(@"speedIndex") parentResponder:[self parentResponder]];
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"HoldToSpeed") pickerSectionTitle:nil rows:rows selectedItemIndex:ytagInt(@"speedIndex") parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
@@ -468,10 +468,10 @@ static NSString *GetCacheSize() {
     Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
 
     return [YTSettingsSectionItemClass itemWithTitle:LOC(@"DefaultPlaybackRate")
-        accessibilityIdentifier:@"YTLiteSectionItem"
+        accessibilityIdentifier:@"YTAfterglowSectionItem"
         detailTextBlock:^NSString *() {
             NSArray *speedLabels = @[@"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
-            return speedLabels[ytlInt(@"autoSpeedIndex")];
+            return speedLabels[ytagInt(@"autoSpeedIndex")];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
@@ -481,13 +481,13 @@ static NSString *GetCacheSize() {
                 NSString *title = speedLabels[i];
                 YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
                     [settingsViewController reloadData];
-                    ytlSetInt((int)innerArg1, @"autoSpeedIndex");
+                    ytagSetInt((int)innerArg1, @"autoSpeedIndex");
                     return YES;
                 }];
                 [rows addObject:item];
             }
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"DefaultPlaybackRate") pickerSectionTitle:nil rows:rows selectedItemIndex:ytlInt(@"autoSpeedIndex") parentResponder:[self parentResponder]];
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"DefaultPlaybackRate") pickerSectionTitle:nil rows:rows selectedItemIndex:ytagInt(@"autoSpeedIndex") parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
@@ -498,10 +498,10 @@ static NSString *GetCacheSize() {
     Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
 
     return [YTSettingsSectionItemClass itemWithTitle:LOC(title)
-        accessibilityIdentifier:@"YTLiteSectionItem"
+        accessibilityIdentifier:@"YTAfterglowSectionItem"
         detailTextBlock:^NSString *() {
             NSArray *qualityLabels = @[LOC(@"Default"), LOC(@"Best"), @"2160p60", @"2160p", @"1440p60", @"1440p", @"1080p60", @"1080p", @"720p60", @"720p", @"480p", @"360p"];
-            return qualityLabels[ytlInt(key)];
+            return qualityLabels[ytagInt(key)];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
@@ -511,14 +511,14 @@ static NSString *GetCacheSize() {
                 NSString *qualityTitle = qualityLabels[i];
                 YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:qualityTitle titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
                     [settingsViewController reloadData];
-                    ytlSetInt((int)innerArg1, key);
+                    ytagSetInt((int)innerArg1, key);
                     return YES;
                 }];
 
                 [rows addObject:item];
             }
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"SelectQuality") pickerSectionTitle:nil rows:rows selectedItemIndex:ytlInt(key) parentResponder:[self parentResponder]];
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"SelectQuality") pickerSectionTitle:nil rows:rows selectedItemIndex:ytagInt(key) parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
@@ -529,16 +529,16 @@ static NSString *GetCacheSize() {
     Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
 
     return [YTSettingsSectionItemClass itemWithTitle:LOC(@"Startup")
-        accessibilityIdentifier:@"YTLiteSectionItem"
+        accessibilityIdentifier:@"YTAfterglowSectionItem"
         detailTextBlock:^NSString *() {
-            NSString *tab = [[YTLUserDefaults standardUserDefaults] currentStartupTab];
-            NSDictionary *names = [self ytl_tabNames];
+            NSString *tab = [[YTAGUserDefaults standardUserDefaults] currentStartupTab];
+            NSDictionary *names = [self ytag_tabNames];
             return names[tab] ?: tab;
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSArray *activeTabs = [[YTLUserDefaults standardUserDefaults] currentActiveTabs];
-            NSDictionary *names = [self ytl_tabNames];
-            NSString *currentTab = [[YTLUserDefaults standardUserDefaults] currentStartupTab];
+            NSArray *activeTabs = [[YTAGUserDefaults standardUserDefaults] currentActiveTabs];
+            NSDictionary *names = [self ytag_tabNames];
+            NSString *currentTab = [[YTAGUserDefaults standardUserDefaults] currentStartupTab];
 
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
             NSInteger selectedIdx = 0;
@@ -549,7 +549,7 @@ static NSString *GetCacheSize() {
                 if ([tabId isEqualToString:currentTab]) selectedIdx = i;
 
                 YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
-                    [[YTLUserDefaults standardUserDefaults] setObject:tabId forKey:@"startupTab"];
+                    [[YTAGUserDefaults standardUserDefaults] setObject:tabId forKey:@"startupTab"];
                     [settingsViewController reloadData];
                     return YES;
                 }];
@@ -565,12 +565,12 @@ static NSString *GetCacheSize() {
 #pragma mark - Tab Helpers
 
 %new
-- (NSArray<NSString *> *)ytl_allTabs {
+- (NSArray<NSString *> *)ytag_allTabs {
     return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEexplore", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
 }
 
 %new
-- (NSDictionary<NSString *, NSString *> *)ytl_tabNames {
+- (NSDictionary<NSString *, NSString *> *)ytag_tabNames {
     return @{
         @"FEwhat_to_watch": LOC(@"FEwhat_to_watch"),
         @"FEshorts": LOC(@"FEshorts"),
@@ -624,13 +624,13 @@ static NSString *GetCacheSize() {
                            @"theme_background", @"theme_textPrimary", @"theme_textSecondary",
                            @"theme_navBar", @"theme_accent"];
     for (NSString *key in colorKeys) {
-        if ([[YTLUserDefaults standardUserDefaults] objectForKey:key] != nil) customizedCount++;
+        if ([[YTAGUserDefaults standardUserDefaults] objectForKey:key] != nil) customizedCount++;
     }
 
-    BOOL hasGradientStart = [[YTLUserDefaults standardUserDefaults] objectForKey:@"theme_gradientStart"] != nil;
-    BOOL hasGradientEnd = [[YTLUserDefaults standardUserDefaults] objectForKey:@"theme_gradientEnd"] != nil;
+    BOOL hasGradientStart = [[YTAGUserDefaults standardUserDefaults] objectForKey:@"theme_gradientStart"] != nil;
+    BOOL hasGradientEnd = [[YTAGUserDefaults standardUserDefaults] objectForKey:@"theme_gradientEnd"] != nil;
     BOOL hasGradient = hasGradientStart || hasGradientEnd;
-    BOOL hasGlow = ytlBool(@"theme_glowEnabled");
+    BOOL hasGlow = ytagBool(@"theme_glowEnabled");
 
     if (customizedCount == 0 && !hasGradient && !hasGlow) return LOC(@"Default");
     if (customizedCount == 0 && hasGradient && !hasGlow) return [NSString stringWithFormat:@"Gradient %@", [self themeGradientSummary]];
@@ -643,7 +643,7 @@ static NSString *GetCacheSize() {
 
 %new
 - (UIColor *)themeLoadColorForKey:(NSString *)key {
-    NSData *data = [[YTLUserDefaults standardUserDefaults] objectForKey:key];
+    NSData *data = [[YTAGUserDefaults standardUserDefaults] objectForKey:key];
     if (!data) return nil;
     NSKeyedUnarchiver *u = [[NSKeyedUnarchiver alloc] initForReadingFromData:data error:nil];
     [u setRequiresSecureCoding:NO];
@@ -656,7 +656,7 @@ static NSString *GetCacheSize() {
         UIColorPickerViewController *picker = [[UIColorPickerViewController alloc] init];
         picker.supportsAlpha = NO;
         if (startColor) picker.selectedColor = startColor;
-        YTLColorPickerDelegate *delegate = [[YTLColorPickerDelegate alloc] init];
+        YTAGColorPickerDelegate *delegate = [[YTAGColorPickerDelegate alloc] init];
         delegate.themeKey = themeKey;
         delegate.settingsVC = settingsVC;
         delegate.didSelect = NO;
@@ -674,7 +674,7 @@ static NSString *GetCacheSize() {
 
     YTSettingsSectionItem *item = [YTSettingsSectionItemClass itemWithTitle:LOC(title)
         titleDescription:titleDescription
-        accessibilityIdentifier:@"YTLiteSectionItem"
+        accessibilityIdentifier:@"YTAfterglowSectionItem"
         detailTextBlock:^NSString *() {
             return [self themeColorDetailForKey:themeKey];
         }
@@ -687,13 +687,13 @@ static NSString *GetCacheSize() {
     if ([self themeLoadColorForKey:themeKey]) {
         YTSettingsSectionItem *reset = [YTSettingsSectionItemClass itemWithTitle:[NSString stringWithFormat:@"Use Default %@", LOC(title)]
             titleDescription:@"Restore the default color."
-            accessibilityIdentifier:@"YTLiteSectionItem"
+            accessibilityIdentifier:@"YTAfterglowSectionItem"
             detailTextBlock:^NSString *() {
                 return [NSString stringWithFormat:@"Clears %@", [self themeColorDetailForKey:themeKey]];
             }
             selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
-                [[YTLUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
-                ytl_clearThemeCache();
+                [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
+                ytag_clearThemeCache();
                 [settingsVC reloadData];
                 [(UINavigationController *)settingsVC.navigationController popViewControllerAnimated:YES];
                 return YES;
@@ -705,7 +705,7 @@ static NSString *GetCacheSize() {
 %new
 - (void)themeSaveColor:(UIColor *)color forKey:(NSString *)key {
     NSData *data = [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
-    [[YTLUserDefaults standardUserDefaults] setObject:data forKey:key];
+    [[YTAGUserDefaults standardUserDefaults] setObject:data forKey:key];
 }
 
 %new
@@ -722,10 +722,10 @@ static NSString *GetCacheSize() {
         [self themeSaveColor:gradientStart forKey:@"theme_gradientStart"];
         [self themeSaveColor:gradientEnd forKey:@"theme_gradientEnd"];
     } else {
-        [[YTLUserDefaults standardUserDefaults] removeObjectForKey:@"theme_gradientStart"];
-        [[YTLUserDefaults standardUserDefaults] removeObjectForKey:@"theme_gradientEnd"];
+        [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:@"theme_gradientStart"];
+        [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:@"theme_gradientEnd"];
     }
-    ytl_clearThemeCache();
+    ytag_clearThemeCache();
 }
 
 %new
@@ -734,15 +734,15 @@ static NSString *GetCacheSize() {
 
     YTSettingsSectionItem *item = [YTSettingsSectionItemClass itemWithTitle:name
         titleDescription:titleDescription
-        accessibilityIdentifier:@"YTLiteSectionItem"
+        accessibilityIdentifier:@"YTAfterglowSectionItem"
         detailTextBlock:^NSString *() {
             return @"Apply";
         }
         selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
-            [[YTLUserDefaults standardUserDefaults] setBool:[name hasPrefix:@"Afterglow"] forKey:@"theme_glowEnabled"];
+            [[YTAGUserDefaults standardUserDefaults] setBool:[name hasPrefix:@"Afterglow"] forKey:@"theme_glowEnabled"];
             [self themeApplyPresetOverlay:overlay tabIcons:tabIcons seekBar:seekBar bg:bg textP:textP textS:textS nav:nav accent:accent gradientStart:gradientStart gradientEnd:gradientEnd];
             UIViewController *presenter = settingsVC.navigationController.topViewController ?: settingsVC;
-            ytl_presentThemeRefreshAlert(presenter, LOC(@"PresetApplied"), [NSString stringWithFormat:@"%@ is ready. Restart YouTube for the full look across every surface.", name]);
+            ytag_presentThemeRefreshAlert(presenter, LOC(@"PresetApplied"), [NSString stringWithFormat:@"%@ is ready. Restart YouTube for the full look across every surface.", name]);
             return YES;
         }];
     [rows addObject:item];
@@ -752,7 +752,7 @@ static NSString *GetCacheSize() {
 - (YTSettingsSectionItem *)themeSectionHeaderWithTitle:(NSString *)title description:(NSString *)description {
     YTSettingsSectionItem *item = [%c(YTSettingsSectionItem) itemWithTitle:title
         titleDescription:description
-        accessibilityIdentifier:@"YTLiteSectionItem"
+        accessibilityIdentifier:@"YTAfterglowSectionItem"
         detailTextBlock:nil
         selectBlock:nil];
     item.enabled = NO;
@@ -762,12 +762,12 @@ static NSString *GetCacheSize() {
 #pragma mark - Settings Section
 
 %new(v@:@)
-- (void)updateYTLiteSectionWithEntry:(id)entry {
+- (void)updateYTAfterglowSectionWithEntry:(id)entry {
     NSMutableArray *sectionItems = [NSMutableArray array];
     YTSettingsViewController *settingsViewController = [self valueForKey:@"_settingsViewControllerDelegate"];
-    BOOL isAdvanced = ytlBool(@"advancedMode");
+    BOOL isAdvanced = ytagBool(@"advancedMode");
 
-    YTSettingsSectionItem *space = [%c(YTSettingsSectionItem) itemWithTitle:nil accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:nil];
+    YTSettingsSectionItem *space = [%c(YTSettingsSectionItem) itemWithTitle:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:nil];
     NSArray *adsKeys = @[@"noAds", @"noPromotionCards"];
     NSArray *navbarKeys = @[@"noCast", @"noNotifsButton", @"noSearchButton", @"noVoiceSearchButton", @"stickyNavbar", @"noSubbar", @"noYTLogo", @"premiumYTLogo"];
     NSArray *tabbarKeys = @[@"frostedPivot", @"removeLabels", @"removeIndicators"];
@@ -841,7 +841,7 @@ static NSString *GetCacheSize() {
             [rows addObject:[self pageItemWithTitle:LOC(@"Tabbar")
                 titleDescription:@"Visible tabs, labels, indicators, and bar styling."
                 summary:^NSString *() {
-                    return [NSString stringWithFormat:@"%lu tabs", (unsigned long)[[YTLUserDefaults standardUserDefaults] currentActiveTabs].count];
+                    return [NSString stringWithFormat:@"%lu tabs", (unsigned long)[[YTAGUserDefaults standardUserDefaults] currentActiveTabs].count];
                 }
                 selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
                     NSMutableArray <YTSettingsSectionItem *> *tabRows = [NSMutableArray array];
@@ -851,17 +851,17 @@ static NSString *GetCacheSize() {
                     [tabRows addObject:[self pageItemWithTitle:@"Manage Tabs"
                         titleDescription:@"Drag tabs between active and inactive sections, or tap a row to toggle it."
                         summary:^NSString *() {
-                            return [NSString stringWithFormat:@"%lu active", (unsigned long)[[YTLUserDefaults standardUserDefaults] currentActiveTabs].count];
+                            return [NSString stringWithFormat:@"%lu active", (unsigned long)[[YTAGUserDefaults standardUserDefaults] currentActiveTabs].count];
                         }
                         selectBlock:^BOOL (YTSettingsCell *manageCell, NSUInteger manageArg1) {
-                            YTLTabBarEditorController *editor = [[YTLTabBarEditorController alloc] initWithSettingsViewController:settingsViewController
-                                activeTabs:[[YTLUserDefaults standardUserDefaults] currentActiveTabs]
-                                allTabs:[self ytl_allTabs]
-                                tabNames:[self ytl_tabNames]];
+                            YTAGTabBarEditorController *editor = [[YTAGTabBarEditorController alloc] initWithSettingsViewController:settingsViewController
+                                activeTabs:[[YTAGUserDefaults standardUserDefaults] currentActiveTabs]
+                                allTabs:[self ytag_allTabs]
+                                tabNames:[self ytag_tabNames]];
                             [settingsViewController pushViewController:editor];
                             return YES;
                         }]];
-                    [tabRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:nil titleDescription:LOC(@"HideLibraryFooter") accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:nil]];
+                    [tabRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:nil titleDescription:LOC(@"HideLibraryFooter") accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:nil]];
 
                     YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Tabbar") pickerSectionTitle:nil rows:tabRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
@@ -965,18 +965,18 @@ static NSString *GetCacheSize() {
                     [gradientRows addObject:[self themeSectionHeaderWithTitle:@"Gradient Status" description:@"Both colors must be set for the background gradient to appear everywhere."]];
                     [self themeAddColorRowWithTitle:@"GradientStart" titleDescription:@"Start of the background gradient." themeKey:@"theme_gradientStart" toRows:gradientRows settingsVC:settingsViewController];
                     [self themeAddColorRowWithTitle:@"GradientEnd" titleDescription:@"End of the background gradient." themeKey:@"theme_gradientEnd" toRows:gradientRows settingsVC:settingsViewController];
-                    if ([[YTLUserDefaults standardUserDefaults] objectForKey:@"theme_gradientStart"] || [[YTLUserDefaults standardUserDefaults] objectForKey:@"theme_gradientEnd"]) {
+                    if ([[YTAGUserDefaults standardUserDefaults] objectForKey:@"theme_gradientStart"] || [[YTAGUserDefaults standardUserDefaults] objectForKey:@"theme_gradientEnd"]) {
                         [gradientRows addObject:space];
                         [gradientRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:@"Turn Off Gradient"
                             titleDescription:@"Remove both gradient colors and go back to a flat background."
-                            accessibilityIdentifier:@"YTLiteSectionItem"
+                            accessibilityIdentifier:@"YTAfterglowSectionItem"
                             detailTextBlock:^NSString *() {
                                 return [self themeGradientSummary];
                             }
                             selectBlock:^BOOL(YTSettingsCell *resetCell, NSUInteger resetArg1) {
-                                [[YTLUserDefaults standardUserDefaults] removeObjectForKey:@"theme_gradientStart"];
-                                [[YTLUserDefaults standardUserDefaults] removeObjectForKey:@"theme_gradientEnd"];
-                                ytl_clearThemeCache();
+                                [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:@"theme_gradientStart"];
+                                [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:@"theme_gradientEnd"];
+                                ytag_clearThemeCache();
                                 [settingsViewController reloadData];
                                 [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
                                 return YES;
@@ -992,7 +992,7 @@ static NSString *GetCacheSize() {
             [appearanceRows addObject:[self themeSectionHeaderWithTitle:@"Reset" description:@"If the look gets messy, clear Themes without touching the rest of the tweak."]];
             [appearanceRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ResetAllColors")
                 titleDescription:@"Clear every theme override and go back to stock colors."
-                accessibilityIdentifier:@"YTLiteSectionItem"
+                accessibilityIdentifier:@"YTAfterglowSectionItem"
                 detailTextBlock:^NSString *() {
                     return @"Restart required";
                 }
@@ -1001,9 +1001,9 @@ static NSString *GetCacheSize() {
                     [alert addAction:[UIAlertAction actionWithTitle:LOC(@"ResetAndRestart") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
                         NSArray *keys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar", @"theme_background", @"theme_textPrimary", @"theme_textSecondary", @"theme_navBar", @"theme_accent", @"theme_gradientStart", @"theme_gradientEnd", @"theme_glowEnabled"];
                         for (NSString *key in keys) {
-                            [[YTLUserDefaults standardUserDefaults] removeObjectForKey:key];
+                            [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:key];
                         }
-                        ytl_clearThemeCache();
+                        ytag_clearThemeCache();
                         exit(0);
                     }]];
                     [alert addAction:[UIAlertAction actionWithTitle:LOC(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
@@ -1305,7 +1305,7 @@ static NSString *GetCacheSize() {
         }];
     [sectionItems addObject:feed];
 
-    YTSettingsSectionItem *support = [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"SupportDevelopment") accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:^NSString *() { return @"♡"; } selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+    YTSettingsSectionItem *support = [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"SupportDevelopment") accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:^NSString *() { return @"♡"; } selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
         YTDefaultSheetController *sheetController = [%c(YTDefaultSheetController) sheetControllerWithMessage:LOC(@"SupportDevelopment") subMessage:LOC(@"SupportDevelopmentDesc") delegate:nil parentResponder:nil];
         YTActionSheetHeaderView *headerView = [sheetController valueForKey:@"_headerView"];
         YTFormattedStringLabel *subtitle = [headerView valueForKey:@"_subtitleLabel"];
@@ -1392,7 +1392,7 @@ static NSString *GetCacheSize() {
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSMutableArray <YTSettingsSectionItem *> *rows = [@[
                 [self switchWithTitle:@"Advanced" key:@"advancedMode"],
-                [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ClearCache") titleDescription:nil accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:^NSString *() { return GetCacheSize(); } selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+                [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ClearCache") titleDescription:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:^NSString *() { return GetCacheSize(); } selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
                     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                         NSString *cachePath = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
                         [[NSFileManager defaultManager] removeItemAtPath:cachePath error:nil];
@@ -1403,9 +1403,9 @@ static NSString *GetCacheSize() {
                     return YES;
                 }],
 
-                [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ResetSettings") titleDescription:nil accessibilityIdentifier:@"YTLiteSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+                [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ResetSettings") titleDescription:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
                     YTAlertView *alertView = [%c(YTAlertView) confirmationDialogWithAction:^{
-                        [YTLUserDefaults resetUserDefaults];
+                        [YTAGUserDefaults resetUserDefaults];
 
                         [[UIApplication sharedApplication] performSelector:@selector(suspend)];
                         [NSThread sleepForTimeInterval:1.0];
@@ -1433,14 +1433,14 @@ static NSString *GetCacheSize() {
     [sectionItems addObject:about];
 
     BOOL isNew = [settingsViewController respondsToSelector:@selector(setSectionItems:forCategory:title:icon:titleDescription:headerHidden:)];
-    isNew ? [settingsViewController setSectionItems:sectionItems forCategory:YTLiteSection title:@"YouTube Afterglow" icon:nil titleDescription:nil headerHidden:NO]
-          : [settingsViewController setSectionItems:sectionItems forCategory:YTLiteSection title:@"YouTube Afterglow" titleDescription:nil headerHidden:NO];
+    isNew ? [settingsViewController setSectionItems:sectionItems forCategory:YTAfterglowSection title:@"YouTube Afterglow" icon:nil titleDescription:nil headerHidden:NO]
+          : [settingsViewController setSectionItems:sectionItems forCategory:YTAfterglowSection title:@"YouTube Afterglow" titleDescription:nil headerHidden:NO];
 
 }
 
 - (void)updateSectionForCategory:(NSUInteger)category withEntry:(id)entry {
-    if (category == YTLiteSection) {
-        [self updateYTLiteSectionWithEntry:entry];
+    if (category == YTAfterglowSection) {
+        [self updateYTAfterglowSectionWithEntry:entry];
         return;
     } %orig;
 }
@@ -1450,7 +1450,7 @@ static NSString *GetCacheSize() {
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(32, 32)];
     UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext * _Nonnull rendererContext) {
         UIView *imageView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 32, 32)];
-        UIImageView *iconImageView = [[UIImageView alloc] initWithImage:[UIImage imageWithContentsOfFile:[NSBundle.ytl_defaultBundle pathForResource:iconName ofType:@"png"]]];
+        UIImageView *iconImageView = [[UIImageView alloc] initWithImage:[UIImage imageWithContentsOfFile:[NSBundle.ytag_defaultBundle pathForResource:iconName ofType:@"png"]]];
         iconImageView.contentMode = UIViewContentModeScaleAspectFit;
         iconImageView.clipsToBounds = YES;
         iconImageView.frame = imageView.bounds;
