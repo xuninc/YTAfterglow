@@ -220,26 +220,67 @@ static CAGradientLayer *ytag_createGradient(CGRect bounds) {
     return gradient;
 }
 
-static void ytag_applyGradient(UIView *view) {
-    if (!ytag_themeGradientEnabled()) return;
-
-    // Remove existing gradient
+static void ytag_removeGradient(UIView *view) {
+    if (!view) return;
     for (CALayer *layer in [view.layer.sublayers copy]) {
         if ([layer.name isEqualToString:@"ytag_gradient"]) [layer removeFromSuperlayer];
     }
+}
 
-    view.backgroundColor = [UIColor clearColor];
-    view.opaque = NO;
+static UIView *ytag_gradientHostView(UIView *view) {
+    if (!view) return nil;
 
-    CAGradientLayer *gradient = ytag_createGradient(view.bounds);
-    if (gradient) [view.layer insertSublayer:gradient atIndex:0];
+    CGSize screenSize = UIScreen.mainScreen.bounds.size;
+    UIView *candidate = view;
+    UIView *best = view;
+
+    while (candidate) {
+        best = candidate;
+
+        CGFloat width = CGRectGetWidth(candidate.bounds);
+        CGFloat height = CGRectGetHeight(candidate.bounds);
+        if (width >= screenSize.width * 0.9 && height >= screenSize.height * 0.9) {
+            return candidate;
+        }
+
+        candidate = candidate.superview;
+    }
+
+    return view.window ?: best;
+}
+
+static void ytag_applyGradient(UIView *view) {
+    if (!view) return;
+
+    UIView *hostView = ytag_gradientHostView(view);
+    if (!hostView) return;
+
+    ytag_removeGradient(hostView);
+    if (!ytag_themeGradientEnabled()) return;
+
+    if (CGRectIsEmpty(hostView.bounds)) return;
+
+    hostView.backgroundColor = [UIColor clearColor];
+    hostView.opaque = NO;
+
+    CAGradientLayer *gradient = ytag_createGradient(hostView.bounds);
+    if (gradient) [hostView.layer insertSublayer:gradient atIndex:0];
 }
 
 // Apply gradient to the main app view
 %hook YTAppView
 - (void)layoutSubviews {
     %orig;
-    ytag_applyGradient((UIView *)self);
+    UIView *hostView = (UIView *)self;
+    ytag_applyGradient(hostView);
+    if (hostView.window) ytag_applyGradient(hostView.window);
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    UIView *hostView = (UIView *)self;
+    ytag_applyGradient(hostView);
+    if (hostView.window) ytag_applyGradient(hostView.window);
 }
 %end
 
