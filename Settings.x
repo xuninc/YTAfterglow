@@ -2,6 +2,10 @@
 #import <objc/runtime.h>
 
 extern void ytag_clearThemeCache(void);
+static UIViewController *ytag_viewControllerForResponder(UIResponder *responder);
+static void ytag_reloadSettingsController(UIViewController *controller);
+static void ytag_refreshSettingsHierarchy(UIViewController *controller);
+static void ytag_refreshSettingsFromCell(YTSettingsCell *cell);
 static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString *title, NSString *message);
 
 @interface YTSettingsSectionItemManager (YTAfterglow)
@@ -68,7 +72,7 @@ static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString 
     __weak YTSettingsViewController *weakVC = self.settingsVC;
     BOOL selected = self.didSelect;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [weakVC reloadData];
+        ytag_refreshSettingsHierarchy(weakVC);
         if (selected && weakVC) {
             UIViewController *presenter = weakVC.navigationController.topViewController ?: weakVC;
             ytag_presentThemeRefreshAlert(presenter, LOC(@"ColorSaved"), @"Some surfaces refresh immediately. Restart YouTube for a full theme refresh across the app.");
@@ -84,6 +88,40 @@ static YTAGColorPickerDelegate *_colorPickerDelegate = nil;
 
 static UIColor *YTAGAfterglowTintColor(void) {
     return [UIColor colorWithRed:0.95 green:0.41 blue:0.50 alpha:1.0];
+}
+
+static UIViewController *ytag_viewControllerForResponder(UIResponder *responder) {
+    UIResponder *currentResponder = responder;
+    while (currentResponder && ![currentResponder isKindOfClass:[UIViewController class]]) {
+        currentResponder = currentResponder.nextResponder;
+    }
+    return (UIViewController *)currentResponder;
+}
+
+static void ytag_reloadSettingsController(UIViewController *controller) {
+    if (!controller || ![controller respondsToSelector:@selector(reloadData)]) return;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    [controller performSelector:@selector(reloadData)];
+#pragma clang diagnostic pop
+}
+
+static void ytag_refreshSettingsHierarchy(UIViewController *controller) {
+    if (!controller) return;
+
+    NSMutableOrderedSet<UIViewController *> *controllers = [NSMutableOrderedSet orderedSet];
+    if (controller.navigationController.viewControllers.count > 0) {
+        [controllers addObjectsFromArray:controller.navigationController.viewControllers];
+    }
+    [controllers addObject:controller];
+
+    for (UIViewController *viewController in controllers) {
+        ytag_reloadSettingsController(viewController);
+    }
+}
+
+static void ytag_refreshSettingsFromCell(YTSettingsCell *cell) {
+    ytag_refreshSettingsHierarchy(ytag_viewControllerForResponder(cell));
 }
 
 static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString *title, NSString *message) {
@@ -156,7 +194,7 @@ static NSString *GetCacheSize() {
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    [self.settingsViewController reloadData];
+    ytag_refreshSettingsHierarchy(self.settingsViewController ?: self);
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
@@ -220,7 +258,7 @@ static NSString *GetCacheSize() {
 - (void)ytag_persistTabsAndRefresh {
     [[YTAGUserDefaults standardUserDefaults] setActiveTabs:self.activeTabs];
     [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
-    [self.settingsViewController reloadData];
+    ytag_refreshSettingsHierarchy(self.settingsViewController ?: self);
 }
 
 - (void)ytag_moveTabFromIndexPath:(NSIndexPath *)sourceIndexPath toIndexPath:(NSIndexPath *)destinationIndexPath {
@@ -345,6 +383,7 @@ static NSString *GetCacheSize() {
         if ([key isEqualToString:@"shortsOnlyMode"]) {
             YTAlertView *alertView = [YTAlertViewClass confirmationDialogWithAction:^{
                 ytagSetBool(enabled, @"shortsOnlyMode");
+                ytag_refreshSettingsFromCell(cell);
             }
             actionTitle:LOC(@"Yes")
             cancelAction:^{
@@ -365,6 +404,8 @@ static NSString *GetCacheSize() {
             if ([keys containsObject:key]) {
                 [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
             }
+
+            ytag_refreshSettingsFromCell(cell);
         }
 
         return YES;
@@ -449,8 +490,8 @@ static NSString *GetCacheSize() {
             for (NSUInteger i = 0; i < speedLabels.count; i++) {
                 NSString *title = speedLabels[i];
                 YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
-                    [settingsViewController reloadData];
                     ytagSetInt((int)innerArg1, @"speedIndex");
+                    ytag_refreshSettingsHierarchy(settingsViewController);
                     return YES;
                 }];
 
@@ -480,8 +521,8 @@ static NSString *GetCacheSize() {
             for (NSUInteger i = 0; i < speedLabels.count; i++) {
                 NSString *title = speedLabels[i];
                 YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
-                    [settingsViewController reloadData];
                     ytagSetInt((int)innerArg1, @"autoSpeedIndex");
+                    ytag_refreshSettingsHierarchy(settingsViewController);
                     return YES;
                 }];
                 [rows addObject:item];
@@ -510,8 +551,8 @@ static NSString *GetCacheSize() {
             for (NSUInteger i = 0; i < qualityLabels.count; i++) {
                 NSString *qualityTitle = qualityLabels[i];
                 YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:qualityTitle titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
-                    [settingsViewController reloadData];
                     ytagSetInt((int)innerArg1, key);
+                    ytag_refreshSettingsHierarchy(settingsViewController);
                     return YES;
                 }];
 
@@ -550,7 +591,7 @@ static NSString *GetCacheSize() {
 
                 YTSettingsSectionItem *item = [YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
                     [[YTAGUserDefaults standardUserDefaults] setObject:tabId forKey:@"startupTab"];
-                    [settingsViewController reloadData];
+                    ytag_refreshSettingsHierarchy(settingsViewController);
                     return YES;
                 }];
                 [rows addObject:item];
@@ -694,7 +735,7 @@ static NSString *GetCacheSize() {
             selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
                 [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:themeKey];
                 ytag_clearThemeCache();
-                [settingsVC reloadData];
+                ytag_refreshSettingsHierarchy(settingsVC);
                 [(UINavigationController *)settingsVC.navigationController popViewControllerAnimated:YES];
                 return YES;
             }];
@@ -741,6 +782,7 @@ static NSString *GetCacheSize() {
         selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
             [[YTAGUserDefaults standardUserDefaults] setBool:[name hasPrefix:@"Afterglow"] forKey:@"theme_glowEnabled"];
             [self themeApplyPresetOverlay:overlay tabIcons:tabIcons seekBar:seekBar bg:bg textP:textP textS:textS nav:nav accent:accent gradientStart:gradientStart gradientEnd:gradientEnd];
+            ytag_refreshSettingsHierarchy(settingsVC);
             UIViewController *presenter = settingsVC.navigationController.topViewController ?: settingsVC;
             ytag_presentThemeRefreshAlert(presenter, LOC(@"PresetApplied"), [NSString stringWithFormat:@"%@ is ready. Restart YouTube for the full look across every surface.", name]);
             return YES;
@@ -977,7 +1019,7 @@ static NSString *GetCacheSize() {
                                 [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:@"theme_gradientStart"];
                                 [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:@"theme_gradientEnd"];
                                 ytag_clearThemeCache();
-                                [settingsViewController reloadData];
+                                ytag_refreshSettingsHierarchy(settingsViewController);
                                 [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
                                 return YES;
                             }]];

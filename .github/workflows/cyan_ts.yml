@@ -52,7 +52,7 @@ on:
         default: false
 
       tweak_version:
-        description: "The version of the tweak to use. Enter the version manually from dayanch96/YTAfterglow/releases or leave default"
+        description: "The version of the tweak to use. Enter the version manually from xuninc/YTAfterglow releases or leave default"
         default: "5.2b4"
         required: true
         type: string
@@ -65,7 +65,7 @@ on:
 
       bundle_id:
         description: "BundleID (Optional)"
-        default: "i.am.kain.ytag"
+        default: "i.am.kain.ytafterglow"
         required: true
         type: string
 

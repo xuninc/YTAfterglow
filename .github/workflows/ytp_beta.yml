@@ -45,12 +45,6 @@ on:
         required: true
         type: string
 
-      tweak_url:
-        description: "URL to the YouTube Afterglow tweak file"
-        default: ""
-        required: true
-        type: string
-
       display_name:
         description: "App Name (Optional)"
         default: "YouTube Afterglow"
@@ -59,13 +53,13 @@ on:
 
       bundle_id:
         description: "BundleID (Optional)"
-        default: "i.am.kain.ytag"
+        default: "i.am.kain.ytafterglow"
         required: true
         type: string
 
       info_note:
         description: "TIP: Learn more about integrations in the README via the link below"
-        default: "https://github.com/dayanch96/YTAfterglow#tweak-integration-details"
+        default: "https://github.com/xuninc/YTAfterglow#tweak-integration-details"
         type: string
         required: false
 
@@ -83,7 +77,6 @@ jobs:
       enable_ryd: ${{ inputs.enable_ryd }}
       enable_ytabc: ${{ inputs.enable_ytabc }}
       enable_demc: ${{ inputs.enable_demc }}
-      tweak_url: ${{ inputs.tweak_url }}
 
   package:
     name: Package IPA (Beta)
