@@ -121,10 +121,12 @@ jobs:
           done
           cyan -i youtube.ipa -o YTAfterglow_Beta.ipa -uwef $tweaks -n "${{ github.event.inputs.display_name }}" -b ${{ github.event.inputs.bundle_id }}
 
-      - name: Fix Substrate load paths
+      - name: Scrub signing artifacts and fix Substrate load paths
         run: |
+          mkdir -p ipa_contents
           unzip -q YTAfterglow_Beta.ipa -d ipa_contents
           APP_DIR=$(find ipa_contents/Payload -maxdepth 1 -name "*.app" -type d | head -1)
+          bash scripts/scrub_signing_artifacts.sh "$APP_DIR"
           bash scripts/fix_substrate_load_paths.sh "$APP_DIR"
           cd ipa_contents
           zip -qr ../YTAfterglow_Beta_fixed.ipa Payload
