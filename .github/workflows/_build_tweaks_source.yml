@@ -75,10 +75,10 @@ jobs:
           git checkout
           mv *.sdk $THEOS/sdks
 
-      - name: Checkout YTLite source
+      - name: Checkout YTAfterglow source
         uses: actions/checkout@v6
         with:
-          path: YTLite
+          path: YTAfterglow
 
       - name: Clone YouTubeHeader
         run: |
@@ -92,7 +92,7 @@ jobs:
             cp -r "$THEOS/include/YouTubeHeader" "$THEOS/include/YTHeaders"
           fi
 
-      # Symlink YouTubeHeader next to YTLite checkout (for ../YouTubeHeader imports)
+      # Symlink YouTubeHeader next to YTAfterglow checkout (for ../YouTubeHeader imports)
       - name: Symlink YouTubeHeader
         run: ln -sf $THEOS/include/YouTubeHeader ${{ github.workspace }}/YouTubeHeader
 
@@ -104,10 +104,10 @@ jobs:
           git sparse-checkout set --no-cone objectivec
           git checkout
 
-      - name: Build YouTube Plus from source
+      - name: Build YTAfterglow from source
         run: |
-          cd YTLite && make clean package DEBUG=0 FINALPACKAGE=1
-          mv packages/*.deb ../ytplus.deb
+          cd YTAfterglow && make clean package DEBUG=0 FINALPACKAGE=1
+          mv packages/*.deb ../ytafterglow.deb
 
       - name: Clone PSHeader
         if: ${{ inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}

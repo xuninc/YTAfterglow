@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-echo "== YouTube Plus maintenance audit =="
+echo "== YTAfterglow maintenance audit =="
 
 if ! command -v rg >/dev/null 2>&1; then
   echo "[ERROR] ripgrep (rg) is required." >&2
@@ -37,7 +37,7 @@ fi
 
 echo
 echo "-- Possibly stale preference keys --"
-rg -o 'kYTL[^] ;]+' --glob '*.x' --glob '*.m' --glob '*.h' | \
+rg -o 'kYTAG[^] ;]+' --glob '*.x' --glob '*.m' --glob '*.h' | \
   sed 's/:.*//' | sort | uniq -c | awk '$1==1 {print "[WARN] key appears once:", $2}' || true
 
 if [ -f README.md ]; then

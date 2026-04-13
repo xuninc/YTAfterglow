@@ -14,7 +14,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          CAR="layout/Library/Application Support/YTLite.bundle/Assets.car"
+          CAR="layout/Library/Application Support/YTAfterglow.bundle/Assets.car"
 
           if [[ ! -f "$CAR" ]]; then
             echo "ERROR: Assets.car not found"
@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           source $HOME/.cargo/env
 
-          CAR="layout/Library/Application Support/YTLite.bundle/Assets.car"
+          CAR="layout/Library/Application Support/YTAfterglow.bundle/Assets.car"
           OUT="extracted_assets"
 
           mkdir -p "$OUT"

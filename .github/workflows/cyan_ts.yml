@@ -52,7 +52,7 @@ on:
         default: false
 
       tweak_version:
-        description: "The version of the tweak to use. Enter the version manually from dayanch96/YTLite/releases or leave default"
+        description: "The version of the tweak to use. Enter the version manually from dayanch96/YTAfterglow/releases or leave default"
         default: "5.2b4"
         required: true
         type: string
@@ -115,7 +115,7 @@ jobs:
       - name: Generate .cyan file
         if: ${{ github.event.inputs.create_cyan }}
         run: |
-          tweaks="ytplus.deb OpenYoutubeSafariExtension.appex"
+          tweaks="ytafterglow.deb OpenYoutubeSafariExtension.appex"
           for f in *.deb; do
             [ -f "$f" ] && tweaks="$tweaks $f"
           done
