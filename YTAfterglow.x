@@ -471,26 +471,48 @@ static BOOL canRememberLoopMode = NO;
 // Extra Speed Options
 %hook YTVarispeedSwitchController
 - (void)setDelegate:(id)arg1 {
-    NSMutableArray *optionsCopy = [[[self valueForKey:@"_options"] mutableCopy] ?: [NSMutableArray array] mutableCopy];
-    NSArray *speedOptions = @[@"2.25", @"2.5", @"2.75", @"3", @"3.25", @"3.5", @"3.75", @"4", @"5"];
-    NSMutableSet<NSString *> *existingTitles = [NSMutableSet set];
+    %orig;
 
-    for (id option in optionsCopy) {
-        NSString *existingTitle = [option valueForKey:@"title"];
-        if (existingTitle.length > 0) [existingTitles addObject:existingTitle];
+    if (!ytagBool(@"extraSpeedOptions")) return;
+
+    Class optionClass = %c(YTVarispeedSwitchControllerOption);
+    if (!optionClass) return;
+
+    @try {
+        id rawOptions = [self valueForKey:@"_options"];
+        if (![rawOptions isKindOfClass:[NSArray class]]) return;
+
+        NSMutableArray *optionsCopy = [(NSArray *)rawOptions mutableCopy];
+        NSArray<NSNumber *> *speedOptions = @[@2.25f, @2.5f, @2.75f, @3.0f, @3.25f, @3.5f, @3.75f, @4.0f, @5.0f];
+        NSMutableSet<NSNumber *> *existingRates = [NSMutableSet set];
+
+        for (id option in optionsCopy) {
+            NSNumber *existingRate = nil;
+            @try {
+                existingRate = [option valueForKey:@"rate"];
+            } @catch (__unused NSException *innerException) {}
+
+            if ([existingRate isKindOfClass:[NSNumber class]]) {
+                [existingRates addObject:@(existingRate.floatValue)];
+            }
+        }
+
+        for (NSNumber *rateNumber in speedOptions) {
+            NSNumber *normalizedRate = @(rateNumber.floatValue);
+            if ([existingRates containsObject:normalizedRate]) continue;
+
+            NSString *title = [NSString stringWithFormat:@"%g", rateNumber.floatValue];
+            YTVarispeedSwitchControllerOption *option = [[optionClass alloc] initWithTitle:title rate:rateNumber.floatValue];
+            if (!option) continue;
+
+            [optionsCopy addObject:option];
+            [existingRates addObject:normalizedRate];
+        }
+
+        [self setValue:[optionsCopy copy] forKey:@"_options"];
+    } @catch (__unused NSException *exception) {
+        return;
     }
-
-    for (NSString *title in speedOptions) {
-        if ([existingTitles containsObject:title]) continue;
-        float rate = [title floatValue];
-        YTVarispeedSwitchControllerOption *option = [[%c(YTVarispeedSwitchControllerOption) alloc] initWithTitle:title rate:rate];
-        [optionsCopy addObject:option];
-        [existingTitles addObject:title];
-    }
-
-    if (ytagBool(@"extraSpeedOptions")) [self setValue:[optionsCopy copy] forKey:@"_options"];
-
-    return %orig;
 }
 %end
 
@@ -502,7 +524,7 @@ static BOOL canRememberLoopMode = NO;
     NSString *legacyUIVersion = @"17.38.10";
 
     if (ytagBool(@"oldYTUI")) return legacyUIVersion;
-    if (ytagBool(@"classicQuality") || ytagBool(@"extraSpeedOptions")) return qualityCompatibilityVersion;
+    if (ytagBool(@"classicQuality")) return qualityCompatibilityVersion;
     return originalVersion;
 }
 %end
