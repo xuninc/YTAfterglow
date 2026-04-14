@@ -1,6 +1,5 @@
-  {
+{
     "minVersion": "0.1",
-    "headerImage": "https://raw.githubusercontent.com/dayanch96/YTLite/refs/heads/main/Resources/header.png",
     "class": "DepictionTabView",
     "tintColor": "#E36678",
     "tabs": [
@@ -9,63 +8,20 @@
                 {
                     "class": "DepictionSubheaderView",
                     "useBottomMargin": false,
-                    "title": "YouTube Plus",
+                    "title": "YouTube Afterglow",
                     "useBoldText": true
                 },
                 {
                     "useSpacing": true,
                     "class": "DepictionMarkdownView",
-                    "markdown": "A flexible enhancer for YouTube app"
+                    "markdown": "A richly customized YouTube experience — theme engine, gradient backgrounds, gesture controls, ad removal, and deep UI customization."
                 },
                 {
                     "spacing": 8,
                     "class": "DepictionSpacerView"
                 },
                 {
-                    "screenshots": [
-                        {
-                            "accessibilityText": "Screenshot0",
-                            "url": "https://raw.githubusercontent.com/dayanch96/YTLite/refs/heads/main/Resources/scr1.jpg"
-                        },
-                        {
-                            "accessibilityText": "Screenshot1",
-                            "url": "https://raw.githubusercontent.com/dayanch96/YTLite/refs/heads/main/Resources/scr2.jpg"
-                        },
-                        {
-                            "accessibilityText": "Screenshot2",
-                            "url": "https://raw.githubusercontent.com/dayanch96/YTLite/refs/heads/main/Resources/scr3.jpg"
-                        },
-                        {
-                            "accessibilityText": "Screenshot3",
-                            "url": "https://raw.githubusercontent.com/dayanch96/YTLite/refs/heads/main/Resources/scr4.jpg"
-                        },
-                        {
-                            "accessibilityText": "Screenshot4",
-                            "url": "https://raw.githubusercontent.com/dayanch96/YTLite/refs/heads/main/Resources/scr5.jpg"
-                        },
-                        {
-                            "accessibilityText": "Screenshot5",
-                            "url": "https://raw.githubusercontent.com/dayanch96/YTLite/refs/heads/main/Resources/scr6.jpg"
-                        },
-                        {
-                            "accessibilityText": "Screenshot6",
-                            "url": "https://raw.githubusercontent.com/dayanch96/YTLite/refs/heads/main/Resources/scr7.jpg"
-                        },
-                        {
-                            "accessibilityText": "Screenshot7",
-                            "url": "https://raw.githubusercontent.com/dayanch96/YTLite/refs/heads/main/Resources/scr8.jpg"
-                        },
-                        {
-                            "accessibilityText": "Screenshot8",
-                            "url": "https://raw.githubusercontent.com/dayanch96/YTLite/refs/heads/main/Resources/scr9.jpg"
-                        }
-                    ],
-                    "itemSize": "{160, 275.41333333333336}",
-                    "class": "DepictionScreenshotsView",
-                    "itemCornerRadius": 6
-                },
-                {
-                    "markdown": "### Features:\n- Download videos, audio (including audio track selection), thumbnails, posts, and profile pictures\n- Copy video, comment, and post information\n- Interface customization: Remove feed elements, reorder tabs, enable OLED mode, and as use Shorts-only mode\n- Player settings: Gestures, default quality, preferred audio track\n- Save, Load and Restore settings. Clear cache once or automatically on app startup\n- Built-in SponsorBlock\n- And much, much more\n\n*YouTube Plus preferences can be found in the YouTube settings*",
+                    "markdown": "### Features:\n- Full theme engine with 17 curated presets (dark & light)\n- Per-element color picker for text, icons, backgrounds, accents, seek bar, and more\n- Gradient background support\n- Custom tab bar with icon customization\n- Comprehensive ad blocking\n- Player gesture controls (hold-to-speed, swipe, tap-to-seek)\n- Background playback, download support, and audio track selection\n- Shorts customization and filtering\n- SponsorBlock integration\n- And much more\n\n*Afterglow preferences live inside the YouTube settings page.*",
                     "class": "DepictionMarkdownView",
                     "useBottomMargin": false,
                     "title": "markdown-description",
@@ -79,9 +35,19 @@
                     "class": "DepictionSpacerView"
                 },
                 {
-                    "text": "dayanch96",
+                    "text": "Corey Hamilton",
                     "class": "DepictionTableTextView",
-                    "title": "Developer"
+                    "title": "Maintainer"
+                },
+                {
+                    "text": "Claude Opus 4.6, Codex",
+                    "class": "DepictionTableTextView",
+                    "title": "AI Collaborators"
+                },
+                {
+                    "text": "Based on YTLite by dayanch96 (last open-source files, pre-4.0)",
+                    "class": "DepictionTableTextView",
+                    "title": "Foundation"
                 },
                 {
                     "spacing": 8,
@@ -95,17 +61,17 @@
             "views": [
                 {
                     "class": "DepictionTableButtonView",
-                    "title": "My Patreon",
-                    "action": "https://patreon.com/dayanch96"
+                    "title": "Source Code",
+                    "action": "https://github.com/xuninc/YTAfterglow"
                 },
                 {
                     "class": "DepictionTableButtonView",
-                    "title": "Buy me a coffee",
-                    "action": "https://buymeacoffee.com/dayanch96"
+                    "title": "Report an Issue",
+                    "action": "https://github.com/xuninc/YTAfterglow/issues"
                 }
             ],
             "class": "DepictionStackView",
-            "tabname": "Support"
+            "tabname": "Links"
         }
     ]
 }

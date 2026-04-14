@@ -1371,84 +1371,36 @@ static NSString *GetCacheSize() {
         }];
     [sectionItems addObject:feed];
 
-    YTSettingsSectionItem *support = [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"SupportDevelopment") accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:^NSString *() { return @"♡"; } selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-        YTDefaultSheetController *sheetController = [%c(YTDefaultSheetController) sheetControllerWithMessage:LOC(@"SupportDevelopment") subMessage:LOC(@"SupportDevelopmentDesc") delegate:nil parentResponder:nil];
-        YTActionSheetHeaderView *headerView = [sheetController valueForKey:@"_headerView"];
-        YTFormattedStringLabel *subtitle = [headerView valueForKey:@"_subtitleLabel"];
-        subtitle.numberOfLines = 0;
-        [headerView showHeaderDivider];
-
-        [sheetController addAction:[%c(YTActionSheetAction) actionWithTitle:@"PayPal" iconImage:[self resizedImageNamed:@"paypal"] secondaryIconImage:nil accessibilityIdentifier:nil handler:^ {
-            [%c(YTUIUtils) openURL:[NSURL URLWithString:@"https://paypal.me/dayanch96"]];
-        }]];
-
-        [sheetController addAction:[%c(YTActionSheetAction) actionWithTitle:@"Github Sponsors" iconImage:[self resizedImageNamed:@"github"] secondaryIconImage:nil accessibilityIdentifier:nil handler:^ {
-            [%c(YTUIUtils) openURL:[NSURL URLWithString:@"https://github.com/sponsors/dayanch96"]];
-        }]];
-
-        [sheetController addAction:[%c(YTActionSheetAction) actionWithTitle:@"Buy Me a Coffee" iconImage:[self resizedImageNamed:@"coffee"] secondaryIconImage:nil accessibilityIdentifier:nil handler:^ {
-            [%c(YTUIUtils) openURL:[NSURL URLWithString:@"https://www.buymeacoffee.com/dayanch96"]];
-        }]];
-
-        [sheetController addAction:[%c(YTActionSheetAction) actionWithTitle:@"USDT (TRC20)" iconImage:[self resizedImageNamed:@"usdt"] secondaryIconImage:nil accessibilityIdentifier:nil handler:^ {
-            [UIPasteboard generalPasteboard].string = @"TEdKJdKwc1Bbu8Py4um8qPQ6MbproEqNJw";
-            [[%c(YTToastResponderEvent) eventWithMessage:LOC(@"Copied") firstResponder:[self parentResponder]] send];
-        }]];
-
-        [sheetController addAction:[%c(YTActionSheetAction) actionWithTitle:@"BNB Smart Chain (BEP20)" iconImage:[self resizedImageNamed:@"bnb"] secondaryIconImage:nil accessibilityIdentifier:nil handler:^ {
-            [UIPasteboard generalPasteboard].string = @"0xc6f9fddb30ce10d70e6497950f44c8e10b72bcd6";
-            [[%c(YTToastResponderEvent) eventWithMessage:LOC(@"Copied") firstResponder:[self parentResponder]] send];
-        }]];
-
-        [sheetController addAction:[%c(YTActionSheetAction) actionWithTitle:@"Boosty" iconImage:[self resizedImageNamed:@"boosty"] secondaryIconImage:nil accessibilityIdentifier:nil handler:^ {
-            [%c(YTUIUtils) openURL:[NSURL URLWithString:@"https://boosty.to/dayanch96"]];
-        }]];
-
-        [sheetController presentFromViewController:[%c(YTUIUtils) topViewControllerForPresenting] animated:YES completion:nil];
-
-        return YES;
-    }];
-
-    YTSettingsSectionItem *thanks = [self pageItemWithTitle:LOC(@"Contributors")
-        titleDescription:@"People who built, translated, and improved the tweak."
+    YTSettingsSectionItem *credits = [self pageItemWithTitle:LOC(@"Credits")
+        titleDescription:@"The team behind YouTube Afterglow, the foundation it's built on, and the open-source projects it depends on."
         summary:^NSString *() {
-            return @"9 people";
+            return @"Team, Foundation & Libraries";
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-        NSArray <YTSettingsSectionItem *> *rows = @[
-            [self linkWithTitle:@"Dayanch96" description:LOC(@"Developer") link:@"https://github.com/Dayanch96/"],
-            [self linkWithTitle:@"Dan Pashin" description:LOC(@"SpecialThanks") link:@"https://github.com/danpashin/"],
-            space,
-            [self linkWithTitle:@"Stalker" description:LOC(@"ChineseSimplified") link:@"https://github.com/xiangfeidexiaohuo"],
-            [self linkWithTitle:@"Clement" description:LOC(@"ChineseTraditional") link:@"https://twitter.com/a100900900"],
-            [self linkWithTitle:@"Balackburn" description:LOC(@"French") link:@"https://github.com/Balackburn"],
-            [self linkWithTitle:@"DeciBelioS" description:LOC(@"Spanish") link:@"https://github.com/Deci8BelioS"],
-            [self linkWithTitle:@"SKEIDs" description:LOC(@"Japanese") link:@"https://github.com/SKEIDs"],
-            [self linkWithTitle:@"Hiepvk" description:LOC(@"Vietnamese") link:@"https://github.com/hiepvk"]
-        ];
+            NSArray <YTSettingsSectionItem *> *rows = @[
+                [self themeSectionHeaderWithTitle:@"Development Team" description:@"The humans and AIs who built and continue to maintain this tweak."],
+                [self linkWithTitle:@"Corey Hamilton" description:@"Maintainer" link:@"https://github.com/xuninc"],
+                [self linkWithTitle:@"Claude Opus 4.6" description:@"AI Collaborator" link:@"https://claude.com/claude"],
+                [self linkWithTitle:@"Codex" description:@"AI Collaborator" link:@"https://openai.com/codex"],
+                space,
+                [self themeSectionHeaderWithTitle:@"Foundation" description:@"Afterglow is built on the last open-source state of YTLite before it went closed-source at version 4.0."],
+                [self linkWithTitle:@"dayanch96" description:@"YTLite — last open-source source files (pre-4.0)" link:@"https://github.com/dayanch96/YTLite"],
+                space,
+                [self themeSectionHeaderWithTitle:@"Bundled Tweaks" description:@"The community-built tweaks packaged inside Afterglow."],
+                [self linkWithTitle:@"PoomSmart" description:@"YouPiP, YouQuality, Return-YouTube-Dislikes, YTABConfig, YTVideoOverlay, YouGroupSettings, YTIcons, YouTubeHeader" link:@"https://github.com/PoomSmart"],
+                [self linkWithTitle:@"splaser" description:@"YTUHD" link:@"https://github.com/splaser/YTUHD"],
+                [self linkWithTitle:@"therealFoxster" description:@"DontEatMyContent" link:@"https://github.com/therealFoxster/DontEatMyContent"],
+                [self linkWithTitle:@"BillyCurtis" description:@"Open in YouTube Safari Extension" link:@"https://github.com/BillyCurtis/OpenYouTubeSafariExtension"],
+                space,
+                [self themeSectionHeaderWithTitle:@"Libraries" description:@"Open-source libraries used by the tweak."],
+                [self linkWithTitle:@"jkhsjdhjs" description:@"YouTube Native Share" link:@"https://github.com/jkhsjdhjs/youtube-native-share"],
+                [self linkWithTitle:@"Tony Million" description:@"Reachability" link:@"https://github.com/tonymillion/Reachability"]
+            ];
 
-        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"About") pickerSectionTitle:LOC(@"Credits") rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-        [settingsViewController pushViewController:picker];
-        return YES;
-    }];
-
-    YTSettingsSectionItem *sources = [self pageItemWithTitle:LOC(@"OpenSourceLibs")
-        titleDescription:@"Core open-source projects this build depends on."
-        summary:^NSString *() {
-            return @"4 libs";
-        }
-        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-        NSArray <YTSettingsSectionItem *> *rows = @[
-            [self linkWithTitle:@"PoomSmart" description:@"YouTube-X, YTNoPremium, YTClassicVideoQuality, YTShortsProgress, YTReExplore, SkipContentWarning, YTAutoFullscreen, YouTubeHeaders" link:@"https://github.com/PoomSmart/"],
-            [self linkWithTitle:@"MiRO92" description:@"YTNoShorts" link:@"https://github.com/MiRO92/YTNoShorts"],
-            [self linkWithTitle:@"Tony Million" description:@"Reachability" link:@"https://github.com/tonymillion/Reachability"],
-            [self linkWithTitle:@"jkhsjdhjs" description:@"YouTube Native Share" link:@"https://github.com/jkhsjdhjs/youtube-native-share"]
-        ];
-
-        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"About") pickerSectionTitle:LOC(@"Credits") rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-        [settingsViewController pushViewController:picker];
-        return YES;
-    }];
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"About") pickerSectionTitle:LOC(@"Credits") rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+            [settingsViewController pushViewController:picker];
+            return YES;
+        }];
 
     YTSettingsSectionItem *about = [self pageItemWithTitle:LOC(@"About")
         titleDescription:@"Maintenance tools, advanced mode, credits, and support."
@@ -1488,9 +1440,7 @@ static NSString *GetCacheSize() {
             ] mutableCopy];
 
             [rows addObject:space];
-            [rows addObject:thanks];
-            [rows addObject:sources];
-            [rows addObject:support];
+            [rows addObject:credits];
 
             YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"About") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
