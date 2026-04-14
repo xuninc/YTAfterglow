@@ -28,7 +28,7 @@
 #import "../protobuf/objectivec/GPBUnknownField.h"
 #import "../protobuf/objectivec/GPBUnknownFieldSet.h"
 
-#define ytagBool(key)  [[[NSUserDefaults alloc] initWithSuiteName:@"com.dvntm.ytafterglow"] boolForKey:key]
+#define ytagBool(key)  [[[NSUserDefaults alloc] initWithSuiteName:@"i.am.kain.afterglow"] boolForKey:key]
 
 @interface CustomGPBMessage : GPBMessage
 + (instancetype)deserializeFromString:(NSString *)string;

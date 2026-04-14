@@ -1,11 +1,9 @@
-Package: com.dvntm.ytafterglow
+Package: i.am.kain.afterglow
 Name: YTAfterglow
 Depends: mobilesubstrate
 Version: 0.0.1
 Architecture: iphoneos-arm
-Description: Lightweight YouTube Enhancer
-Maintainer: dvntm
-Author: dvntm
+Description: Customized YouTube build with theming, downloads, and interface controls
+Maintainer: Corey Hamilton
+Author: Corey Hamilton
 Section: Tweaks
-Icon: https://raw.githubusercontent.com/dayanch96/icons/main/ytafterglow.png
-SileoDepiction: https://raw.githubusercontent.com/dayanch96/icons/main/ytafterglow.json
