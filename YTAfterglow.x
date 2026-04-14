@@ -1,8 +1,76 @@
 #import "YTAfterglow.h"
 #import <objc/message.h>
+#import <objc/runtime.h>
 
 static UIImage *YTImageNamed(NSString *imageName) {
     return [UIImage imageNamed:imageName inBundle:[NSBundle mainBundle] compatibleWithTraitCollection:nil];
+}
+
+static BOOL ytagDidScheduleAdvancedModePrompt = NO;
+static id ytagAdvancedModePromptObserver = nil;
+
+static UIViewController *ytagTopViewController(UIViewController *controller) {
+    UIViewController *topController = controller;
+    while (topController.presentedViewController) {
+        topController = topController.presentedViewController;
+    }
+    return topController;
+}
+
+static void ytagPresentAdvancedModeReminderIfNeeded(void) {
+    if (ytagDidScheduleAdvancedModePrompt) return;
+    if (ytagBool(@"advancedMode") || ytagBool(@"advancedModeReminder")) {
+        if (ytagAdvancedModePromptObserver) {
+            [[NSNotificationCenter defaultCenter] removeObserver:ytagAdvancedModePromptObserver];
+            ytagAdvancedModePromptObserver = nil;
+        }
+        return;
+    }
+
+    UIApplication *application = UIApplication.sharedApplication;
+    if (!application) return;
+
+    UIWindow *window = application.delegate.window;
+    if (!window) {
+        for (UIScene *scene in application.connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+
+            for (UIWindow *sceneWindow in ((UIWindowScene *)scene).windows) {
+                if (sceneWindow.isKeyWindow) {
+                    window = sceneWindow;
+                    break;
+                }
+            }
+
+            if (window) break;
+        }
+    }
+
+    UIViewController *rootController = window.rootViewController;
+    if (!rootController) return;
+
+    ytagDidScheduleAdvancedModePrompt = YES;
+    if (ytagAdvancedModePromptObserver) {
+        [[NSNotificationCenter defaultCenter] removeObserver:ytagAdvancedModePromptObserver];
+        ytagAdvancedModePromptObserver = nil;
+    }
+    ytagSetBool(YES, @"advancedModeReminder");
+    [[YTAGUserDefaults standardUserDefaults] synchronize];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.75 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIViewController *presenter = ytagTopViewController(window.rootViewController);
+        if (!presenter) return;
+
+        YTAlertView *alertView = [%c(YTAlertView) confirmationDialogWithAction:^{
+            ytagSetBool(YES, @"advancedMode");
+            [[YTAGUserDefaults standardUserDefaults] synchronize];
+        }
+        actionTitle:LOC(@"Yes")
+        cancelTitle:LOC(@"No")];
+        alertView.title = @"YTAfterglow";
+        alertView.subtitle = [NSString stringWithFormat:LOC(@"AdvancedModeReminder"), @"YTAfterglow", LOC(@"Version"), LOC(@"Advanced")];
+        [alertView show];
+    });
 }
 
 static NSURL *ytagSanitizedOpenURL(NSURL *url) {
@@ -468,12 +536,10 @@ static BOOL canRememberLoopMode = NO;
 - (BOOL)iosUseSystemVolumeControlInFullscreen { return ytagBool(@"stockVolumeHUD") ? YES : %orig; }
 %end
 
-// Extra Speed Options
+// Unlock higher playback speeds in the speed picker without adding another settings toggle.
 %hook YTVarispeedSwitchController
 - (void)setDelegate:(id)arg1 {
     %orig;
-
-    if (!ytagBool(@"extraSpeedOptions")) return;
 
     Class optionClass = %c(YTVarispeedSwitchControllerOption);
     if (!optionClass) return;
@@ -483,7 +549,7 @@ static BOOL canRememberLoopMode = NO;
         if (![rawOptions isKindOfClass:[NSArray class]]) return;
 
         NSMutableArray *optionsCopy = [(NSArray *)rawOptions mutableCopy];
-        NSArray<NSNumber *> *speedOptions = @[@2.25f, @2.5f, @2.75f, @3.0f, @3.25f, @3.5f, @3.75f, @4.0f, @5.0f];
+        NSArray<NSNumber *> *speedOptions = @[@2.25f, @2.5f, @2.75f, @3.0f, @3.25f, @3.5f, @3.75f, @4.0f, @4.25f, @4.5f, @4.75f, @5.0f];
         NSMutableSet<NSNumber *> *existingRates = [NSMutableSet set];
 
         for (id option in optionsCopy) {
@@ -501,7 +567,7 @@ static BOOL canRememberLoopMode = NO;
             NSNumber *normalizedRate = @(rateNumber.floatValue);
             if ([existingRates containsObject:normalizedRate]) continue;
 
-            NSString *title = [NSString stringWithFormat:@"%g", rateNumber.floatValue];
+            NSString *title = [NSString stringWithFormat:@"%g×", rateNumber.floatValue];
             YTVarispeedSwitchControllerOption *option = [[optionClass alloc] initWithTitle:title rate:rateNumber.floatValue];
             if (!option) continue;
 
@@ -516,7 +582,69 @@ static BOOL canRememberLoopMode = NO;
 }
 %end
 
-// Temprorary Fix For 'Classic Video Quality' and 'Extra Speed Options'
+static const void *kYTAGStockSpeedmasterActiveKey = &kYTAGStockSpeedmasterActiveKey;
+static const void *kYTAGStockSpeedmasterRestoreRateKey = &kYTAGStockSpeedmasterRestoreRateKey;
+
+static NSArray<NSNumber *> *ytagStockSpeedmasterRates(void) {
+    static NSArray<NSNumber *> *rates = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        rates = @[
+            @0.0,
+            @0.0,
+            @1.25f,
+            @1.5f,
+            @1.75f,
+            @2.0f,
+            @2.25f,
+            @2.5f,
+            @2.75f,
+            @3.0f,
+            @3.25f,
+            @3.5f,
+            @3.75f,
+            @4.0f,
+            @4.25f,
+            @4.5f,
+            @4.75f,
+            @5.0f
+        ];
+    });
+    return rates;
+}
+
+static NSInteger ytagClampedStockSpeedmasterIndex(void) {
+    NSInteger speedIndex = ytagInt(@"speedIndex");
+    NSInteger maximumIndex = (NSInteger)ytagStockSpeedmasterRates().count - 1;
+
+    if (speedIndex < 0) return 0;
+    if (speedIndex > maximumIndex) {
+        ytagSetInt((int)maximumIndex, @"speedIndex");
+        return maximumIndex;
+    }
+
+    return speedIndex;
+}
+
+static NSString *ytagGestureStateName(UIGestureRecognizerState state) {
+    switch (state) {
+        case UIGestureRecognizerStatePossible: return @"possible";
+        case UIGestureRecognizerStateBegan: return @"began";
+        case UIGestureRecognizerStateChanged: return @"changed";
+        case UIGestureRecognizerStateEnded: return @"ended";
+        case UIGestureRecognizerStateCancelled: return @"cancelled";
+        case UIGestureRecognizerStateFailed: return @"failed";
+    }
+}
+
+static BOOL ytagShouldLogThrottled(CFAbsoluteTime *lastLogTime, CFTimeInterval interval) {
+    CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+    if ((now - *lastLogTime) < interval) return NO;
+    *lastLogTime = now;
+    return YES;
+}
+
+// Temporary fix for classic quality compatibility.
 %hook YTVersionUtils
 + (NSString *)appVersion {
     NSString *originalVersion = %orig;
@@ -541,6 +669,80 @@ static BOOL canRememberLoopMode = NO;
 }
 %end
 
+%hook YTSpeedmasterController
+- (void)speedmasterDidLongPressWithRecognizer:(UILongPressGestureRecognizer *)gesture {
+    NSInteger speedIndex = ytagClampedStockSpeedmasterIndex();
+    if (speedIndex == 0) return;
+    if (speedIndex == 1) {
+        NSLog(@"[YTAfterglow] Speedmaster forwarding to stock handler. state=%@ index=%ld", ytagGestureStateName(gesture.state), (long)speedIndex);
+        return %orig;
+    }
+
+    YTMainAppVideoPlayerOverlayViewController *delegate = nil;
+    @try {
+        delegate = [self valueForKey:@"_delegate"];
+    } @catch (__unused NSException *exception) {
+        NSLog(@"[YTAfterglow] Speedmaster missing delegate via KVC. Falling back to stock handler. state=%@ index=%ld", ytagGestureStateName(gesture.state), (long)speedIndex);
+        return %orig;
+    }
+
+    if (!delegate || ![delegate respondsToSelector:@selector(setPlaybackRate:)] || ![delegate respondsToSelector:@selector(currentPlaybackRate)]) {
+        NSLog(@"[YTAfterglow] Speedmaster delegate is unusable. Falling back to stock handler. state=%@ index=%ld delegate=%@", ytagGestureStateName(gesture.state), (long)speedIndex, delegate);
+        return %orig;
+    }
+
+    NSNumber *selectedRate = ytagStockSpeedmasterRates()[speedIndex];
+    BOOL isActive = [objc_getAssociatedObject(self, kYTAGStockSpeedmasterActiveKey) boolValue];
+
+    YTInlinePlayerScrubUserEducationView *edu = nil;
+    if ([delegate respondsToSelector:@selector(videoPlayerOverlayView)]) {
+        YTMainAppVideoPlayerOverlayView *overlayView = [delegate videoPlayerOverlayView];
+        if ([overlayView respondsToSelector:@selector(scrubUserEducationView)]) {
+            edu = overlayView.scrubUserEducationView;
+        }
+    }
+
+    if (edu) {
+        YTLabel *label = nil;
+        if ([edu respondsToSelector:@selector(userEducationLabel)]) {
+            label = [edu userEducationLabel];
+        } else {
+            @try {
+                label = [edu valueForKey:@"_userEducationLabel"];
+            } @catch (__unused NSException *exception) {}
+        }
+
+        edu.labelType = 1;
+        label.text = [NSString stringWithFormat:@"%@: %@×", LOC(@"PlaybackSpeed"), selectedRate];
+    }
+
+    if (gesture.state == UIGestureRecognizerStateBegan) {
+        if (isActive) return;
+
+        NSLog(@"[YTAfterglow] Speedmaster override began. target=%@ current=%.2f", selectedRate, delegate.currentPlaybackRate);
+        objc_setAssociatedObject(self, kYTAGStockSpeedmasterActiveKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self, kYTAGStockSpeedmasterRestoreRateKey, @(delegate.currentPlaybackRate), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [delegate setPlaybackRate:selectedRate.floatValue];
+        [edu setVisible:YES];
+        return;
+    }
+
+    if (gesture.state == UIGestureRecognizerStateEnded || gesture.state == UIGestureRecognizerStateCancelled || gesture.state == UIGestureRecognizerStateFailed) {
+        if (!isActive) return;
+
+        NSNumber *restoreRate = objc_getAssociatedObject(self, kYTAGStockSpeedmasterRestoreRateKey);
+        NSLog(@"[YTAfterglow] Speedmaster override ending. state=%@ restore=%@", ytagGestureStateName(gesture.state), restoreRate ?: @1.0f);
+        [delegate setPlaybackRate:restoreRate ? restoreRate.floatValue : 1.0f];
+        objc_setAssociatedObject(self, kYTAGStockSpeedmasterActiveKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self, kYTAGStockSpeedmasterRestoreRateKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [edu setVisible:NO];
+        return;
+    }
+
+    return;
+}
+%end
+
 // Experimental legacy UI mode.
 %hook YTQTMButton
 + (BOOL)buttonModernizationEnabled { return ytagBool(@"oldYTUI") ? NO : %orig; }
@@ -556,17 +758,6 @@ static BOOL canRememberLoopMode = NO;
 %end
 
 // Progress bar colors now handled by ColorMode.x theme system
-
-// Disable Hints
-%hook YTSettings
-- (BOOL)areHintsDisabled { return ytagBool(@"noHints") ? YES : NO; }
-- (void)setHintsDisabled:(BOOL)arg1 { ytagBool(@"noHints") ? %orig(YES) : %orig; }
-%end
-
-%hook YTUserDefaults
-- (BOOL)areHintsDisabled { return ytagBool(@"noHints") ? YES : NO; }
-- (void)setHintsDisabled:(BOOL)arg1 { ytagBool(@"noHints") ? %orig(YES) : %orig; }
-%end
 
 void addEndTime(YTPlayerViewController *self, YTSingleVideoController *video, YTSingleVideoTime *time) {
     if (!ytagBool(@"videoEndTime")) return;
@@ -1031,7 +1222,33 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
 
 %hook YTInlinePlayerBarContainerView
 - (BOOL)canShowHeatwave { return ytagBool(@"hideHeatwaves") ? NO : %orig; }
+- (CGFloat)scrubRangeForScrubX:(CGFloat)x {
+    CGFloat range = %orig;
+
+    static CFAbsoluteTime lastScrubRangeLogTime = 0;
+    if (ytagShouldLogThrottled(&lastScrubRangeLogTime, 0.4)) {
+        NSLog(@"[YTAfterglow] Stock scrub range used. x=%.2f range=%.4f", x, range);
+    }
+
+    return range;
+}
+
 - (void)didPressScrubber:(id)gesture {
+    UIGestureRecognizerState state = UIGestureRecognizerStatePossible;
+    CGPoint location = CGPointZero;
+    BOOL hasGestureState = [gesture respondsToSelector:@selector(state)];
+    BOOL hasLocation = [gesture respondsToSelector:@selector(locationInView:)];
+
+    if (hasGestureState) {
+        state = ((UIGestureRecognizer *)gesture).state;
+    }
+
+    if (hasLocation) {
+        location = [gesture locationInView:self];
+    }
+
+    NSLog(@"[YTAfterglow] Stock didPressScrubber fired. gesture=%@ state=%@ x=%.2f tapToSeek=%@", NSStringFromClass([gesture class]), ytagGestureStateName(state), location.x, ytagBool(@"tapToSeek") ? @"on" : @"off");
+
     %orig;
 
     if (!ytagBool(@"tapToSeek")) return;
@@ -1040,9 +1257,9 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
     id parent = [ancestor parentViewController];
     if (![parent isKindOfClass:NSClassFromString(@"YTPlayerViewController")]) return;
 
-    CGPoint location = [gesture locationInView:self];
     CGFloat scrubRange = [self scrubRangeForScrubX:location.x];
     CGFloat totalMediaTime = ((CGFloat (*)(id, SEL))objc_msgSend)(parent, @selector(currentVideoTotalMediaTime));
+    NSLog(@"[YTAfterglow] Tap-to-seek override seeking. range=%.4f total=%.2f target=%.2f", scrubRange, totalMediaTime, scrubRange * totalMediaTime);
     ((void (*)(id, SEL, CGFloat))objc_msgSend)(parent, @selector(seekToTime:), scrubRange * totalMediaTime);
 }
 %end
@@ -1598,6 +1815,11 @@ BOOL isTabSelected = NO;
 %end
 
 %hook YTAppViewController
+- (void)viewDidAppear:(BOOL)animated {
+    %orig;
+    ytagPresentAdvancedModeReminderIfNeeded();
+}
+
 - (void)showPivotBar {
     if (!ytagBool(@"shortsOnlyMode")) {
         %orig;
@@ -1666,54 +1888,6 @@ BOOL isTabSelected = NO;
 }
 %end
 
-CGFloat rateBeforeSpeedmaster = 1.0;
-
-static void manageSpeedmasterYTAfterglow(UILongPressGestureRecognizer *gesture, YTMainAppVideoPlayerOverlayViewController *delegate, YTInlinePlayerScrubUserEducationView *edu) {
-    NSArray *speedLabels = @[@0, @2.0, @0.25, @0.5, @0.75, @1.0, @1.25, @1.5, @1.75, @2.0, @3.0, @4.0, @5.0];
-
-    YTLabel *label = [edu valueForKey:@"_userEducationLabel"];
-    edu.labelType = 1;
-    [label setValue:[NSString stringWithFormat:@"%@: %@×", LOC(@"PlaybackSpeed"), speedLabels[ytagInt(@"speedIndex")]] forKey:@"text"];
-
-    if (gesture.state == UIGestureRecognizerStateBegan) {
-        rateBeforeSpeedmaster = delegate.currentPlaybackRate;
-        [delegate setPlaybackRate:[speedLabels[ytagInt(@"speedIndex")] floatValue]];
-        [edu setVisible:YES];
-    }
-
-    else if (gesture.state == UIGestureRecognizerStateEnded) {
-        [delegate setPlaybackRate:rateBeforeSpeedmaster];
-        [edu setVisible:NO];
-    }
-}
-
-%hook YTMainAppVideoPlayerOverlayView
-- (void)setSeekAnywherePanGestureRecognizer:(id)arg1 {
-    if (ytagInt(@"speedIndex") == 0) return %orig;
-
-    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(speedmasterYtLite:)];
-    longPress.minimumPressDuration = 0.3;
-    if (ytagInt(@"speedIndex") != 0) [self addGestureRecognizer:longPress];
-}
-
-%new
-- (void)speedmasterYtLite:(UILongPressGestureRecognizer *)gesture {
-    YTInlinePlayerScrubUserEducationView *edu = self.scrubUserEducationView;
-    manageSpeedmasterYTAfterglow(gesture, self.delegate, edu);
-}
-%end
-
-%hook YTSpeedmasterController
-- (void)speedmasterDidLongPressWithRecognizer:(UILongPressGestureRecognizer *)gesture {
-    if (ytagInt(@"speedIndex") == 0) return;
-    if (ytagInt(@"speedIndex") == 1) return %orig;
-
-    YTMainAppVideoPlayerOverlayViewController *delegate = [self valueForKey:@"_delegate"];
-    YTInlinePlayerScrubUserEducationView *edu = (YTInlinePlayerScrubUserEducationView *)delegate.videoPlayerOverlayView.scrubUserEducationView;
-    manageSpeedmasterYTAfterglow(gesture, delegate, edu);
-}
-%end
-
 // Disable Right-To-Left Formatting
 %hook NSParagraphStyle
 + (NSWritingDirection)defaultWritingDirectionForLanguage:(id)lang { return ytagBool(@"disableRTL") ? NSWritingDirectionLeftToRight : %orig; }
@@ -1753,18 +1927,10 @@ static NSURL *newCoverURL(NSURL *originalURL) {
         }
     }
 
-    if (!ytagBool(@"advancedMode") && !ytagBool(@"advancedModeReminder")) {
-        ytagSetBool(YES, @"advancedModeReminder");
-
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            YTAlertView *alertView = [%c(YTAlertView) confirmationDialogWithAction:^{
-                ytagSetBool(YES, @"advancedMode");
-            }
-            actionTitle:LOC(@"Yes")
-            cancelTitle:LOC(@"No")];
-            alertView.title = @"YTAfterglow";
-            alertView.subtitle = [NSString stringWithFormat:LOC(@"AdvancedModeReminder"), @"YTAfterglow", LOC(@"Version"), LOC(@"Advanced")];
-            [alertView show];
-        });
-    }
+    ytagAdvancedModePromptObserver = [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification
+                                                                                       object:nil
+                                                                                        queue:[NSOperationQueue mainQueue]
+                                                                                   usingBlock:^(__unused NSNotification *note) {
+        ytagPresentAdvancedModeReminderIfNeeded();
+    }];
 }

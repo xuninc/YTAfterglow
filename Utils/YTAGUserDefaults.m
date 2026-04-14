@@ -3,7 +3,7 @@
 
 @implementation YTAGUserDefaults
 
-static NSString *const kDefaultsSuiteName = @"com.dvntm.ytafterglow";
+static NSString *const kDefaultsSuiteName = @"i.am.kain.afterglow";
 static NSString *const kActiveTabsKey = @"activeTabs";
 static NSString *const kStartupTabKey = @"startupTab";
 static NSString *const kThemeMigrationVersionKey = @"themePresetMigrationVersion";

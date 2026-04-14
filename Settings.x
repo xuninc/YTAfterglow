@@ -476,16 +476,36 @@ static NSString *GetCacheSize() {
 %new
 - (YTSettingsSectionItem *)holdToSpeedItemWithSettingsVC:(YTSettingsViewController *)settingsViewController {
     Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
+    NSArray *speedLabels = @[
+        LOC(@"Disabled"),
+        LOC(@"Default"),
+        @"1.25×",
+        @"1.5×",
+        @"1.75×",
+        @"2.0×",
+        @"2.25×",
+        @"2.5×",
+        @"2.75×",
+        @"3.0×",
+        @"3.25×",
+        @"3.5×",
+        @"3.75×",
+        @"4.0×",
+        @"4.25×",
+        @"4.5×",
+        @"4.75×",
+        @"5.0×"
+    ];
 
     return [YTSettingsSectionItemClass itemWithTitle:LOC(@"HoldToSpeed")
         accessibilityIdentifier:@"YTAfterglowSectionItem"
         detailTextBlock:^NSString *() {
-            NSArray *speedLabels = @[LOC(@"Disabled"), LOC(@"Default"), @"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
-            return speedLabels[ytagInt(@"speedIndex")];
+            NSInteger speedIndex = MIN(MAX(ytagInt(@"speedIndex"), 0), (int)speedLabels.count - 1);
+            return speedLabels[speedIndex];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
-            NSArray *speedLabels = @[LOC(@"Disable"), LOC(@"Default"), @"0.25×", @"0.5×", @"0.75×", @"1.0×", @"1.25×", @"1.5×", @"1.75×", @"2.0×", @"3.0×", @"4.0×", @"5.0×"];
+            NSInteger selectedSpeedIndex = MIN(MAX(ytagInt(@"speedIndex"), 0), (int)speedLabels.count - 1);
 
             for (NSUInteger i = 0; i < speedLabels.count; i++) {
                 NSString *title = speedLabels[i];
@@ -498,7 +518,7 @@ static NSString *GetCacheSize() {
                 [rows addObject:item];
             }
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"HoldToSpeed") pickerSectionTitle:nil rows:rows selectedItemIndex:ytagInt(@"speedIndex") parentResponder:[self parentResponder]];
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"HoldToSpeed") pickerSectionTitle:nil rows:rows selectedItemIndex:selectedSpeedIndex parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
@@ -816,7 +836,7 @@ static NSString *GetCacheSize() {
     NSArray *legacyKeys = @[@"oldYTUI"];
     NSArray *interfaceKeys = [[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObjectsFromArray:legacyKeys];
     NSArray *overlayKeys = @[@"hideAutoplay", @"hideSubs", @"showPlayerShareButton", @"showPlayerSaveButton", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"endScreenCards", @"noFullscreenActions", @"persistentProgressBar", @"stockVolumeHUD", @"noRelatedVids", @"noWatermarks", @"disableAmbientMode", @"videoEndTime", @"24hrFormat", @"hideHeatwaves", @"noContinueWatchingPrompt"];
-    NSArray *playerKeys = @[@"backgroundPlayback", @"miniplayer", @"portraitFullscreen", @"copyWithTimestamp", @"disableAutoplay", @"disableAutoCaptions", @"rememberCaptionState", @"rememberLoop", @"noContentWarning", @"classicQuality", @"extraSpeedOptions", @"tapToSeek", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"redProgressBar", @"noPlayerRemixButton", @"noPlayerClipButton", @"noHints", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
+    NSArray *playerKeys = @[@"backgroundPlayback", @"miniplayer", @"portraitFullscreen", @"copyWithTimestamp", @"disableAutoplay", @"disableAutoCaptions", @"rememberCaptionState", @"rememberLoop", @"noContentWarning", @"classicQuality", @"tapToSeek", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"redProgressBar", @"noPlayerRemixButton", @"noPlayerClipButton", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
     NSArray *shortsBehaviorKeys = @[@"shortsOnlyMode", @"autoSkipShorts", @"hideShorts", @"shortsProgress", @"pinchToFullscreenShorts", @"shortsToRegular", @"resumeShorts"];
     NSArray *shortsUIKeys = @[@"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"];
     NSArray *downloadUIKeys = @[@"removeDownloadMenu", @"noPlayerDownloadButton", @"playerNoShare", @"playerNoSave", @"removeShareMenu"];
@@ -949,7 +969,7 @@ static NSString *GetCacheSize() {
             [appearanceRows addObject:[self pageItemWithTitle:LOC(@"Presets")
                 titleDescription:@"Complete looks for the whole app, grouped into dark and light palettes."
                 summary:^NSString *() {
-                    return @"15 curated";
+                    return @"17 curated";
                 }
                 selectBlock:^BOOL(YTSettingsCell *presetCell, NSUInteger presetArg1) {
                     NSMutableArray <YTSettingsSectionItem *> *presetRows = [NSMutableArray array];
@@ -962,15 +982,17 @@ static NSString *GetCacheSize() {
                     [self themeAddPresetRowWithName:@"Afterglow 1" titleDescription:@"Hot magenta and cyan vaporwave with loud neon bloom." overlay:[UIColor colorWithRed:1.00 green:0.72 blue:0.90 alpha:1.0] tabIcons:[UIColor colorWithRed:0.28 green:0.95 blue:1.00 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.27 blue:0.75 alpha:1.0] bg:[UIColor colorWithRed:0.09 green:0.03 blue:0.16 alpha:1.0] textP:[UIColor colorWithRed:0.98 green:0.90 blue:0.99 alpha:1.0] textS:[UIColor colorWithRed:0.72 green:0.61 blue:0.82 alpha:1.0] nav:[UIColor colorWithRed:0.13 green:0.05 blue:0.20 alpha:1.0] accent:[UIColor colorWithRed:0.30 green:0.91 blue:1.00 alpha:1.0] gradientStart:[UIColor colorWithRed:0.18 green:0.03 blue:0.29 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.94 green:0.27 blue:0.58 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Afterglow 2" titleDescription:@"Sunset vapor tones with peach fire over electric violet." overlay:[UIColor colorWithRed:1.00 green:0.82 blue:0.71 alpha:1.0] tabIcons:[UIColor colorWithRed:1.00 green:0.55 blue:0.42 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.48 blue:0.66 alpha:1.0] bg:[UIColor colorWithRed:0.11 green:0.05 blue:0.13 alpha:1.0] textP:[UIColor colorWithRed:1.00 green:0.94 blue:0.90 alpha:1.0] textS:[UIColor colorWithRed:0.79 green:0.67 blue:0.72 alpha:1.0] nav:[UIColor colorWithRed:0.17 green:0.08 blue:0.19 alpha:1.0] accent:[UIColor colorWithRed:0.41 green:0.89 blue:1.00 alpha:1.0] gradientStart:[UIColor colorWithRed:0.24 green:0.06 blue:0.24 alpha:1.0] gradientEnd:[UIColor colorWithRed:1.00 green:0.46 blue:0.28 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Afterglow 3" titleDescription:@"Cyber dusk with deep indigo, laser cyan, and glossy pink chrome." overlay:[UIColor colorWithRed:0.89 green:0.79 blue:1.00 alpha:1.0] tabIcons:[UIColor colorWithRed:0.34 green:0.90 blue:1.00 alpha:1.0] seekBar:[UIColor colorWithRed:0.92 green:0.31 blue:1.00 alpha:1.0] bg:[UIColor colorWithRed:0.04 green:0.06 blue:0.16 alpha:1.0] textP:[UIColor colorWithRed:0.93 green:0.95 blue:1.00 alpha:1.0] textS:[UIColor colorWithRed:0.62 green:0.70 blue:0.89 alpha:1.0] nav:[UIColor colorWithRed:0.07 green:0.09 blue:0.20 alpha:1.0] accent:[UIColor colorWithRed:1.00 green:0.54 blue:0.72 alpha:1.0] gradientStart:[UIColor colorWithRed:0.07 green:0.08 blue:0.25 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.62 green:0.12 blue:0.64 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                    [self themeAddPresetRowWithName:@"Afterglow 4" titleDescription:@"Jet-black cybergrid with neon green bloom, hot magenta sparks, and electric violet chrome." overlay:[UIColor colorWithRed:0.98 green:0.86 blue:0.95 alpha:1.0] tabIcons:[UIColor colorWithRed:0.20 green:1.00 blue:0.47 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.20 blue:0.70 alpha:1.0] bg:[UIColor colorWithRed:0.02 green:0.02 blue:0.05 alpha:1.0] textP:[UIColor colorWithRed:0.96 green:0.96 blue:1.00 alpha:1.0] textS:[UIColor colorWithRed:0.67 green:0.64 blue:0.83 alpha:1.0] nav:[UIColor colorWithRed:0.05 green:0.05 blue:0.09 alpha:1.0] accent:[UIColor colorWithRed:0.55 green:0.27 blue:1.00 alpha:1.0] gradientStart:[UIColor colorWithRed:0.00 green:0.95 blue:0.40 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.46 green:0.10 blue:0.96 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
                     [presetRows addObject:space];
                     [presetRows addObject:[self themeSectionHeaderWithTitle:@"Light Themes" description:@"Brighter looks that still feel deliberate and themed."]];
                     [self themeAddPresetRowWithName:@"Clean White" titleDescription:@"Minimal white surfaces with blue accents." overlay:[UIColor colorWithRed:0.2 green:0.2 blue:0.2 alpha:1.0] tabIcons:[UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:1.0] seekBar:[UIColor colorWithRed:1.0 green:0.2 blue:0.2 alpha:1.0] bg:[UIColor colorWithRed:1.0 green:1.0 blue:1.0 alpha:1.0] textP:[UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:1.0] textS:[UIColor colorWithRed:0.45 green:0.45 blue:0.45 alpha:1.0] nav:[UIColor colorWithRed:0.97 green:0.97 blue:0.97 alpha:1.0] accent:[UIColor colorWithRed:0.0 green:0.48 blue:1.0 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Warm Sand" titleDescription:@"Cream tones with soft amber highlights." overlay:[UIColor colorWithRed:0.45 green:0.35 blue:0.25 alpha:1.0] tabIcons:[UIColor colorWithRed:0.5 green:0.38 blue:0.25 alpha:1.0] seekBar:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0] bg:[UIColor colorWithRed:0.98 green:0.96 blue:0.91 alpha:1.0] textP:[UIColor colorWithRed:0.2 green:0.15 blue:0.1 alpha:1.0] textS:[UIColor colorWithRed:0.5 green:0.42 blue:0.35 alpha:1.0] nav:[UIColor colorWithRed:0.95 green:0.92 blue:0.85 alpha:1.0] accent:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Ocean Breeze" titleDescription:@"Light blue surfaces with teal energy." overlay:[UIColor colorWithRed:0.15 green:0.4 blue:0.55 alpha:1.0] tabIcons:[UIColor colorWithRed:0.1 green:0.45 blue:0.6 alpha:1.0] seekBar:[UIColor colorWithRed:0.0 green:0.6 blue:0.7 alpha:1.0] bg:[UIColor colorWithRed:0.94 green:0.97 blue:1.0 alpha:1.0] textP:[UIColor colorWithRed:0.1 green:0.15 blue:0.2 alpha:1.0] textS:[UIColor colorWithRed:0.35 green:0.45 blue:0.55 alpha:1.0] nav:[UIColor colorWithRed:0.9 green:0.94 blue:0.98 alpha:1.0] accent:[UIColor colorWithRed:0.0 green:0.55 blue:0.65 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Rose Gold" titleDescription:@"Soft blush tones with warm chrome." overlay:[UIColor colorWithRed:0.6 green:0.35 blue:0.35 alpha:1.0] tabIcons:[UIColor colorWithRed:0.7 green:0.4 blue:0.4 alpha:1.0] seekBar:[UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0] bg:[UIColor colorWithRed:1.0 green:0.95 blue:0.93 alpha:1.0] textP:[UIColor colorWithRed:0.25 green:0.15 blue:0.15 alpha:1.0] textS:[UIColor colorWithRed:0.55 green:0.4 blue:0.4 alpha:1.0] nav:[UIColor colorWithRed:0.95 green:0.88 blue:0.86 alpha:1.0] accent:[UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
-                    [self themeAddPresetRowWithName:@"Afterglow Light 1" titleDescription:@"Pastel vaporwave with pink chrome and turquoise shimmer." overlay:[UIColor colorWithRed:0.53 green:0.27 blue:0.51 alpha:1.0] tabIcons:[UIColor colorWithRed:0.05 green:0.72 blue:0.82 alpha:1.0] seekBar:[UIColor colorWithRed:0.97 green:0.38 blue:0.70 alpha:1.0] bg:[UIColor colorWithRed:0.99 green:0.96 blue:1.00 alpha:1.0] textP:[UIColor colorWithRed:0.27 green:0.16 blue:0.37 alpha:1.0] textS:[UIColor colorWithRed:0.55 green:0.42 blue:0.63 alpha:1.0] nav:[UIColor colorWithRed:0.96 green:0.91 blue:1.00 alpha:1.0] accent:[UIColor colorWithRed:0.14 green:0.79 blue:0.85 alpha:1.0] gradientStart:[UIColor colorWithRed:1.00 green:0.92 blue:0.99 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.84 green:0.97 blue:1.00 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                    [self themeAddPresetRowWithName:@"Afterglow Light 2" titleDescription:@"Peach neon daylight with coral heat and lilac haze." overlay:[UIColor colorWithRed:0.62 green:0.29 blue:0.32 alpha:1.0] tabIcons:[UIColor colorWithRed:0.96 green:0.47 blue:0.38 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.35 blue:0.56 alpha:1.0] bg:[UIColor colorWithRed:1.00 green:0.97 blue:0.93 alpha:1.0] textP:[UIColor colorWithRed:0.31 green:0.14 blue:0.19 alpha:1.0] textS:[UIColor colorWithRed:0.61 green:0.42 blue:0.48 alpha:1.0] nav:[UIColor colorWithRed:0.99 green:0.92 blue:0.92 alpha:1.0] accent:[UIColor colorWithRed:0.44 green:0.73 blue:1.00 alpha:1.0] gradientStart:[UIColor colorWithRed:1.00 green:0.94 blue:0.88 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.97 green:0.84 blue:1.00 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                    [self themeAddPresetRowWithName:@"Afterglow Light 3" titleDescription:@"Mint-glass vapor sheen with rosy sunset bloom." overlay:[UIColor colorWithRed:0.35 green:0.34 blue:0.58 alpha:1.0] tabIcons:[UIColor colorWithRed:0.29 green:0.79 blue:0.75 alpha:1.0] seekBar:[UIColor colorWithRed:0.99 green:0.44 blue:0.63 alpha:1.0] bg:[UIColor colorWithRed:0.95 green:0.99 blue:0.98 alpha:1.0] textP:[UIColor colorWithRed:0.18 green:0.20 blue:0.31 alpha:1.0] textS:[UIColor colorWithRed:0.45 green:0.51 blue:0.60 alpha:1.0] nav:[UIColor colorWithRed:0.90 green:0.97 blue:0.96 alpha:1.0] accent:[UIColor colorWithRed:0.55 green:0.39 blue:0.95 alpha:1.0] gradientStart:[UIColor colorWithRed:0.90 green:0.98 blue:0.97 alpha:1.0] gradientEnd:[UIColor colorWithRed:1.00 green:0.89 blue:0.95 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                    [self themeAddPresetRowWithName:@"Afterglow Light 1" titleDescription:@"Candyglass daylight with a real lilac body color and aqua chrome." overlay:[UIColor colorWithRed:0.55 green:0.19 blue:0.54 alpha:1.0] tabIcons:[UIColor colorWithRed:0.03 green:0.72 blue:0.82 alpha:1.0] seekBar:[UIColor colorWithRed:0.98 green:0.33 blue:0.69 alpha:1.0] bg:[UIColor colorWithRed:0.97 green:0.84 blue:1.00 alpha:1.0] textP:[UIColor colorWithRed:0.24 green:0.08 blue:0.33 alpha:1.0] textS:[UIColor colorWithRed:0.46 green:0.27 blue:0.58 alpha:1.0] nav:[UIColor colorWithRed:0.93 green:0.76 blue:1.00 alpha:1.0] accent:[UIColor colorWithRed:0.08 green:0.80 blue:0.84 alpha:1.0] gradientStart:[UIColor colorWithRed:1.00 green:0.84 blue:0.93 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.73 green:0.95 blue:1.00 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                    [self themeAddPresetRowWithName:@"Afterglow Light 2" titleDescription:@"Apricot sunset with coral punch, hot pink sparks, and blue contrast." overlay:[UIColor colorWithRed:0.60 green:0.24 blue:0.14 alpha:1.0] tabIcons:[UIColor colorWithRed:0.97 green:0.44 blue:0.12 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.31 blue:0.44 alpha:1.0] bg:[UIColor colorWithRed:1.00 green:0.86 blue:0.72 alpha:1.0] textP:[UIColor colorWithRed:0.30 green:0.12 blue:0.09 alpha:1.0] textS:[UIColor colorWithRed:0.58 green:0.30 blue:0.28 alpha:1.0] nav:[UIColor colorWithRed:1.00 green:0.79 blue:0.64 alpha:1.0] accent:[UIColor colorWithRed:0.28 green:0.67 blue:1.00 alpha:1.0] gradientStart:[UIColor colorWithRed:1.00 green:0.90 blue:0.69 alpha:1.0] gradientEnd:[UIColor colorWithRed:1.00 green:0.68 blue:0.73 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                    [self themeAddPresetRowWithName:@"Afterglow Light 3" titleDescription:@"Mint arcade glass with louder teal, berry pink, and violet energy." overlay:[UIColor colorWithRed:0.13 green:0.40 blue:0.40 alpha:1.0] tabIcons:[UIColor colorWithRed:0.00 green:0.68 blue:0.61 alpha:1.0] seekBar:[UIColor colorWithRed:0.98 green:0.37 blue:0.58 alpha:1.0] bg:[UIColor colorWithRed:0.80 green:1.00 blue:0.91 alpha:1.0] textP:[UIColor colorWithRed:0.08 green:0.22 blue:0.24 alpha:1.0] textS:[UIColor colorWithRed:0.28 green:0.47 blue:0.49 alpha:1.0] nav:[UIColor colorWithRed:0.72 green:0.98 blue:0.89 alpha:1.0] accent:[UIColor colorWithRed:0.41 green:0.30 blue:0.95 alpha:1.0] gradientStart:[UIColor colorWithRed:0.82 green:1.00 blue:0.94 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.93 green:0.84 blue:1.00 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+                    [self themeAddPresetRowWithName:@"Afterglow Light 4" titleDescription:@"Sky chrome with icy blue glass, coral sparks, and violet-pop contrast." overlay:[UIColor colorWithRed:0.21 green:0.31 blue:0.66 alpha:1.0] tabIcons:[UIColor colorWithRed:0.17 green:0.50 blue:1.00 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.40 blue:0.47 alpha:1.0] bg:[UIColor colorWithRed:0.82 green:0.91 blue:1.00 alpha:1.0] textP:[UIColor colorWithRed:0.11 green:0.18 blue:0.39 alpha:1.0] textS:[UIColor colorWithRed:0.29 green:0.39 blue:0.63 alpha:1.0] nav:[UIColor colorWithRed:0.74 green:0.84 blue:1.00 alpha:1.0] accent:[UIColor colorWithRed:0.84 green:0.31 blue:0.68 alpha:1.0] gradientStart:[UIColor colorWithRed:0.82 green:0.93 blue:1.00 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.92 green:0.84 blue:1.00 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
 
                     YTSettingsPickerViewController *presetPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Presets") pickerSectionTitle:nil rows:presetRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:presetPicker];
@@ -1106,7 +1128,6 @@ static NSString *GetCacheSize() {
                         [self switchWithTitle:@"RememberLoopMode" key:@"rememberLoop"],
                         [self switchWithTitle:@"NoContentWarning" key:@"noContentWarning"],
                         [self switchWithTitle:@"ClassicQuality" key:@"classicQuality"],
-                        [self switchWithTitle:@"ExtraSpeedOptions" key:@"extraSpeedOptions"],
                         [self switchWithTitle:@"TapToSeek" key:@"tapToSeek"],
                         [self switchWithTitle:@"DontSnap2Chapter" key:@"dontSnapToChapter"],
                         [self switchWithTitle:@"NoTwoFingerSnapToChapter" key:@"noTwoFingerSnapToChapter"],
@@ -1114,7 +1135,6 @@ static NSString *GetCacheSize() {
                         [self switchWithTitle:@"RedProgressBar" key:@"redProgressBar"],
                         [self switchWithTitle:@"NoPlayerRemixButton" key:@"noPlayerRemixButton"],
                         [self switchWithTitle:@"NoPlayerClipButton" key:@"noPlayerClipButton"],
-                        [self switchWithTitle:@"NoHints" key:@"noHints"],
                         [self switchWithTitle:@"NoFreeZoom" key:@"noFreeZoom"],
                         [self switchWithTitle:@"AutoFullscreen" key:@"autoFullscreen"],
                         [self switchWithTitle:@"ExitFullscreen" key:@"exitFullscreen"],
