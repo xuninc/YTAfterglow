@@ -75,6 +75,68 @@ static UIColor *ytag_surfaceBackgroundColor(CGFloat fallbackAlpha) {
     return [background colorWithAlphaComponent:fallbackAlpha];
 }
 
+static CGFloat ytag_colorLuminance(UIColor *color) {
+    if (!color) return -1.0;
+
+    UIColor *resolvedColor = color;
+    if (@available(iOS 13.0, *)) {
+        resolvedColor = [color resolvedColorWithTraitCollection:UITraitCollection.currentTraitCollection];
+    }
+
+    CGFloat r = 0.0, g = 0.0, b = 0.0, a = 0.0;
+    if ([resolvedColor getRed:&r green:&g blue:&b alpha:&a]) {
+        return 0.299 * r + 0.587 * g + 0.114 * b;
+    }
+
+    CGFloat white = 0.0;
+    if ([resolvedColor getWhite:&white alpha:&a]) {
+        return white;
+    }
+
+    CGColorRef cgColor = resolvedColor.CGColor;
+    size_t count = CGColorGetNumberOfComponents(cgColor);
+    const CGFloat *components = CGColorGetComponents(cgColor);
+    if (!components || count == 0) return -1.0;
+    if (count == 2) return components[0];
+    if (count >= 3) return 0.299 * components[0] + 0.587 * components[1] + 0.114 * components[2];
+    return -1.0;
+}
+
+static NSInteger ytag_themePageStyleOverride(void) {
+    UIColor *gradientStart = themeColor(kThemeGradientStart);
+    UIColor *gradientEnd = themeColor(kThemeGradientEnd);
+    UIColor *background = themeColor(kThemeBackground);
+
+    CGFloat luminance = -1.0;
+    if (gradientStart && gradientEnd) {
+        CGFloat startLuminance = ytag_colorLuminance(gradientStart);
+        CGFloat endLuminance = ytag_colorLuminance(gradientEnd);
+        if (startLuminance >= 0.0 && endLuminance >= 0.0) {
+            luminance = (startLuminance + endLuminance) / 2.0;
+        }
+    }
+
+    if (luminance < 0.0) {
+        luminance = ytag_colorLuminance(gradientStart ?: background);
+    }
+
+    if (luminance < 0.0) return -1;
+    return luminance < 0.55 ? 1 : 0;
+}
+
+static UIUserInterfaceStyle ytag_themeInterfaceStyleOverride(void) {
+    NSInteger pageStyle = ytag_themePageStyleOverride();
+    if (pageStyle < 0) return UIUserInterfaceStyleUnspecified;
+    return pageStyle == 1 ? UIUserInterfaceStyleDark : UIUserInterfaceStyleLight;
+}
+
+static void ytag_applyThemeInterfaceStyleToWindow(UIWindow *window) {
+    if (!window) return;
+    if (@available(iOS 13.0, *)) {
+        window.overrideUserInterfaceStyle = ytag_themeInterfaceStyleOverride();
+    }
+}
+
 static void ytag_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity, CGFloat radius) {
     if (!layer) return;
 
@@ -136,20 +198,70 @@ static void ytag_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacit
 - (UIColor *)callToAction        { return themed(kThemeAccent, 1.0) ?: %orig; }
 - (UIColor *)callToActionInverse { return themed(kThemeAccent, 1.0) ?: %orig; }
 
-// Force dark page style when a dark background is set
-// This makes YouTube use light text/icons everywhere
+// Keep YouTube's internal light/dark base theme aligned with the selected preset.
 - (NSInteger)pageStyle {
-    // Check gradient start color first, then flat background
-    UIColor *bg = themeColor(kThemeGradientStart) ?: themeColor(kThemeBackground);
-    if (bg) {
-        CGFloat r, g, b;
-        [bg getRed:&r green:&g blue:&b alpha:nil];
-        CGFloat luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-        if (luminance < 0.5) return 1; // dark
-    }
+    NSInteger pageStyleOverride = ytag_themePageStyleOverride();
+    if (pageStyleOverride >= 0) return pageStyleOverride;
     return %orig;
 }
 
+%end
+
+%hook YTPageStyleController
++ (NSInteger)pageStyle {
+    NSInteger pageStyleOverride = ytag_themePageStyleOverride();
+    if (pageStyleOverride >= 0) return pageStyleOverride;
+    return %orig;
+}
+
+- (NSInteger)pageStyle {
+    NSInteger pageStyleOverride = ytag_themePageStyleOverride();
+    if (pageStyleOverride >= 0) return pageStyleOverride;
+    return %orig;
+}
+
+- (NSInteger)appThemeSetting {
+    NSInteger pageStyleOverride = ytag_themePageStyleOverride();
+    if (pageStyleOverride >= 0) return pageStyleOverride;
+    return %orig;
+}
+%end
+
+%hook YTPageStyleControllerImpl
+- (NSInteger)pageStyle {
+    NSInteger pageStyleOverride = ytag_themePageStyleOverride();
+    if (pageStyleOverride >= 0) return pageStyleOverride;
+    return %orig;
+}
+
+- (NSInteger)appThemeSetting {
+    NSInteger pageStyleOverride = ytag_themePageStyleOverride();
+    if (pageStyleOverride >= 0) return pageStyleOverride;
+    return %orig;
+}
+
+- (YTCommonColorPalette *)currentColorPalette {
+    NSInteger pageStyleOverride = ytag_themePageStyleOverride();
+    if (pageStyleOverride == 0) return [%c(YTCommonColorPalette) lightPalette];
+    if (pageStyleOverride == 1) return [%c(YTCommonColorPalette) darkPalette];
+    return %orig;
+}
+%end
+
+%hook YTAppViewController
+- (NSInteger)pageStyle {
+    NSInteger pageStyleOverride = ytag_themePageStyleOverride();
+    if (pageStyleOverride >= 0) return pageStyleOverride;
+    return %orig;
+}
+%end
+
+%hook YTAppViewControllerImpl
+- (NSInteger)pageStyle {
+    NSInteger pageStyleOverride = ytag_themePageStyleOverride();
+    if (pageStyleOverride >= 0) return pageStyleOverride;
+    return %orig;
+}
 %end
 
 #pragma mark - Seek/Progress Bar
@@ -254,6 +366,9 @@ static void ytag_applyGradient(UIView *view) {
 
     UIView *hostView = ytag_gradientHostView(view);
     if (!hostView) return;
+    UIWindow *window = hostView.window ?: ([hostView isKindOfClass:[UIWindow class]] ? (UIWindow *)hostView : nil);
+
+    ytag_applyThemeInterfaceStyleToWindow(window);
 
     ytag_removeGradient(hostView);
     if (!ytag_themeGradientEnabled()) return;
