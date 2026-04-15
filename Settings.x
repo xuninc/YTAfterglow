@@ -834,18 +834,20 @@ static NSString *GetCacheSize() {
     NSArray *navbarKeys = @[@"noCast", @"noNotifsButton", @"noSearchButton", @"noVoiceSearchButton", @"stickyNavbar", @"noSubbar", @"noYTLogo", @"premiumYTLogo"];
     NSArray *tabbarKeys = @[@"frostedPivot", @"removeLabels", @"removeIndicators"];
     NSArray *legacyKeys = @[@"oldYTUI"];
-    NSArray *interfaceKeys = [[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObjectsFromArray:legacyKeys];
-    NSArray *overlayKeys = @[@"hideAutoplay", @"hideSubs", @"showPlayerShareButton", @"showPlayerSaveButton", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"endScreenCards", @"noFullscreenActions", @"persistentProgressBar", @"stockVolumeHUD", @"noRelatedVids", @"noWatermarks", @"disableAmbientMode", @"videoEndTime", @"24hrFormat", @"hideHeatwaves", @"noContinueWatchingPrompt"];
-    NSArray *playerKeys = @[@"backgroundPlayback", @"miniplayer", @"portraitFullscreen", @"copyWithTimestamp", @"disableAutoplay", @"disableAutoCaptions", @"rememberCaptionState", @"rememberLoop", @"noContentWarning", @"classicQuality", @"tapToSeek", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"redProgressBar", @"noPlayerRemixButton", @"noPlayerClipButton", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
+    NSArray *interfaceKeys = [[[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObject:@"noSearchHistory"] arrayByAddingObjectsFromArray:[@[@"disableRTL"] arrayByAddingObjectsFromArray:legacyKeys]];
+    NSArray *playerPlaybackKeys = @[@"backgroundPlayback", @"disableAutoplay", @"hideAutoplay", @"disableAutoCaptions", @"rememberCaptionState", @"rememberLoop", @"noContentWarning", @"classicQuality", @"endScreenCards", @"noRelatedVids", @"noContinueWatching", @"noContinueWatchingPrompt", @"noRelatedWatchNexts"];
+    NSArray *playerControlKeys = @[@"portraitFullscreen", @"copyWithTimestamp", @"tapToSeek", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
+    NSArray *playerOverlayKeys = @[@"hideSubs", @"showPlayerShareButton", @"showPlayerSaveButton", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"noFullscreenActions", @"persistentProgressBar", @"stockVolumeHUD", @"noWatermarks", @"disableAmbientMode", @"videoEndTime", @"24hrFormat", @"hideHeatwaves", @"redProgressBar"];
+    NSArray *playerActionBarKeys = @[@"noPlayerDownloadButton", @"playerNoShare", @"playerNoSave", @"noPlayerRemixButton", @"noPlayerClipButton"];
+    NSArray *playerMenuKeys = @[@"removeDownloadMenu", @"removeShareMenu"];
+    NSArray *playerMiniplayerKeys = @[@"miniplayer", @"playlistOldMinibar"];
+    NSArray *playerKeys = [[[[[playerPlaybackKeys arrayByAddingObjectsFromArray:playerControlKeys] arrayByAddingObjectsFromArray:playerOverlayKeys] arrayByAddingObjectsFromArray:playerActionBarKeys] arrayByAddingObjectsFromArray:playerMenuKeys] arrayByAddingObjectsFromArray:playerMiniplayerKeys];
     NSArray *shortsBehaviorKeys = @[@"shortsOnlyMode", @"autoSkipShorts", @"hideShorts", @"shortsProgress", @"pinchToFullscreenShorts", @"shortsToRegular", @"resumeShorts"];
     NSArray *shortsUIKeys = @[@"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"];
-    NSArray *downloadUIKeys = @[@"removeDownloadMenu", @"noPlayerDownloadButton", @"playerNoShare", @"playerNoSave", @"removeShareMenu"];
-    NSArray *downloadToolKeys = @[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare"];
-    NSArray *downloadKeys = [downloadUIKeys arrayByAddingObjectsFromArray:downloadToolKeys];
-    NSArray *menuKeys = @[@"removePlayNext", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu"];
-    NSArray *feedKeys = @[@"noContinueWatching", @"noSearchHistory", @"noRelatedWatchNexts"];
-    NSArray *linkKeys = @[@"noLinkTracking", @"noShareChunk"];
-    NSArray *commentKeys = @[@"stickSortComments", @"hideSortComments", @"playlistOldMinibar", @"disableRTL"];
+    NSArray *feedKeys = @[@"removePlayNext", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu"];
+    NSArray *commentKeys = @[@"stickSortComments", @"hideSortComments"];
+    NSArray *extraToolKeys = @[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare", @"noLinkTracking", @"noShareChunk"];
+    NSArray *extrasKeys = [[[feedKeys arrayByAddingObjectsFromArray:commentKeys] arrayByAddingObjectsFromArray:extraToolKeys] copy];
 
     YTSettingsSectionItem *ads = [self pageItemWithTitle:LOC(@"Ads")
         titleDescription:@"Remove ads and promotional clutter."
@@ -865,7 +867,7 @@ static NSString *GetCacheSize() {
     [sectionItems addObject:ads];
 
     YTSettingsSectionItem *interface = [self pageItemWithTitle:LOC(@"Interface")
-        titleDescription:@"App chrome, tabs, and startup behavior."
+        titleDescription:@"App chrome, tabs, startup, and search behavior."
         summary:^NSString *() {
             NSArray *controlKeys = [navbarKeys arrayByAddingObjectsFromArray:interfaceKeys];
             return [self enabledSummaryForKeys:controlKeys];
@@ -932,7 +934,11 @@ static NSString *GetCacheSize() {
 
             [rows addObject:[self startupTabItemWithSettingsVC:settingsViewController]];
             [rows addObject:[self switchWithTitle:@"StartupAnimation" key:@"startupAnimation"]];
+            [rows addObject:[self switchWithTitle:@"NoSearchHistory" key:@"noSearchHistory"]];
             [rows addObject:[self switchWithTitle:@"FloatingKeyboard" key:@"floatingKeyboard"]];
+            if (isAdvanced) {
+                [rows addObject:[self switchWithTitle:@"DisableRTL" key:@"disableRTL"]];
+            }
 
             if (isAdvanced) {
                 [rows addObject:[self pageItemWithTitle:@"Legacy"
@@ -1094,18 +1100,35 @@ static NSString *GetCacheSize() {
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
 
             [rows addObject:[self pageItemWithTitle:@"Playback"
-                titleDescription:@"Background playback, default speed, and preferred quality."
+                titleDescription:@"Playback defaults, autoplay behavior, and watch-next cleanup."
                 summary:^NSString *() {
-                    return @"5 options";
+                    return [self enabledSummaryForKeys:playerPlaybackKeys];
                 }
                 selectBlock:^BOOL (YTSettingsCell *defaultsCell, NSUInteger defaultsArg1) {
-                    NSArray <YTSettingsSectionItem *> *defaultRows = @[
+                    NSMutableArray <YTSettingsSectionItem *> *defaultRows = [@[
                         [self switchWithTitle:@"BackgroundPlayback" key:@"backgroundPlayback"],
                         [self holdToSpeedItemWithSettingsVC:settingsViewController],
                         [self defaultPlaybackRateItemWithSettingsVC:settingsViewController],
                         [self playbackQualityItemWithTitle:@"PlaybackQualityOnWiFi" key:@"wiFiQualityIndex" settingsVC:settingsViewController],
-                        [self playbackQualityItemWithTitle:@"PlaybackQualityOnCellular" key:@"cellQualityIndex" settingsVC:settingsViewController]
-                    ];
+                        [self playbackQualityItemWithTitle:@"PlaybackQualityOnCellular" key:@"cellQualityIndex" settingsVC:settingsViewController],
+                        [self switchWithTitle:@"DisableAutoplay" key:@"disableAutoplay"],
+                        [self switchWithTitle:@"DisableAutoCaptions" key:@"disableAutoCaptions"],
+                        [self switchWithTitle:@"RememberCaptionState" key:@"rememberCaptionState"],
+                        [self switchWithTitle:@"RememberLoopMode" key:@"rememberLoop"],
+                        [self switchWithTitle:@"ClassicQuality" key:@"classicQuality"],
+                        [self switchWithTitle:@"NoContentWarning" key:@"noContentWarning"],
+                        [self switchWithTitle:@"NoContinueWatching" key:@"noContinueWatching"],
+                        [self switchWithTitle:@"NoRelatedWatchNexts" key:@"noRelatedWatchNexts"]
+                    ] mutableCopy];
+
+                    if (isAdvanced) {
+                        [defaultRows addObjectsFromArray:@[
+                            [self switchWithTitle:@"HideAutoplay" key:@"hideAutoplay"],
+                            [self switchWithTitle:@"NoEndScreenCards" key:@"endScreenCards"],
+                            [self switchWithTitle:@"NoRelatedVids" key:@"noRelatedVids"],
+                            [self switchWithTitle:@"NoContinueWatchingPrompt" key:@"noContinueWatchingPrompt"]
+                        ]];
+                    }
 
                     YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Playback") pickerSectionTitle:nil rows:defaultRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
@@ -1113,35 +1136,79 @@ static NSString *GetCacheSize() {
                 }]];
 
             [rows addObject:[self pageItemWithTitle:@"Controls"
-                titleDescription:@"Gestures, fullscreen behavior, captions, and player buttons."
+                titleDescription:@"Gestures, fullscreen behavior, and direct player interactions."
                 summary:^NSString *() {
-                    return [self enabledSummaryForKeys:playerKeys];
+                    return [self enabledSummaryForKeys:playerControlKeys];
                 }
                 selectBlock:^BOOL (YTSettingsCell *controlsCell, NSUInteger controlsArg1) {
                     NSArray <YTSettingsSectionItem *> *controlRows = @[
-                        [self switchWithTitle:@"Miniplayer" key:@"miniplayer"],
                         [self switchWithTitle:@"PortraitFullscreen" key:@"portraitFullscreen"],
-                        [self switchWithTitle:@"CopyWithTimestamp" key:@"copyWithTimestamp"],
-                        [self switchWithTitle:@"DisableAutoplay" key:@"disableAutoplay"],
-                        [self switchWithTitle:@"DisableAutoCaptions" key:@"disableAutoCaptions"],
-                        [self switchWithTitle:@"RememberCaptionState" key:@"rememberCaptionState"],
-                        [self switchWithTitle:@"RememberLoopMode" key:@"rememberLoop"],
-                        [self switchWithTitle:@"NoContentWarning" key:@"noContentWarning"],
-                        [self switchWithTitle:@"ClassicQuality" key:@"classicQuality"],
+                        [self switchWithTitle:@"AutoFullscreen" key:@"autoFullscreen"],
+                        [self switchWithTitle:@"ExitFullscreen" key:@"exitFullscreen"],
                         [self switchWithTitle:@"TapToSeek" key:@"tapToSeek"],
                         [self switchWithTitle:@"DontSnap2Chapter" key:@"dontSnapToChapter"],
                         [self switchWithTitle:@"NoTwoFingerSnapToChapter" key:@"noTwoFingerSnapToChapter"],
+                        [self switchWithTitle:@"NoDoubleTap2Seek" key:@"noDoubleTapToSeek"],
                         [self switchWithTitle:@"PauseOnOverlay" key:@"pauseOnOverlay"],
-                        [self switchWithTitle:@"RedProgressBar" key:@"redProgressBar"],
-                        [self switchWithTitle:@"NoPlayerRemixButton" key:@"noPlayerRemixButton"],
-                        [self switchWithTitle:@"NoPlayerClipButton" key:@"noPlayerClipButton"],
                         [self switchWithTitle:@"NoFreeZoom" key:@"noFreeZoom"],
-                        [self switchWithTitle:@"AutoFullscreen" key:@"autoFullscreen"],
-                        [self switchWithTitle:@"ExitFullscreen" key:@"exitFullscreen"],
-                        [self switchWithTitle:@"NoDoubleTap2Seek" key:@"noDoubleTapToSeek"]
+                        [self switchWithTitle:@"CopyWithTimestamp" key:@"copyWithTimestamp"]
                     ];
 
                     YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Controls") pickerSectionTitle:nil rows:controlRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:picker];
+                    return YES;
+                }]];
+
+            [rows addObject:[self pageItemWithTitle:@"Action Bar"
+                titleDescription:@"Buttons shown directly under the player."
+                summary:^NSString *() {
+                    return [self enabledSummaryForKeys:playerActionBarKeys];
+                }
+                selectBlock:^BOOL (YTSettingsCell *barCell, NSUInteger barArg1) {
+                    NSArray <YTSettingsSectionItem *> *barRows = @[
+                        [self switchWithTitle:@"NoPlayerDownloadButton" key:@"noPlayerDownloadButton"],
+                        [self switchWithTitle:@"PlayerNoShare" key:@"playerNoShare"],
+                        [self switchWithTitle:@"PlayerNoSave" key:@"playerNoSave"],
+                        [self switchWithTitle:@"NoPlayerRemixButton" key:@"noPlayerRemixButton"],
+                        [self switchWithTitle:@"NoPlayerClipButton" key:@"noPlayerClipButton"]
+                    ];
+
+                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Action Bar" pickerSectionTitle:nil rows:barRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:picker];
+                    return YES;
+                }]];
+
+            [rows addObject:[self pageItemWithTitle:@"Menus"
+                titleDescription:@"Hide player menu actions you never use."
+                summary:^NSString *() {
+                    return [self enabledSummaryForKeys:playerMenuKeys];
+                }
+                selectBlock:^BOOL (YTSettingsCell *menuCell, NSUInteger menuArg1) {
+                    NSArray <YTSettingsSectionItem *> *menuRows = @[
+                        [self switchWithTitle:@"RemoveDownloadMenu" key:@"removeDownloadMenu"],
+                        [self switchWithTitle:@"RemoveShareMenu" key:@"removeShareMenu"]
+                    ];
+
+                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Menus" pickerSectionTitle:nil rows:menuRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:picker];
+                    return YES;
+                }]];
+
+            [rows addObject:[self pageItemWithTitle:@"Miniplayer"
+                titleDescription:@"Mini player behavior and queue fallback options."
+                summary:^NSString *() {
+                    return [self enabledSummaryForKeys:playerMiniplayerKeys];
+                }
+                selectBlock:^BOOL (YTSettingsCell *miniCell, NSUInteger miniArg1) {
+                    NSMutableArray <YTSettingsSectionItem *> *miniRows = [@[
+                        [self switchWithTitle:@"Miniplayer" key:@"miniplayer"]
+                    ] mutableCopy];
+
+                    if (isAdvanced) {
+                        [miniRows addObject:[self switchWithTitle:@"PlaylistOldMinibar" key:@"playlistOldMinibar"]];
+                    }
+
+                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Miniplayer" pickerSectionTitle:nil rows:miniRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
                     return YES;
                 }]];
@@ -1150,11 +1217,10 @@ static NSString *GetCacheSize() {
                 [rows addObject:[self pageItemWithTitle:LOC(@"Overlay")
                     titleDescription:@"HUD, autoplay, end-screen cards, and player chrome."
                     summary:^NSString *() {
-                        return [self enabledSummaryForKeys:overlayKeys];
+                        return [self enabledSummaryForKeys:playerOverlayKeys];
                     }
                     selectBlock:^BOOL (YTSettingsCell *overlayCell, NSUInteger overlayArg1) {
                         NSArray <YTSettingsSectionItem *> *overlayRows = @[
-                            [self switchWithTitle:@"HideAutoplay" key:@"hideAutoplay"],
                             [self switchWithTitle:@"HideSubs" key:@"hideSubs"],
                             [self switchWithTitle:@"ShowPlayerShareButton" key:@"showPlayerShareButton"],
                             [self switchWithTitle:@"ShowPlayerSaveButton" key:@"showPlayerSaveButton"],
@@ -1162,17 +1228,15 @@ static NSString *GetCacheSize() {
                             [self switchWithTitle:@"HidePrevNext" key:@"hidePrevNext"],
                             [self switchWithTitle:@"ReplacePrevNext" key:@"replacePrevNext"],
                             [self switchWithTitle:@"NoDarkBg" key:@"noDarkBg"],
-                            [self switchWithTitle:@"NoEndScreenCards" key:@"endScreenCards"],
                             [self switchWithTitle:@"NoFullscreenActions" key:@"noFullscreenActions"],
                             [self switchWithTitle:@"PersistentProgressBar" key:@"persistentProgressBar"],
                             [self switchWithTitle:@"StockVolumeHUD" key:@"stockVolumeHUD"],
-                            [self switchWithTitle:@"NoRelatedVids" key:@"noRelatedVids"],
                             [self switchWithTitle:@"NoWatermarks" key:@"noWatermarks"],
                             [self switchWithTitle:@"DisableAmbientMode" key:@"disableAmbientMode"],
                             [self switchWithTitle:@"VideoEndTime" key:@"videoEndTime"],
                             [self switchWithTitle:@"24hrFormat" key:@"24hrFormat"],
                             [self switchWithTitle:@"HideHeatwaves" key:@"hideHeatwaves"],
-                            [self switchWithTitle:@"NoContinueWatchingPrompt" key:@"noContinueWatchingPrompt"]
+                            [self switchWithTitle:@"RedProgressBar" key:@"redProgressBar"]
                         ];
 
                         YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Overlay") pickerSectionTitle:nil rows:overlayRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
@@ -1240,7 +1304,7 @@ static NSString *GetCacheSize() {
                             [self switchWithTitle:@"HideShortsChannelName" key:@"hideShortsChannelName"],
                             [self switchWithTitle:@"HideShortsDescription" key:@"hideShortsDescription"],
                             [self switchWithTitle:@"HideShortsAudioTrack" key:@"hideShortsAudioTrack"],
-                            [self switchWithTitle:@"NoPromotionCards" key:@"hideShortsPromoCards"]
+                            [self switchWithTitle:@"HideShortsPromoCards" key:@"hideShortsPromoCards"]
                         ];
 
                         YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Shorts Layout" pickerSectionTitle:nil rows:uiRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
@@ -1256,26 +1320,14 @@ static NSString *GetCacheSize() {
     [sectionItems addObject:shorts];
 
     YTSettingsSectionItem *downloads = [self pageItemWithTitle:LOC(@"Downloads")
-        titleDescription:@"Download surfaces, sharing, and export tools."
+        titleDescription:@"Download features and offline tools will live here."
         summary:^NSString *() {
-            return [self enabledSummaryForKeys:downloadKeys];
+            return @"Coming soon";
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
-            [rows addObject:[self themeSectionHeaderWithTitle:@"Download UI" description:@"Hide the download and share entry points when you do not want them."]];
-            [rows addObject:[self switchWithTitle:@"RemoveDownloadMenu" key:@"removeDownloadMenu"]];
-            [rows addObject:[self switchWithTitle:@"NoPlayerDownloadButton" key:@"noPlayerDownloadButton"]];
-            [rows addObject:[self switchWithTitle:@"PlayerNoShare" key:@"playerNoShare"]];
-            [rows addObject:[self switchWithTitle:@"PlayerNoSave" key:@"playerNoSave"]];
-            [rows addObject:[self switchWithTitle:@"RemoveShareMenu" key:@"removeShareMenu"]];
-            [rows addObject:space];
-            [rows addObject:[self themeSectionHeaderWithTitle:@"Save & Share" description:@"Copy, save, and replace content export actions."]];
-            [rows addObject:[self switchWithTitle:@"CopyVideoInfo" key:@"copyVideoInfo"]];
-            [rows addObject:[self switchWithTitle:@"PostManager" key:@"postManager"]];
-            [rows addObject:[self switchWithTitle:@"SaveProfilePhoto" key:@"saveProfilePhoto"]];
-            [rows addObject:[self switchWithTitle:@"CommentManager" key:@"commentManager"]];
-            [rows addObject:[self switchWithTitle:@"FixAlbums" key:@"fixAlbums"]];
-            [rows addObject:[self switchWithTitle:@"NativeShare" key:@"nativeShare"]];
+            NSArray <YTSettingsSectionItem *> *rows = @[
+                [self themeSectionHeaderWithTitle:@"Coming Soon" description:@"New download features and offline tools will be added here."]
+            ];
 
             YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Downloads") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
@@ -1283,55 +1335,21 @@ static NSString *GetCacheSize() {
         }];
     [sectionItems addObject:downloads];
 
-    YTSettingsSectionItem *feed = [self pageItemWithTitle:LOC(@"Feed")
-        titleDescription:@"Home surfaces, menus, comments, and browse cleanup."
+    YTSettingsSectionItem *extras = [self pageItemWithTitle:@"Extras"
+        titleDescription:@"Extra tools, browse cleanup, and smaller utility tweaks."
         summary:^NSString *() {
-            NSArray *feedContentKeys = [[[feedKeys arrayByAddingObjectsFromArray:linkKeys] arrayByAddingObjectsFromArray:menuKeys] arrayByAddingObjectsFromArray:commentKeys];
-            return [self enabledSummaryForKeys:feedContentKeys];
+            return [self enabledSummaryForKeys:extrasKeys];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
 
-            [rows addObject:[self pageItemWithTitle:@"Home"
-                titleDescription:@"Reduce interruptions and noisy feed behavior."
+            [rows addObject:[self pageItemWithTitle:@"Feed"
+                titleDescription:@"Trim browse-surface menus you never use."
                 summary:^NSString *() {
                     return [self enabledSummaryForKeys:feedKeys];
                 }
                 selectBlock:^BOOL (YTSettingsCell *feedCell, NSUInteger feedArg1) {
                     NSArray <YTSettingsSectionItem *> *feedRows = @[
-                        [self switchWithTitle:@"NoContinueWatching" key:@"noContinueWatching"],
-                        [self switchWithTitle:@"NoSearchHistory" key:@"noSearchHistory"],
-                        [self switchWithTitle:@"NoRelatedWatchNexts" key:@"noRelatedWatchNexts"]
-                    ];
-
-                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Home" pickerSectionTitle:nil rows:feedRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-                    [settingsViewController pushViewController:picker];
-                    return YES;
-                }]];
-
-            [rows addObject:[self pageItemWithTitle:@"Links"
-                titleDescription:@"Open cleaner links and strip YouTube's extra share parameters."
-                summary:^NSString *() {
-                    return [self enabledSummaryForKeys:linkKeys];
-                }
-                selectBlock:^BOOL (YTSettingsCell *linksCell, NSUInteger linksArg1) {
-                    NSArray <YTSettingsSectionItem *> *linkRows = @[
-                        [self switchWithTitle:@"NoLinkTracking" key:@"noLinkTracking"],
-                        [self switchWithTitle:@"NoShareChunk" key:@"noShareChunk"]
-                    ];
-
-                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Links" pickerSectionTitle:nil rows:linkRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-                    [settingsViewController pushViewController:picker];
-                    return YES;
-                }]];
-
-            [rows addObject:[self pageItemWithTitle:@"Menus"
-                titleDescription:@"Trim actions you never use from long-press and overflow menus."
-                summary:^NSString *() {
-                    return [self enabledSummaryForKeys:menuKeys];
-                }
-                selectBlock:^BOOL (YTSettingsCell *menuCell, NSUInteger menuArg1) {
-                    NSArray <YTSettingsSectionItem *> *menuRows = @[
                         [self switchWithTitle:@"RemovePlayNext" key:@"removePlayNext"],
                         [self switchWithTitle:@"RemoveWatchLaterMenu" key:@"removeWatchLaterMenu"],
                         [self switchWithTitle:@"RemoveSaveToPlaylistMenu" key:@"removeSaveToPlaylistMenu"],
@@ -1340,23 +1358,21 @@ static NSString *GetCacheSize() {
                         [self switchWithTitle:@"RemoveReportMenu" key:@"removeReportMenu"]
                     ];
 
-                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Menus" pickerSectionTitle:nil rows:menuRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Feed" pickerSectionTitle:nil rows:feedRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
                     return YES;
                 }]];
 
             if (isAdvanced) {
                 [rows addObject:[self pageItemWithTitle:@"Comments"
-                    titleDescription:@"Comment sorting, playlist behavior, and RTL direction."
+                    titleDescription:@"Comment sorting and comment-surface cleanup."
                     summary:^NSString *() {
                         return [self enabledSummaryForKeys:commentKeys];
                     }
                     selectBlock:^BOOL (YTSettingsCell *commentCell, NSUInteger commentArg1) {
                         NSArray <YTSettingsSectionItem *> *commentRows = @[
                             [self switchWithTitle:@"StickSortComments" key:@"stickSortComments"],
-                            [self switchWithTitle:@"HideSortComments" key:@"hideSortComments"],
-                            [self switchWithTitle:@"PlaylistOldMinibar" key:@"playlistOldMinibar"],
-                            [self switchWithTitle:@"DisableRTL" key:@"disableRTL"]
+                            [self switchWithTitle:@"HideSortComments" key:@"hideSortComments"]
                         ];
 
                         YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Comments" pickerSectionTitle:nil rows:commentRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
@@ -1365,11 +1381,22 @@ static NSString *GetCacheSize() {
                     }]];
             }
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Feed") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+            [rows addObject:space];
+            [rows addObject:[self themeSectionHeaderWithTitle:@"Tools" description:@"Extra utility actions that do not belong to one primary surface."]];
+            [rows addObject:[self switchWithTitle:@"CopyVideoInfo" key:@"copyVideoInfo"]];
+            [rows addObject:[self switchWithTitle:@"SaveProfilePhoto" key:@"saveProfilePhoto"]];
+            [rows addObject:[self switchWithTitle:@"PostManager" key:@"postManager"]];
+            [rows addObject:[self switchWithTitle:@"CommentManager" key:@"commentManager"]];
+            [rows addObject:[self switchWithTitle:@"NoLinkTracking" key:@"noLinkTracking"]];
+            [rows addObject:[self switchWithTitle:@"NativeShare" key:@"nativeShare"]];
+            [rows addObject:[self switchWithTitle:@"NoShareChunk" key:@"noShareChunk"]];
+            [rows addObject:[self switchWithTitle:@"FixAlbums" key:@"fixAlbums"]];
+
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Extras" pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
-    [sectionItems addObject:feed];
+    [sectionItems addObject:extras];
 
     YTSettingsSectionItem *credits = [self pageItemWithTitle:LOC(@"Credits")
         titleDescription:@"The team behind YouTube Afterglow, the foundation it's built on, and the open-source projects it depends on."
@@ -1403,7 +1430,7 @@ static NSString *GetCacheSize() {
         }];
 
     YTSettingsSectionItem *about = [self pageItemWithTitle:LOC(@"About")
-        titleDescription:@"Maintenance tools, advanced mode, credits, and support."
+        titleDescription:@"Maintenance tools, advanced mode, and credits."
         summary:^NSString *() {
             return @(OS_STRINGIFY(TWEAK_VERSION));
         }
