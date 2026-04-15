@@ -6,12 +6,12 @@
 "Downloading" = "Downloading";
 "DownloadManager" = "Download manager";
 "DownloadManagerDesc" = "Replaces 'Download' button action under the player with a Download Manager, which allows downloading Video, Audio, Thumbnail Image, and Copying Video Information.";
-"PostManager" = "Save post information";
-"PostManagerDesc" = "Allows to copy post text and save post as image by long tap.";
-"SaveProfilePhoto" = "Save profile picture";
-"SaveProfilePhotoDesc" = "Saves profile picture to the Photos app by long tap.";
-"CommentManager" = "Save comment information";
-"CommentManagerDesc" = "Allows to copy comment text and save comment as image by long tap.";
+"PostManager" = "Post actions";
+"PostManagerDesc" = "Long press posts to copy text, save images, or copy the post as an image.";
+"SaveProfilePhoto" = "Profile photo actions";
+"SaveProfilePhotoDesc" = "Long press profile pictures to save or copy them.";
+"CommentManager" = "Comment actions";
+"CommentManagerDesc" = "Long press comments to copy text or save them as an image.";
 
 "YtlButtonPosition" = "Downloading button placement";
 "UnderPlayer" = "Under the player";
@@ -90,7 +90,7 @@
 "RemoveMoreTopicsDesc" = "Removes \"More topics\" from the feed.";
 "RemovePlayables" = "Remove playables";
 "RemovePlayablesDesc" = "Removes playables (mini-games) from the feed.";
-"FixAlbums" = "Fix covers";
+"FixAlbums" = "Fix album covers";
 "FixAlbumsDesc" = "Fixes the display of covers for users from Russia.";
 
 /* Player options */
@@ -483,20 +483,20 @@
 "Floating" = "Floating";
 
 "Other" = "Other";
-"CopyVideoInfo" = "Copy video info";
-"CopyVideoInfoDesc" = "Allows copying video information from the description.";
+"CopyVideoInfo" = "Copy video details";
+"CopyVideoInfoDesc" = "Adds a copy action to the video details panel.";
 "NoContinueWatching" = "Hide \"Continue watching\"";
 "NoContinueWatchingDesc" = "Hides the \"Continue watching\" section from the Home feed.";
 "NoLinkTracking" = "Disable link tracking";
 "NoLinkTrackingDesc" = "Prevents tracking information from being sent when tapping links. Opens links directly instead of going through Google redirects.";
-"NoShareChunk" = "Remove share identifier";
-"NoShareChunkDesc" = "Removes the \"si=identifier\" parameter from shared links. A good alternative to the \"Native share sheet\" option as YouTube continues to improve its sharing menu.";
+"NoShareChunk" = "Clean shared links";
+"NoShareChunkDesc" = "Removes YouTube's extra share identifier from shared links.";
 "AutoCheckLinks" = "Auto-check clipboard";
 "AutoCheckLinksDesc" = "Check clipboard for YouTube-related links each time the app is opened.\nFor proper functionality, go to iOS Settings → YouTube → Paste from other apps and select \"Allow\"";
 
 "ContextMenu" = "Context menu";
-"NativeShare" = "Native share sheet";
-"NativeShareDesc" = "Uses system share sheet to share media";
+"NativeShare" = "Use native share sheet";
+"NativeShareDesc" = "Uses the iOS share sheet when sharing media.";
 "RemoveCommentGuidelines" = "Remove guidelines";
 "RemoveCommentGuidelinesDesc" = "Removes pinned guidelines from the comments section.";
 "RemovePlayNext" = "Remove \"Play next in queue\"";
@@ -517,6 +517,8 @@
 "RemoveFeedbackMenuDesc" = "Removes \"Feedback\" option from menu.";
 "RemoveReportMenu" = "Remove \"Report\"";
 "RemoveReportMenuDesc" = "Removes \"Report\" option from menu.";
+"HideShortsPromoCards" = "Hide Shorts promo cards";
+"HideShortsPromoCardsDesc" = "Hides promotional cards inside the Shorts viewer.";
 "RemoveRemixMenu" = "Remove \"Remix\"";
 "RemoveRemixMenuDesc" = "Removes \"Remix\" option from menu.";
 "RemoveYTMMenu" = "Remove \"YouTube Music\"";
@@ -672,7 +674,11 @@
 "PreImportMessage" = "This action will replace the current preferences with those from the selected file.\n\nAre you sure you want to continue?";
 "ExportPreferences" = "Export preferences";
 "Advanced" = "Advanced mode";
-"AdvancedDesc" = "Enables advanced settings and additional options.";
+"AdvancedDesc" = "Shows extra power-user settings and advanced UI controls.";
+"AdvancedModePromptTitle" = "Enable Advanced Mode?";
+"AdvancedModePromptMessage" = "Advanced Mode unlocks extra settings for power users, including additional player cleanup, layout controls, legacy fallbacks, and other advanced tweaks.\n\nIt does not change your setup automatically beyond showing more options, and you can turn it off later in About.";
+"EnableAdvancedMode" = "Enable Advanced Mode";
+"KeepStandardMode" = "Keep Standard Mode";
 "ResetSettings" = "Restore default settings";
 "ResetMessage" = "This action will reset YTPlus settings to default and close YouTube.\n\nAre you sure you want to continue?";
 

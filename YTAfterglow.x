@@ -61,15 +61,21 @@ static void ytagPresentAdvancedModeReminderIfNeeded(void) {
         UIViewController *presenter = ytagTopViewController(window.rootViewController);
         if (!presenter) return;
 
-        YTAlertView *alertView = [%c(YTAlertView) confirmationDialogWithAction:^{
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"AdvancedModePromptTitle")
+                                                                       message:LOC(@"AdvancedModePromptMessage")
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:LOC(@"KeepStandardMode")
+                                                  style:UIAlertActionStyleCancel
+                                                handler:nil]];
+        UIAlertAction *enableAction = [UIAlertAction actionWithTitle:LOC(@"EnableAdvancedMode")
+                                                               style:UIAlertActionStyleDefault
+                                                             handler:^(__unused UIAlertAction *action) {
             ytagSetBool(YES, @"advancedMode");
             [[YTAGUserDefaults standardUserDefaults] synchronize];
-        }
-        actionTitle:LOC(@"Yes")
-        cancelTitle:LOC(@"No")];
-        alertView.title = @"YTAfterglow";
-        alertView.subtitle = [NSString stringWithFormat:LOC(@"AdvancedModeReminder"), @"YTAfterglow", LOC(@"Version"), LOC(@"Advanced")];
-        [alertView show];
+        }];
+        [alert addAction:enableAction];
+        alert.preferredAction = enableAction;
+        [presenter presentViewController:alert animated:YES completion:nil];
     });
 }
 
