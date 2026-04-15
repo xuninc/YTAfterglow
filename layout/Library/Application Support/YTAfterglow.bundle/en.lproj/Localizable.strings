@@ -486,7 +486,7 @@
 "CopyVideoInfo" = "Copy video details";
 "CopyVideoInfoDesc" = "Adds a copy action to the video details panel.";
 "NoContinueWatching" = "Hide \"Continue watching\"";
-"NoContinueWatchingDesc" = "Hides the \"Continue watching\" section from the Home feed.";
+"NoContinueWatchingDesc" = "Hides YouTube's \"Continue watching\" surface.";
 "NoLinkTracking" = "Disable link tracking";
 "NoLinkTrackingDesc" = "Prevents tracking information from being sent when tapping links. Opens links directly instead of going through Google redirects.";
 "NoShareChunk" = "Clean shared links";
