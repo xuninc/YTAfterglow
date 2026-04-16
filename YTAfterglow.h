@@ -11,6 +11,9 @@
 #define ytagBool(key) [[YTAGUserDefaults standardUserDefaults] boolForKey:key]
 #define ytagInt(key) [[YTAGUserDefaults standardUserDefaults] integerForKey:key]
 
+// Exposed from ColorMode.x so SeekBar.x (and future files) can read theme colors
+UIColor *themeColor(NSString *key);
+
 #define ytagSetBool(value, key) [[YTAGUserDefaults standardUserDefaults] setBool:(value) forKey:(key)]
 #define ytagSetInt(value, key) [[YTAGUserDefaults standardUserDefaults] setInteger:(value) forKey:(key)]
 

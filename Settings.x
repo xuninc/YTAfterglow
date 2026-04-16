@@ -98,8 +98,41 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
 #pragma clang diagnostic pop
 
+@interface YTAGImagePickerDelegate : NSObject <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@property (nonatomic, copy) NSString *prefKey;
+@property (nonatomic, weak) YTSettingsViewController *settingsVC;
+@end
+
+@implementation YTAGImagePickerDelegate
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey, id> *)info {
+    UIImage *image = info[UIImagePickerControllerEditedImage];
+    if (!image) image = info[UIImagePickerControllerOriginalImage];
+    if (image && self.prefKey.length) {
+        CGFloat maxSide = 60.0;
+        CGFloat scale = MIN(maxSide / image.size.width, maxSide / image.size.height);
+        if (scale < 1.0) {
+            CGSize newSize = CGSizeMake(image.size.width * scale, image.size.height * scale);
+            UIGraphicsBeginImageContextWithOptions(newSize, NO, 0.0);
+            [image drawInRect:CGRectMake(0, 0, newSize.width, newSize.height)];
+            image = UIGraphicsGetImageFromCurrentImageContext();
+            UIGraphicsEndImageContext();
+        }
+        NSData *data = UIImagePNGRepresentation(image);
+        if (data) [[YTAGUserDefaults standardUserDefaults] setObject:data forKey:self.prefKey];
+    }
+    __weak YTSettingsViewController *weakVC = self.settingsVC;
+    [picker dismissViewControllerAnimated:YES completion:^{
+        ytag_refreshSettingsHierarchy(weakVC);
+    }];
+}
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+@end
+
 static const NSInteger YTAfterglowSection = 789;
 static YTAGColorPickerDelegate *_colorPickerDelegate = nil;
+static YTAGImagePickerDelegate *_imagePickerDelegate = nil;
 static char kYTAGPickerRowsAssociationKey;
 static char kYTAGPickerHighlightIndexAssociationKey;
 
@@ -824,6 +857,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 %new
 - (NSString *)themeCustomizationSummary {
     NSArray *keys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar",
+                      @"theme_seekBarLive", @"theme_seekBarScrubber", @"theme_seekBarScrubberLive",
                       @"theme_background", @"theme_textPrimary", @"theme_textSecondary",
                       @"theme_navBar", @"theme_accent",
                       @"theme_gradientStart", @"theme_gradientEnd", @"theme_glowEnabled"];
@@ -1020,9 +1054,24 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 %new
 - (NSString *)themeCustomColorsSummary {
     NSArray *keys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar",
+                      @"theme_seekBarLive", @"theme_seekBarScrubber", @"theme_seekBarScrubberLive",
                       @"theme_background", @"theme_textPrimary", @"theme_textSecondary",
                       @"theme_navBar", @"theme_accent"];
     return [self customizationSummaryForKeys:keys];
+}
+
+%new
+- (NSString *)themeSeekBarSummary {
+    NSArray *keys = @[@"theme_seekBar", @"theme_seekBarLive",
+                      @"theme_seekBarScrubber", @"theme_seekBarScrubberLive",
+                      @"seekBarScrubberImage", @"seekBarScrubberSize", @"seekBarAnimated"];
+    NSUInteger customizedCount = 0;
+    for (NSString *key in keys) {
+        if ([[YTAGUserDefaults standardUserDefaults] objectForKey:key] != nil) customizedCount++;
+    }
+    if (customizedCount == 0) return LOC(@"Default");
+    if (customizedCount == 1) return @"1 custom";
+    return [NSString stringWithFormat:@"%lu custom", (unsigned long)customizedCount];
 }
 
 %new
@@ -1039,6 +1088,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 - (NSString *)themeAppearanceSummary {
     NSUInteger customizedCount = 0;
     NSArray *colorKeys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar",
+                           @"theme_seekBarLive", @"theme_seekBarScrubber", @"theme_seekBarScrubberLive",
                            @"theme_background", @"theme_textPrimary", @"theme_textSecondary",
                            @"theme_navBar", @"theme_accent"];
     for (NSString *key in colorKeys) {
@@ -1131,6 +1181,9 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     [self themeSaveColor:overlay forKey:@"theme_overlayButtons"];
     [self themeSaveColor:tabIcons forKey:@"theme_tabBarIcons"];
     [self themeSaveColor:seekBar forKey:@"theme_seekBar"];
+    [self themeSaveColor:seekBar forKey:@"theme_seekBarLive"];
+    [self themeSaveColor:seekBar forKey:@"theme_seekBarScrubber"];
+    [self themeSaveColor:seekBar forKey:@"theme_seekBarScrubberLive"];
     [self themeSaveColor:bg forKey:@"theme_background"];
     [self themeSaveColor:textP forKey:@"theme_textPrimary"];
     [self themeSaveColor:textS forKey:@"theme_textSecondary"];
@@ -1642,6 +1695,116 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
                     YTSettingsPickerViewController *colorPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"CustomColors") pickerSectionTitle:nil rows:colorRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:colorPicker];
+                    return YES;
+                }]];
+
+            [appearanceRows addObject:[self pageItemWithTitle:@"Seek Bar"
+                titleDescription:@"Color, scrubber dot, custom icon, size, and animations for the progress bar."
+                summary:^NSString *() {
+                    return [self themeSeekBarSummary];
+                }
+                selectBlock:^BOOL(YTSettingsCell *seekCell, NSUInteger seekArg1) {
+                    NSMutableArray <YTSettingsSectionItem *> *seekRows = [NSMutableArray array];
+                    [seekRows addObject:[self themeSectionHeaderWithTitle:@"Track" description:@"Recolor the entire played portion across every surface."]];
+                    [self themeAddColorRowWithTitle:@"SeekBar" titleDescription:@"Color of the played progress track." themeKey:@"theme_seekBar" toRows:seekRows settingsVC:settingsViewController];
+                    [self themeAddColorRowWithTitle:@"SeekBarLive" titleDescription:@"Track color while watching live streams." themeKey:@"theme_seekBarLive" toRows:seekRows settingsVC:settingsViewController];
+                    [seekRows addObject:space];
+                    [seekRows addObject:[self themeSectionHeaderWithTitle:@"Scrubber Dot" description:@"The ball users drag to scrub. Set a color or replace with a custom image."]];
+                    [self themeAddColorRowWithTitle:@"SeekBarScrubber" titleDescription:@"Color of the scrubber ball." themeKey:@"theme_seekBarScrubber" toRows:seekRows settingsVC:settingsViewController];
+                    [self themeAddColorRowWithTitle:@"SeekBarScrubberLive" titleDescription:@"Scrubber ball color for live streams." themeKey:@"theme_seekBarScrubberLive" toRows:seekRows settingsVC:settingsViewController];
+
+                    // Custom scrubber image
+                    BOOL hasImage = [[YTAGUserDefaults standardUserDefaults] objectForKey:@"seekBarScrubberImage"] != nil;
+                    [seekRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:@"Custom Scrubber Image"
+                        titleDescription:@"Replace the scrubber ball with a PNG from your photos library. Images are auto-scaled to 60pt."
+                        accessibilityIdentifier:@"YTAfterglowSectionItem"
+                        detailTextBlock:^NSString *() {
+                            return [[YTAGUserDefaults standardUserDefaults] objectForKey:@"seekBarScrubberImage"] != nil ? @"Set" : LOC(@"None");
+                        }
+                        selectBlock:^BOOL(YTSettingsCell *imgCell, NSUInteger imgArg1) {
+                            if (![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) return YES;
+                            UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+                            picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+                            picker.allowsEditing = NO;
+                            YTAGImagePickerDelegate *delegate = [[YTAGImagePickerDelegate alloc] init];
+                            delegate.prefKey = @"seekBarScrubberImage";
+                            delegate.settingsVC = settingsViewController;
+                            picker.delegate = delegate;
+                            _imagePickerDelegate = delegate;
+                            UIViewController *presenter = settingsViewController.navigationController.topViewController ?: settingsViewController;
+                            while (presenter.presentedViewController) presenter = presenter.presentedViewController;
+                            [presenter presentViewController:picker animated:YES completion:nil];
+                            return YES;
+                        }]];
+                    if (hasImage) {
+                        [seekRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:@"Remove Custom Image"
+                            titleDescription:@"Go back to the stock scrubber ball."
+                            accessibilityIdentifier:@"YTAfterglowSectionItem"
+                            detailTextBlock:^NSString *() { return @"Clear"; }
+                            selectBlock:^BOOL(YTSettingsCell *clearCell, NSUInteger clearArg1) {
+                                [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:@"seekBarScrubberImage"];
+                                ytag_refreshSettingsHierarchy(settingsViewController);
+                                return YES;
+                            }]];
+                    }
+
+                    [seekRows addObject:space];
+                    [seekRows addObject:[self themeSectionHeaderWithTitle:@"Size & Motion" description:@"Make the scrubber ball bigger or add animated transitions on seek."]];
+
+                    // Scrubber size — picker of 0, 25, 50, 75, 100
+                    NSArray *sizeLabels = @[LOC(@"Default"), @"25%", @"50%", @"75%", @"100%"];
+                    NSArray *sizeValues = @[@0, @25, @50, @75, @100];
+                    NSInteger currentSize = ytagInt(@"seekBarScrubberSize");
+                    NSUInteger selectedIndex = 0;
+                    for (NSUInteger i = 0; i < sizeValues.count; i++) {
+                        if ([sizeValues[i] integerValue] == currentSize) { selectedIndex = i; break; }
+                    }
+                    [seekRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:@"Scrubber Size"
+                        titleDescription:@"Scale the scrubber ball (and custom image if set)."
+                        accessibilityIdentifier:@"YTAfterglowSectionItem"
+                        detailTextBlock:^NSString *() {
+                            NSInteger size = ytagInt(@"seekBarScrubberSize");
+                            if (size == 0) return LOC(@"Default");
+                            return [NSString stringWithFormat:@"+%ld%%", (long)size];
+                        }
+                        selectBlock:^BOOL(YTSettingsCell *sizeCell, NSUInteger sizeArg1) {
+                            NSMutableArray *sizeRows = [NSMutableArray array];
+                            for (NSUInteger i = 0; i < sizeLabels.count; i++) {
+                                NSNumber *value = sizeValues[i];
+                                NSString *label = sizeLabels[i];
+                                [sizeRows addObject:[%c(YTSettingsSectionItem) checkmarkItemWithTitle:label
+                                    selectBlock:^BOOL(YTSettingsCell *c, NSUInteger a) {
+                                        ytagSetInt([value integerValue], @"seekBarScrubberSize");
+                                        ytag_refreshSettingsHierarchy(settingsViewController);
+                                        [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
+                                        return YES;
+                                    }]];
+                            }
+                            YTSettingsPickerViewController *sizePicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Scrubber Size" pickerSectionTitle:nil rows:sizeRows selectedItemIndex:selectedIndex parentResponder:[self parentResponder]];
+                            [settingsViewController pushViewController:sizePicker];
+                            return YES;
+                        }]];
+
+                    [seekRows addObject:[self switchWithTitle:@"Animate Seek" key:@"seekBarAnimated"]];
+
+                    [seekRows addObject:space];
+                    [seekRows addObject:[self themeSectionHeaderWithTitle:@"Reset" description:@"Clear every seek-bar override and go back to theme defaults."]];
+                    [seekRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:@"Reset Seek Bar"
+                        titleDescription:@"Remove track, live, scrubber, image, size, and animation overrides."
+                        accessibilityIdentifier:@"YTAfterglowSectionItem"
+                        detailTextBlock:nil
+                        selectBlock:^BOOL(YTSettingsCell *resetCell, NSUInteger resetArg1) {
+                            for (NSString *k in @[@"theme_seekBar", @"theme_seekBarLive", @"theme_seekBarScrubber", @"theme_seekBarScrubberLive", @"seekBarScrubberImage", @"seekBarScrubberSize", @"seekBarAnimated"]) {
+                                [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:k];
+                            }
+                            ytag_clearThemeCache();
+                            ytag_refreshSettingsHierarchy(settingsViewController);
+                            [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
+                            return YES;
+                        }]];
+
+                    YTSettingsPickerViewController *seekPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Seek Bar" pickerSectionTitle:nil rows:seekRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:seekPicker];
                     return YES;
                 }]];
 

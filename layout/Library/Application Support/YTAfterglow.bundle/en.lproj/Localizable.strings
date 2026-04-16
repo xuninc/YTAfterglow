@@ -413,7 +413,10 @@
 "Default" = "Default";
 "OverlayButtons" = "Overlay Buttons";
 "TabBarIcons" = "Tab Bar Icons";
-"SeekBar" = "Seek Bar";
+"SeekBar" = "Track Color";
+"SeekBarLive" = "Track Color (Live)";
+"SeekBarScrubber" = "Scrubber Color";
+"SeekBarScrubberLive" = "Scrubber Color (Live)";
 "Background" = "Background";
 "PrimaryText" = "Primary Text";
 "SecondaryText" = "Secondary Text";
