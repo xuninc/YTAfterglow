@@ -10,10 +10,19 @@ fi
 APP_DIR=$1
 ABS_SUBSTRATE="/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate"
 RPATH_SUBSTRATE="@rpath/CydiaSubstrate.framework/CydiaSubstrate"
+FRAMEWORK_BIN="$APP_DIR/Frameworks/CydiaSubstrate.framework/CydiaSubstrate"
 
 if [[ ! -d "$APP_DIR" ]]; then
   echo "app bundle not found: $APP_DIR" >&2
   exit 1
+fi
+
+# Align the embedded framework's install name with how the app loads it
+# (@rpath instead of /Library/Frameworks/...). Strip signature first so the
+# modification doesn't complain about invalidating code signing.
+if [[ -f "$FRAMEWORK_BIN" ]]; then
+  codesign --remove-signature "$FRAMEWORK_BIN" 2>/dev/null || true
+  install_name_tool -id "$RPATH_SUBSTRATE" "$FRAMEWORK_BIN"
 fi
 
 patched_any=0
