@@ -3,17 +3,7 @@ name: Build Tweaks (Helper)
 on:
   workflow_call:
     inputs:
-      enable_youpip:
-        type: boolean
-        required: true
-        default: false
-
       enable_ytuhd:
-        type: boolean
-        required: true
-        default: false
-
-      enable_yq:
         type: boolean
         required: true
         default: false
@@ -110,7 +100,6 @@ jobs:
           mv packages/*.deb ../ytafterglow.deb
 
       - name: Clone PSHeader
-        if: ${{ inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
         run: |
           if [ -d "$THEOS/include/PSHeader" ]; then
             cd $THEOS/include/PSHeader && git pull
@@ -118,9 +107,10 @@ jobs:
             cd $THEOS/include && git clone --quiet --depth=1 https://github.com/PoomSmart/PSHeader.git
           fi
 
-      - name: Clone YouPiP
-        if: ${{ inputs.enable_youpip }}
-        run: git clone --quiet --depth=1 https://github.com/PoomSmart/YouPiP.git
+      - name: Build Afterglow Overlay bundle
+        run: |
+          cd YTAfterglow/Overlay && make clean package DEBUG=0 FINALPACKAGE=1
+          mv packages/*.deb ../../overlay.deb
 
       - name: Clone YTUHD
         if: ${{ inputs.enable_ytuhd }}
@@ -134,29 +124,12 @@ jobs:
         if: ${{ inputs.enable_ytabc }}
         run: git clone --quiet --depth=1 https://github.com/PoomSmart/YTABConfig.git
 
-      - name: Clone YouGroupSettings
-        run: git clone --quiet --depth=1 https://github.com/xuninc/YouGroupSettings.git
-
-      - name: Clone YouQuality
-        if: ${{ inputs.enable_yq }}
-        run: git clone --quiet --depth=1 https://github.com/PoomSmart/YouQuality.git
-
-      - name: Clone YTVideoOverlay
-        if: ${{ inputs.enable_yq || inputs.enable_youpip }}
-        run: git clone --quiet --depth=1 https://github.com/PoomSmart/YTVideoOverlay.git
-
       - name: Clone DontEatMyContent
         if: ${{ inputs.enable_demc }}
         run: git clone --quiet --depth=1 https://github.com/therealFoxster/DontEatMyContent.git
 
       - name: Clone YTIcons
         run: git clone --quiet --depth=1 https://github.com/xuninc/YTIcons.git
-
-      - name: Build YouPiP
-        if: ${{ inputs.enable_youpip }}
-        run: |
-          cd YouPiP && make clean package DEBUG=0 FINALPACKAGE=1
-          mv packages/*.deb ../youpip.deb
 
       - name: Build YTUHD
         if: ${{ inputs.enable_ytuhd }}
@@ -175,23 +148,6 @@ jobs:
         run: |
           cd YTABConfig && make clean package DEBUG=0 FINALPACKAGE=1
           mv packages/*.deb ../ytabc.deb
-
-      - name: Build YouGroupSettings
-        run: |
-          cd YouGroupSettings && make clean package DEBUG=0 FINALPACKAGE=1
-          mv packages/*.deb ../ygs.deb
-
-      - name: Build YouQuality
-        if: ${{ inputs.enable_yq }}
-        run: |
-          cd YouQuality && make clean package DEBUG=0 FINALPACKAGE=1
-          mv packages/*.deb ../yq.deb
-
-      - name: Build YTVideoOverlay
-        if: ${{ inputs.enable_yq || inputs.enable_youpip }}
-        run: |
-          cd YTVideoOverlay && make clean package DEBUG=0 FINALPACKAGE=1
-          mv packages/*.deb ../ytvo.deb
 
       - name: Build DontEatMyContent
         if: ${{ inputs.enable_demc }}
