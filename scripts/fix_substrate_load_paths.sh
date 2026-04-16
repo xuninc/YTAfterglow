@@ -18,10 +18,10 @@ if [[ ! -d "$APP_DIR" ]]; then
 fi
 
 # Align the embedded framework's install name with how the app loads it
-# (@rpath instead of /Library/Frameworks/...). Strip signature first so the
-# modification doesn't complain about invalidating code signing.
+# (@rpath instead of /Library/Frameworks/...). install_name_tool will emit a
+# sig-invalidation warning — harmless, since the whole IPA is re-signed on
+# install.
 if [[ -f "$FRAMEWORK_BIN" ]]; then
-  codesign --remove-signature "$FRAMEWORK_BIN" 2>/dev/null || true
   install_name_tool -id "$RPATH_SUBSTRATE" "$FRAMEWORK_BIN"
 fi
 
@@ -34,7 +34,6 @@ while IFS= read -r binary; do
 
   if otool -L "$binary" | grep -q "$ABS_SUBSTRATE"; then
     echo "Patching Substrate load path in $binary"
-    codesign --remove-signature "$binary" 2>/dev/null || true
     install_name_tool -change "$ABS_SUBSTRATE" "$RPATH_SUBSTRATE" "$binary"
     patched_any=1
   fi
