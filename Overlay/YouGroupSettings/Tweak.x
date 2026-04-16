@@ -94,3 +94,7 @@ NSBundle *TweakBundle() {
 }
 
 %end
+
+%ctor {
+    %init;
+}
