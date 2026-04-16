@@ -23,7 +23,7 @@ __attribute__((constructor)) static void initCacheQueue() {
     colorCache = [NSMutableDictionary dictionary];
 }
 
-static UIColor *themeColor(NSString *key) {
+UIColor *themeColor(NSString *key) {
     if (!cacheQueue || !colorCache) return nil;
 
     __block id cached = nil;
@@ -264,7 +264,7 @@ static void ytag_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacit
 }
 %end
 
-#pragma mark - Seek/Progress Bar
+#pragma mark - Seek/Progress Bar (legacy quiet-bar hook only; full paint lives in SeekBar.x)
 
 %hook YTInlinePlayerBarContainerView
 - (id)quietProgressBarColor {
@@ -272,24 +272,6 @@ static void ytag_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacit
     if (c) return c;
     if (ytagBool(@"redProgressBar")) return [UIColor redColor];
     return %orig;
-}
-%end
-
-%hook YTSegmentableInlinePlayerBarView
-- (void)setPlayedProgressBarColor:(id)color {
-    UIColor *c = themeColor(kThemeSeekBar);
-    %orig(c ?: color);
-}
-- (void)setBufferedProgressBarColor:(id)color {
-    if (themeColor(kThemeSeekBar) || ytagBool(@"redProgressBar"))
-        %orig([UIColor colorWithRed:0.65 green:0.65 blue:0.65 alpha:0.60]);
-    else %orig(color);
-}
-
-- (void)layoutSubviews {
-    %orig;
-    UIColor *glowColor = themeColor(kThemeSeekBar) ?: themeColor(kThemeAccent);
-    ytag_applyGlowToLayer(self.layer, glowColor, 0.85, 8.0);
 }
 %end
 
