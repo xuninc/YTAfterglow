@@ -56,6 +56,9 @@ static NSString *const kSeekBarAnimated           = @"seekBarAnimated";         
 @property (nonatomic, readonly) id modularPlayerBar;
 @property (nonatomic, readonly) id segmentablePlayerBar;
 @property (nonatomic, readonly) UIView *playerBar;
+@end
+
+@interface YTMainAppVideoPlayerOverlayViewController (YTAGSeekBar)
 - (id)playerBarController;
 @end
 
