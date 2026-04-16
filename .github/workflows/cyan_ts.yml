@@ -100,7 +100,7 @@ jobs:
       - name: Generate .cyan file
         if: ${{ github.event.inputs.create_cyan }}
         run: |
-          tweaks="ytafterglow.deb OpenYoutubeSafariExtension.appex"
+          tweaks="OpenYoutubeSafariExtension.appex"
           for f in *.deb; do
             [ -f "$f" ] && tweaks="$tweaks $f"
           done
