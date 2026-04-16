@@ -111,6 +111,7 @@ jobs:
           unzip -q YTAfterglow_unsigned.ipa -d ipa_contents
           APP_DIR=$(find ipa_contents/Payload -maxdepth 1 -name "*.app" -type d | head -1)
           bash scripts/scrub_signing_artifacts.sh "$APP_DIR"
+          bash scripts/fix_appex_bundle_ids.sh "$APP_DIR" "${{ github.event.inputs.bundle_id }}"
           bash scripts/fix_substrate_load_paths.sh "$APP_DIR"
           cd ipa_contents
           zip -qr ../YTAfterglow_unsigned_fixed.ipa Payload
