@@ -278,7 +278,7 @@
 "CopyWithTimestamp" = "Copy timestamped links";
 "CopyWithTimestampDesc" = "Allows to copy timestamped link to the clipboard by pressing pause button.";
 "PauseOnOverlay" = "Pause on overlay";
-"PauseOnOverlayDesc" = "Sets playback on pause if overlay appears.";
+"PauseOnOverlayDesc" = "Pauses when overlay appears and resumes when it hides.";
 "DontSnap2Chapter" = "Disable snap to chapter";
 "DontSnap2ChapterDesc" = "Disables skipping to the next episode by double-tap gesture.";
 "NoTwoFingerSnapToChapter" = "Disable two finger double tap";

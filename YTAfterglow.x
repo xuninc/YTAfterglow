@@ -8,6 +8,7 @@ static UIImage *YTImageNamed(NSString *imageName) {
 
 static NSString *const YTAGAdvancedModePromptChoiceKey = @"advancedModePromptChoiceMade";
 static NSString *const YTAGLegacyAdvancedModeReminderKey = @"advancedModeReminder";
+static const void *kYTAGPauseOnOverlayInternalChangeKey = &kYTAGPauseOnOverlayInternalChangeKey;
 static BOOL ytagDidScheduleAdvancedModePrompt = NO;
 static id ytagAdvancedModePromptObserver = nil;
 
@@ -385,8 +386,15 @@ static BOOL canRememberLoopMode = NO;
     %orig;
 
     if (!ytagBool(@"pauseOnOverlay")) return;
+    if ([objc_getAssociatedObject(self, kYTAGPauseOnOverlayInternalChangeKey) boolValue]) return;
 
-    visible ? [self.playerViewController pause] : [self.playerViewController play];
+    id playerController = self.playerViewController;
+    SEL action = visible ? @selector(pause) : @selector(play);
+    if (![playerController respondsToSelector:action]) return;
+
+    objc_setAssociatedObject(self, kYTAGPauseOnOverlayInternalChangeKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    ((void (*)(id, SEL))objc_msgSend)(playerController, action);
+    objc_setAssociatedObject(self, kYTAGPauseOnOverlayInternalChangeKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 %end
 
