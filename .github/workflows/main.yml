@@ -99,7 +99,7 @@ jobs:
 
       - name: Inject tweaks into IPA
         run: |
-          tweaks="ytafterglow.deb OpenYoutubeSafariExtension.appex"
+          tweaks="OpenYoutubeSafariExtension.appex"
           for f in *.deb; do
             [ -f "$f" ] && tweaks="$tweaks $f"
           done
