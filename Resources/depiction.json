@@ -37,12 +37,17 @@
                 {
                     "text": "Corey Hamilton",
                     "class": "DepictionTableTextView",
-                    "title": "Maintainer"
+                    "title": "Maintainer / Senior Developer"
                 },
                 {
-                    "text": "Claude Opus 4.6, Codex",
+                    "text": "Claude Opus 4.6",
                     "class": "DepictionTableTextView",
-                    "title": "AI Collaborators"
+                    "title": "AI Core Developer"
+                },
+                {
+                    "text": "Codex (forgets things)",
+                    "class": "DepictionTableTextView",
+                    "title": "AI Contributor"
                 },
                 {
                     "text": "Based on YTLite by dayanch96 (last open-source files, pre-4.0)",
