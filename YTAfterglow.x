@@ -6,6 +6,8 @@ static UIImage *YTImageNamed(NSString *imageName) {
     return [UIImage imageNamed:imageName inBundle:[NSBundle mainBundle] compatibleWithTraitCollection:nil];
 }
 
+static NSString *const YTAGAdvancedModePromptChoiceKey = @"advancedModePromptChoiceMade";
+static NSString *const YTAGLegacyAdvancedModeReminderKey = @"advancedModeReminder";
 static BOOL ytagDidScheduleAdvancedModePrompt = NO;
 static id ytagAdvancedModePromptObserver = nil;
 
@@ -19,7 +21,7 @@ static UIViewController *ytagTopViewController(UIViewController *controller) {
 
 static void ytagPresentAdvancedModeReminderIfNeeded(void) {
     if (ytagDidScheduleAdvancedModePrompt) return;
-    if (ytagBool(@"advancedMode") || ytagBool(@"advancedModeReminder")) {
+    if (ytagBool(@"advancedMode") || ytagBool(YTAGAdvancedModePromptChoiceKey)) {
         if (ytagAdvancedModePromptObserver) {
             [[NSNotificationCenter defaultCenter] removeObserver:ytagAdvancedModePromptObserver];
             ytagAdvancedModePromptObserver = nil;
@@ -54,23 +56,30 @@ static void ytagPresentAdvancedModeReminderIfNeeded(void) {
         [[NSNotificationCenter defaultCenter] removeObserver:ytagAdvancedModePromptObserver];
         ytagAdvancedModePromptObserver = nil;
     }
-    ytagSetBool(YES, @"advancedModeReminder");
-    [[YTAGUserDefaults standardUserDefaults] synchronize];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.75 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         UIViewController *presenter = ytagTopViewController(window.rootViewController);
-        if (!presenter) return;
+        if (!presenter || !presenter.view.window || [presenter isKindOfClass:[UIAlertController class]]) {
+            ytagDidScheduleAdvancedModePrompt = NO;
+            return;
+        }
 
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"AdvancedModePromptTitle")
                                                                        message:LOC(@"AdvancedModePromptMessage")
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:LOC(@"KeepStandardMode")
                                                   style:UIAlertActionStyleCancel
-                                                handler:nil]];
+                                                handler:^(__unused UIAlertAction *action) {
+            ytagSetBool(YES, YTAGAdvancedModePromptChoiceKey);
+            ytagSetBool(YES, YTAGLegacyAdvancedModeReminderKey);
+            [[YTAGUserDefaults standardUserDefaults] synchronize];
+        }]];
         UIAlertAction *enableAction = [UIAlertAction actionWithTitle:LOC(@"EnableAdvancedMode")
                                                                style:UIAlertActionStyleDefault
                                                              handler:^(__unused UIAlertAction *action) {
             ytagSetBool(YES, @"advancedMode");
+            ytagSetBool(YES, YTAGAdvancedModePromptChoiceKey);
+            ytagSetBool(YES, YTAGLegacyAdvancedModeReminderKey);
             [[YTAGUserDefaults standardUserDefaults] synchronize];
         }];
         [alert addAction:enableAction];

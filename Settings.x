@@ -1243,6 +1243,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
     NSString *adsTitle = LOC(@"Ads");
     NSString *interfaceTitle = LOC(@"Interface");
+    NSString *privacyTitle = ytag_localizedStringOrFallback(@"Privacy", @"Privacy");
     NSString *navbarTitle = LOC(@"Navbar");
     NSString *tabbarTitle = LOC(@"Tabbar");
     NSString *legacyTitle = @"Legacy";
@@ -1258,7 +1259,6 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSString *miniplayerTitle = @"Miniplayer";
     NSString *overlayTitle = LOC(@"Overlay");
     NSString *shortsTitle = LOC(@"Shorts");
-    NSString *behaviorTitle = @"Behavior";
     NSString *layoutButtonsTitle = @"Layout & Buttons";
     NSString *downloadsTitle = LOC(@"Downloads");
     NSString *extrasTitle = @"Extras";
@@ -1268,7 +1268,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSString *creditsTitle = LOC(@"Credits");
 
     [entries addObject:[self ytag_searchPageEntryWithTitle:adsTitle description:@"Remove ads and promotional clutter." path:@[adsTitle] aliases:@[@"sponsored", @"promotions"]]];
-    [entries addObject:[self ytag_searchPageEntryWithTitle:interfaceTitle description:@"App chrome, tabs, startup, and search behavior." path:@[interfaceTitle] aliases:@[@"navigation", @"search", @"tab bar"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:interfaceTitle description:@"App chrome, tabs, startup, and input behavior." path:@[interfaceTitle] aliases:@[@"navigation", @"tab bar", @"keyboard"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:privacyTitle description:@"Search privacy, redirect cleanup, and cleaner shared links." path:@[privacyTitle] aliases:@[@"privacy", @"tracking", @"search history", @"shared links"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:navbarTitle description:@"Top bar buttons and header presentation." path:@[interfaceTitle, navbarTitle] aliases:@[@"top bar", @"header"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:tabbarTitle description:@"Visible tabs, labels, indicators, and bar styling." path:@[interfaceTitle, tabbarTitle] aliases:@[@"tabs", @"pivot bar"]]];
     if (isAdvanced) {
@@ -1291,7 +1292,6 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     }
 
     [entries addObject:[self ytag_searchPageEntryWithTitle:shortsTitle description:@"Behavior, conversion, and optional UI cleanup for Shorts." path:@[shortsTitle] aliases:@[@"reels"]]];
-    [entries addObject:[self ytag_searchPageEntryWithTitle:behaviorTitle description:@"Open, skip, resume, or convert Shorts." path:@[shortsTitle, behaviorTitle] aliases:@[@"shorts behavior", @"shorts actions"]]];
     if (isAdvanced) {
         [entries addObject:[self ytag_searchPageEntryWithTitle:layoutButtonsTitle description:@"Hide specific Shorts UI elements and action buttons." path:@[shortsTitle, layoutButtonsTitle] aliases:@[@"shorts layout", @"shorts buttons"]]];
     }
@@ -1300,9 +1300,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
     [entries addObject:[self ytag_searchPageEntryWithTitle:extrasTitle description:@"Extra tools, browse cleanup, and smaller utility tweaks." path:@[extrasTitle] aliases:@[@"misc", @"utilities"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:feedTitle description:@"Trim browse-surface menus you never use." path:@[extrasTitle, feedTitle] aliases:@[@"browse", @"video menus"]]];
-    if (isAdvanced) {
-        [entries addObject:[self ytag_searchPageEntryWithTitle:commentsTitle description:@"Comment sorting and comment-surface cleanup." path:@[extrasTitle, commentsTitle] aliases:@[@"comment sorting"]]];
-    }
+    [entries addObject:[self ytag_searchPageEntryWithTitle:commentsTitle description:@"Comment sorting and comment-surface cleanup." path:@[extrasTitle, commentsTitle] aliases:@[@"comment sorting"]]];
 
     [entries addObject:[self ytag_searchPageEntryWithTitle:aboutTitle description:@"Maintenance tools, advanced mode, and credits." path:@[aboutTitle] aliases:@[@"settings info", @"maintenance"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:creditsTitle description:@"The people, projects, and libraries behind Afterglow." path:@[aboutTitle, creditsTitle] aliases:@[@"about", @"acknowledgements"]]];
@@ -1318,14 +1316,18 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     [entries addObject:[self ytag_searchEntryWithTitle:@"Manage Tabs" description:@"Drag tabs between active and inactive sections, or tap a row to toggle it." path:@[interfaceTitle, tabbarTitle] targetTitle:@"Manage Tabs" aliases:@[@"tab editor", @"reorder tabs"]]];
 
     [entries addObject:[self ytag_searchEntryWithTitle:LOC(@"Startup") description:@"Choose which active tab opens first." path:@[interfaceTitle] targetTitle:LOC(@"Startup") aliases:@[@"startup tab", @"launch tab"]]];
-    [self ytag_addSearchEntries:entries forSettingKeys:@[@"StartupAnimation", @"NoSearchHistory", @"FloatingKeyboard"] path:@[interfaceTitle] aliasesByKey:@{
-        @"NoSearchHistory": @[@"search suggestions", @"recent searches"],
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"StartupAnimation", @"FloatingKeyboard"] path:@[interfaceTitle] aliasesByKey:@{
         @"FloatingKeyboard": @[@"ipad keyboard"]
     }];
     if (isAdvanced) {
         [self ytag_addSearchEntries:entries forSettingKeys:@[@"DisableRTL"] path:@[interfaceTitle] aliasesByKey:@{ @"DisableRTL": @[@"right to left", @"ltr"] }];
         [self ytag_addSearchEntries:entries forSettingKeys:@[@"OldYTUI"] path:@[interfaceTitle, legacyTitle] aliasesByKey:@{ @"OldYTUI": @[@"legacy ui"] }];
     }
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"NoSearchHistory", @"NoLinkTracking", @"NoShareChunk"] path:@[privacyTitle] aliasesByKey:@{
+        @"NoSearchHistory": @[@"search suggestions", @"recent searches"],
+        @"NoLinkTracking": @[@"tracking links", @"redirects"],
+        @"NoShareChunk": @[@"clean links", @"shared links"]
+    }];
 
     [entries addObject:[self ytag_searchEntryWithTitle:LOC(@"ResetAllColors") description:@"Clear every theme override and go back to stock colors." path:@[themesTitle] targetTitle:LOC(@"ResetAllColors") aliases:@[@"reset theme", @"default theme"]]];
     [self ytag_addSearchEntries:entries forLiteralTitles:@[
@@ -1374,7 +1376,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         }];
     }
 
-    [self ytag_addSearchEntries:entries forSettingKeys:@[@"ShortsOnlyMode", @"AutoSkipShorts", @"HideShorts", @"ShortsProgress", @"PinchToFullscreenShorts", @"ShortsToRegular", @"ResumeShorts"] path:@[shortsTitle, behaviorTitle] aliasesByKey:@{
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"ShortsOnlyMode", @"AutoSkipShorts", @"HideShorts", @"ShortsProgress", @"PinchToFullscreenShorts", @"ShortsToRegular", @"ResumeShorts"] path:@[shortsTitle] aliasesByKey:@{
         @"ShortsToRegular": @[@"convert shorts"],
         @"PinchToFullscreenShorts": @[@"pinch fullscreen"]
     }];
@@ -1385,18 +1387,14 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"RemovePlayNext", @"RemoveWatchLaterMenu", @"RemoveSaveToPlaylistMenu", @"RemoveNotInterestedMenu", @"RemoveDontRecommendMenu", @"RemoveReportMenu"] path:@[extrasTitle, feedTitle] aliasesByKey:@{
         @"RemoveDontRecommendMenu": @[@"don't recommend channel"]
     }];
-    if (isAdvanced) {
-        [self ytag_addSearchEntries:entries forSettingKeys:@[@"StickSortComments", @"HideSortComments"] path:@[extrasTitle, commentsTitle] aliasesByKey:nil];
-    }
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"StickSortComments", @"HideSortComments"] path:@[extrasTitle, commentsTitle] aliasesByKey:nil];
 
-    [self ytag_addSearchEntries:entries forSettingKeys:@[@"CopyVideoInfo", @"SaveProfilePhoto", @"PostManager", @"CommentManager", @"NoLinkTracking", @"NativeShare", @"NoShareChunk", @"FixAlbums"] path:@[extrasTitle] aliasesByKey:@{
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"CopyVideoInfo", @"SaveProfilePhoto", @"PostManager", @"CommentManager", @"NativeShare", @"FixAlbums"] path:@[extrasTitle] aliasesByKey:@{
         @"CopyVideoInfo": @[@"copy info", @"video details"],
         @"SaveProfilePhoto": @[@"avatar"],
         @"PostManager": @[@"community posts"],
         @"CommentManager": @[@"long press comments"],
-        @"NoLinkTracking": @[@"tracking links"],
-        @"NativeShare": @[@"share sheet"],
-        @"NoShareChunk": @[@"clean links"]
+        @"NativeShare": @[@"share sheet"]
     }];
 
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"Advanced", @"ClearCache", @"ResetSettings"] path:@[aboutTitle] aliasesByKey:@{
@@ -1422,7 +1420,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSArray *navbarKeys = @[@"noCast", @"noNotifsButton", @"noSearchButton", @"noVoiceSearchButton", @"stickyNavbar", @"noSubbar", @"noYTLogo", @"premiumYTLogo"];
     NSArray *tabbarKeys = @[@"frostedPivot", @"removeLabels", @"removeIndicators"];
     NSArray *legacyKeys = @[@"oldYTUI"];
-    NSArray *interfaceKeys = [[[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObject:@"noSearchHistory"] arrayByAddingObjectsFromArray:[@[@"disableRTL"] arrayByAddingObjectsFromArray:legacyKeys]];
+    NSArray *interfaceKeys = [[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObjectsFromArray:[@[@"disableRTL"] arrayByAddingObjectsFromArray:legacyKeys]];
+    NSArray *privacyKeys = @[@"noSearchHistory", @"noLinkTracking", @"noShareChunk"];
     NSArray *playerPlaybackKeys = @[@"backgroundPlayback", @"disableAutoplay", @"hideAutoplay", @"disableAutoCaptions", @"rememberCaptionState", @"rememberLoop", @"noContentWarning", @"classicQuality", @"endScreenCards", @"noRelatedVids", @"noContinueWatching", @"noContinueWatchingPrompt", @"noRelatedWatchNexts"];
     NSArray *playerControlKeys = @[@"portraitFullscreen", @"copyWithTimestamp", @"tapToSeek", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"pauseOnOverlay", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
     NSArray *playerOverlayKeys = @[@"hideSubs", @"showPlayerShareButton", @"showPlayerSaveButton", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"noFullscreenActions", @"persistentProgressBar", @"stockVolumeHUD", @"noWatermarks", @"disableAmbientMode", @"videoEndTime", @"24hrFormat", @"hideHeatwaves", @"redProgressBar"];
@@ -1434,7 +1433,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSArray *shortsUIKeys = @[@"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"];
     NSArray *feedKeys = @[@"removePlayNext", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu"];
     NSArray *commentKeys = @[@"stickSortComments", @"hideSortComments"];
-    NSArray *extraToolKeys = @[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare", @"noLinkTracking", @"noShareChunk"];
+    NSArray *extraToolKeys = @[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare"];
     NSArray *extrasKeys = [[[feedKeys arrayByAddingObjectsFromArray:commentKeys] arrayByAddingObjectsFromArray:extraToolKeys] copy];
 
     YTSettingsSectionItem *searchSettings = [self pageItemWithTitle:ytag_localizedStringOrFallback(@"SearchSettings", @"Search Settings")
@@ -1467,7 +1466,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     [sectionItems addObject:ads];
 
     YTSettingsSectionItem *interface = [self pageItemWithTitle:LOC(@"Interface")
-        titleDescription:@"App chrome, tabs, startup, and search behavior."
+        titleDescription:@"App chrome, tabs, startup, and input behavior."
         summary:^NSString *() {
             NSArray *controlKeys = [navbarKeys arrayByAddingObjectsFromArray:interfaceKeys];
             return [self enabledSummaryForKeys:controlKeys];
@@ -1534,7 +1533,6 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
             [rows addObject:[self startupTabItemWithSettingsVC:settingsViewController]];
             [rows addObject:[self switchWithTitle:@"StartupAnimation" key:@"startupAnimation"]];
-            [rows addObject:[self switchWithTitle:@"NoSearchHistory" key:@"noSearchHistory"]];
             [rows addObject:[self switchWithTitle:@"FloatingKeyboard" key:@"floatingKeyboard"]];
             if (isAdvanced) {
                 [rows addObject:[self switchWithTitle:@"DisableRTL" key:@"disableRTL"]];
@@ -1562,6 +1560,24 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             return YES;
         }];
     [sectionItems addObject:interface];
+
+    YTSettingsSectionItem *privacy = [self pageItemWithTitle:ytag_localizedStringOrFallback(@"Privacy", @"Privacy")
+        titleDescription:@"Search history, redirects, and shared-link cleanup."
+        summary:^NSString *() {
+            return [self enabledSummaryForKeys:privacyKeys];
+        }
+        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+            NSArray <YTSettingsSectionItem *> *rows = @[
+                [self switchWithTitle:@"NoSearchHistory" key:@"noSearchHistory"],
+                [self switchWithTitle:@"NoLinkTracking" key:@"noLinkTracking"],
+                [self switchWithTitle:@"NoShareChunk" key:@"noShareChunk"]
+            ];
+
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:ytag_localizedStringOrFallback(@"Privacy", @"Privacy") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+            [settingsViewController pushViewController:picker];
+            return YES;
+        }];
+    [sectionItems addObject:privacy];
 
     YTSettingsSectionItem *appearance = [self pageItemWithTitle:@"Themes"
         titleDescription:@"Curated themes, custom colors, gradients, and polish."
@@ -1859,28 +1875,18 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
 
-            [rows addObject:[self pageItemWithTitle:@"Behavior"
-                titleDescription:@"Open, skip, resume, or convert Shorts."
-                summary:^NSString *() {
-                    return [self enabledSummaryForKeys:shortsBehaviorKeys];
-                }
-                selectBlock:^BOOL (YTSettingsCell *behaviorCell, NSUInteger behaviorArg1) {
-                    NSArray <YTSettingsSectionItem *> *behaviorRows = @[
-                        [self switchWithTitle:@"ShortsOnlyMode" key:@"shortsOnlyMode"],
-                        [self switchWithTitle:@"AutoSkipShorts" key:@"autoSkipShorts"],
-                        [self switchWithTitle:@"HideShorts" key:@"hideShorts"],
-                        [self switchWithTitle:@"ShortsProgress" key:@"shortsProgress"],
-                        [self switchWithTitle:@"PinchToFullscreenShorts" key:@"pinchToFullscreenShorts"],
-                        [self switchWithTitle:@"ShortsToRegular" key:@"shortsToRegular"],
-                        [self switchWithTitle:@"ResumeShorts" key:@"resumeShorts"]
-                    ];
-
-                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Shorts Behavior" pickerSectionTitle:nil rows:behaviorRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-                    [settingsViewController pushViewController:picker];
-                    return YES;
-                }]];
+            [rows addObjectsFromArray:@[
+                [self switchWithTitle:@"ShortsOnlyMode" key:@"shortsOnlyMode"],
+                [self switchWithTitle:@"AutoSkipShorts" key:@"autoSkipShorts"],
+                [self switchWithTitle:@"HideShorts" key:@"hideShorts"],
+                [self switchWithTitle:@"ShortsProgress" key:@"shortsProgress"],
+                [self switchWithTitle:@"PinchToFullscreenShorts" key:@"pinchToFullscreenShorts"],
+                [self switchWithTitle:@"ShortsToRegular" key:@"shortsToRegular"],
+                [self switchWithTitle:@"ResumeShorts" key:@"resumeShorts"]
+            ]];
 
             if (isAdvanced) {
+                [rows addObject:space];
                 [rows addObject:[self pageItemWithTitle:@"Layout & Buttons"
                     titleDescription:@"Hide specific Shorts UI elements and action buttons."
                     summary:^NSString *() {
@@ -1963,23 +1969,21 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     return YES;
                 }]];
 
-            if (isAdvanced) {
-                [rows addObject:[self pageItemWithTitle:@"Comments"
-                    titleDescription:@"Comment sorting and comment-surface cleanup."
-                    summary:^NSString *() {
-                        return [self enabledSummaryForKeys:commentKeys];
-                    }
-                    selectBlock:^BOOL (YTSettingsCell *commentCell, NSUInteger commentArg1) {
-                        NSArray <YTSettingsSectionItem *> *commentRows = @[
-                            [self switchWithTitle:@"StickSortComments" key:@"stickSortComments"],
-                            [self switchWithTitle:@"HideSortComments" key:@"hideSortComments"]
-                        ];
+            [rows addObject:[self pageItemWithTitle:@"Comments"
+                titleDescription:@"Comment sorting and comment-surface cleanup."
+                summary:^NSString *() {
+                    return [self enabledSummaryForKeys:commentKeys];
+                }
+                selectBlock:^BOOL (YTSettingsCell *commentCell, NSUInteger commentArg1) {
+                    NSArray <YTSettingsSectionItem *> *commentRows = @[
+                        [self switchWithTitle:@"StickSortComments" key:@"stickSortComments"],
+                        [self switchWithTitle:@"HideSortComments" key:@"hideSortComments"]
+                    ];
 
-                        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Comments" pickerSectionTitle:nil rows:commentRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-                        [settingsViewController pushViewController:picker];
-                        return YES;
-                    }]];
-            }
+                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Comments" pickerSectionTitle:nil rows:commentRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:picker];
+                    return YES;
+                }]];
 
             [rows addObject:space];
             [rows addObject:[self themeSectionHeaderWithTitle:@"Tools" description:@"Extra utility actions that do not belong to one primary surface."]];
@@ -1987,9 +1991,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             [rows addObject:[self switchWithTitle:@"SaveProfilePhoto" key:@"saveProfilePhoto"]];
             [rows addObject:[self switchWithTitle:@"PostManager" key:@"postManager"]];
             [rows addObject:[self switchWithTitle:@"CommentManager" key:@"commentManager"]];
-            [rows addObject:[self switchWithTitle:@"NoLinkTracking" key:@"noLinkTracking"]];
             [rows addObject:[self switchWithTitle:@"NativeShare" key:@"nativeShare"]];
-            [rows addObject:[self switchWithTitle:@"NoShareChunk" key:@"noShareChunk"]];
             [rows addObject:[self switchWithTitle:@"FixAlbums" key:@"fixAlbums"]];
 
             YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Extras" pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];

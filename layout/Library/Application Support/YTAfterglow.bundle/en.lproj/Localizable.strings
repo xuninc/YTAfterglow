@@ -8,6 +8,7 @@
 "SearchSettingsNoResults" = "No matching settings";
 "SearchSettingsNoResultsDesc" = "Try a broader word like player, overlay, or comments.";
 "SearchSettingsOpenFailed" = "That setting could not be opened right now.";
+"Privacy" = "Privacy";
 
 /* Downloading options */
 "Downloading" = "Downloading";
@@ -491,7 +492,7 @@
 
 "Other" = "Other";
 "CopyVideoInfo" = "Copy video details";
-"CopyVideoInfoDesc" = "Adds a copy action to the video details panel.";
+"CopyVideoInfoDesc" = "Long press the video details panel to copy video details.";
 "NoContinueWatching" = "Hide \"Continue watching\"";
 "NoContinueWatchingDesc" = "Hides YouTube's \"Continue watching\" surface.";
 "NoLinkTracking" = "Disable link tracking";
