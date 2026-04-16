@@ -33,6 +33,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 - (NSString *)themeHexFromColor:(UIColor *)color;
 - (NSString *)themeColorDetailForKey:(NSString *)key;
 - (NSString *)themeCustomColorsSummary;
+- (NSString *)themeSeekBarSummary;
 - (NSString *)themeGradientSummary;
 - (NSString *)themeAppearanceSummary;
 - (UIColor *)themeLoadColorForKey:(NSString *)key;

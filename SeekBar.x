@@ -1,22 +1,6 @@
 #import "YTAfterglow.h"
-#import <UIKit/UIImage+Private.h>
-#import <UIKit/UIImageAsset+Private.h>
-#import <YouTubeHeader/ASImageNodeDrawParameters.h>
-#import <YouTubeHeader/_ASDisplayView.h>
-#import <YouTubeHeader/ELMContainerNode.h>
-#import <YouTubeHeader/ELMNodeController.h>
-#import <YouTubeHeader/UIColor+YouTube.h>
-#import <YouTubeHeader/UIImage+YouTube.h>
-#import <YouTubeHeader/YTInlineMutedPlaybackScrubberView.h>
-#import <YouTubeHeader/YTInlineMutedPlaybackScrubbingSlider.h>
-#import <YouTubeHeader/YTIPlayerBarDecorationModel.h>
-#import <YouTubeHeader/YTMainAppVideoPlayerOverlayViewController.h>
-#import <YouTubeHeader/YTPlayerBarController.h>
-#import <YouTubeHeader/YTPlayerBarRectangleDecorationView.h>
-#import <YouTubeHeader/YTPlayerBarScrubberDotDecorationController.h>
-#import <YouTubeHeader/YTPlayerBarScrubberDotDecorationView.h>
-#import <YouTubeHeader/YTPlayerBarSegmentView.h>
-#import <YouTubeHeader/YTSegmentableInlinePlayerBarView.h>
+#import <objc/runtime.h>
+#import <objc/message.h>
 
 // Additional keys owned by SeekBar
 static NSString *const kThemeSeekBar              = @"theme_seekBar";
@@ -33,6 +17,13 @@ static NSString *const kSeekBarAnimated           = @"seekBarAnimated";         
 #define YTAG_PLAYER_BAR_MODE_LIVE     4
 #define YTAG_PLAYER_BAR_MODE_LIVE_VDR 5
 #define YTAG_PLAYER_BAR_OVERLAY_MODE_DEFAULT 0
+
+// Forward declarations for classes not already in YTAfterglow.h/YouTubeHeaders.h
+@class YTIPlayerBarDecorationModel;
+@class ASImageNodeDrawParameters;
+
+@interface YTInlineMutedPlaybackScrubbingSlider : UISlider
+@end
 
 @interface YTModularPlayerBarView : UIView
 @property (retain, nonatomic) UIImageView *ytagScrubberImageView;
@@ -65,6 +56,34 @@ static NSString *const kSeekBarAnimated           = @"seekBarAnimated";         
 @property (nonatomic, readonly) id modularPlayerBar;
 @property (nonatomic, readonly) id segmentablePlayerBar;
 @property (nonatomic, readonly) UIView *playerBar;
+- (id)playerBarController;
+@end
+
+@interface YTPlayerBarScrubberDotDecorationView : UIView
+@property (nonatomic, readonly) UIView *scrubberDot;
+@end
+
+@interface YTPlayerBarSegmentView : UIView
+@end
+
+@interface YTPlayerBarRectangleDecorationView : UIView
+@end
+
+@interface YTInlineMutedPlaybackScrubberView : UIView
+@end
+
+@interface ASImageNodeDrawParameters : NSObject
+@property (nonatomic, readonly) CGRect drawRect;
+@end
+
+// UIKit+Private / YouTube categories
+@interface UIImage (YTAGSeekBar)
+- (UIImage *)_flatImageWithColor:(UIColor *)color;
+- (UIImage *)yt_imageScaledToSize:(CGSize)size;
+@end
+
+@interface UIImageAsset (YTAGSeekBar)
+@property (nonatomic, readonly) NSString *assetName;
 @end
 
 #pragma mark - Helpers
@@ -464,13 +483,18 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
         return;
     }
     @try {
-        YTIPlayerBarDecorationModel *model = [self valueForKey:@"_model"];
-        NSInteger originalOverlayMode = model.playingState.overlayMode;
-        model.playingState.overlayMode = YTAG_PLAYER_BAR_OVERLAY_MODE_DEFAULT;
-        if ([model respondsToSelector:@selector(style)] && [[model valueForKey:@"style"] respondsToSelector:@selector(setGradientColor:)])
-            [[model valueForKey:@"style"] setValue:nil forKey:@"gradientColor"];
+        id model = [self valueForKey:@"_model"];
+        id playingState = [model valueForKey:@"playingState"];
+        NSNumber *originalOverlayMode = [playingState valueForKey:@"overlayMode"];
+        [playingState setValue:@(YTAG_PLAYER_BAR_OVERLAY_MODE_DEFAULT) forKey:@"overlayMode"];
+        @try {
+            id style = [model valueForKey:@"style"];
+            if ([style respondsToSelector:@selector(setGradientColor:)])
+                [style setValue:nil forKey:@"gradientColor"];
+        } @catch (id ex2) {}
         %orig;
-        model.playingState.overlayMode = originalOverlayMode;
+        if (originalOverlayMode)
+            [playingState setValue:originalOverlayMode forKey:@"overlayMode"];
     } @catch (id ex) {
         %orig;
     }
@@ -479,8 +503,10 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
 - (void)drawProgressRect:(CGRect)rect withColor:(UIColor *)color {
     UIColor *targetColor = color;
     @try {
-        YTIPlayerBarDecorationModel *model = [self valueForKey:@"_model"];
-        BOOL isLive = seekBarIsLiveMode(model.playingState.mode);
+        id model = [self valueForKey:@"_model"];
+        id playingState = [model valueForKey:@"playingState"];
+        NSInteger mode = [[playingState valueForKey:@"mode"] integerValue];
+        BOOL isLive = seekBarIsLiveMode(mode);
         UIColor *override = seekBarSliderColor(isLive);
         if (override) targetColor = override;
     } @catch (id ex) {}
