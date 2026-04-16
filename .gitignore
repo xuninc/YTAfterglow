@@ -1,3 +1,4 @@
 .theos/
 packages/
 .DS_Store
+*-this-session-is-being-continued-from-a-previous-c.txt
