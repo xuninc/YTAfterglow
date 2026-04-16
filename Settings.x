@@ -7,6 +7,16 @@ static void ytag_reloadSettingsController(UIViewController *controller);
 static void ytag_refreshSettingsHierarchy(UIViewController *controller);
 static void ytag_refreshSettingsFromCell(YTSettingsCell *cell);
 static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString *title, NSString *message);
+static NSString *ytag_localizedStringOrFallback(NSString *key, NSString *fallback);
+static NSString *ytag_settingDescriptionForKey(NSString *key);
+static NSArray<YTSettingsSectionItem *> *ytag_pickerRowsForController(UIViewController *controller);
+static UICollectionView *ytag_findCollectionViewInView(UIView *view);
+static YTSettingsSectionItem *ytag_firstItemWithTitle(NSArray<YTSettingsSectionItem *> *items, NSString *title);
+static NSInteger ytag_indexOfItemWithTitle(NSArray<YTSettingsSectionItem *> *items, NSString *title);
+static void ytag_highlightPickerRowIfNeeded(UIViewController *controller, NSInteger attempt);
+
+@class YTAGSettingsSearchEntry;
+static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewController, YTAGSettingsSearchEntry *entry);
 
 @interface YTSettingsSectionItemManager (YTAfterglow)
 - (void)updateYTAfterglowSectionWithEntry:(id)entry;
@@ -32,6 +42,11 @@ static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString 
 - (void)themeApplyPresetOverlay:(UIColor *)overlay tabIcons:(UIColor *)tabIcons seekBar:(UIColor *)seekBar bg:(UIColor *)bg textP:(UIColor *)textP textS:(UIColor *)textS nav:(UIColor *)nav accent:(UIColor *)accent gradientStart:(UIColor *)gradientStart gradientEnd:(UIColor *)gradientEnd;
 - (void)themeAddPresetRowWithName:(NSString *)name titleDescription:(NSString *)titleDescription overlay:(UIColor *)overlay tabIcons:(UIColor *)tabIcons seekBar:(UIColor *)seekBar bg:(UIColor *)bg textP:(UIColor *)textP textS:(UIColor *)textS nav:(UIColor *)nav accent:(UIColor *)accent gradientStart:(UIColor *)gradientStart gradientEnd:(UIColor *)gradientEnd toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC;
 - (YTSettingsSectionItem *)themeSectionHeaderWithTitle:(NSString *)title description:(NSString *)description;
+- (YTAGSettingsSearchEntry *)ytag_searchEntryWithTitle:(NSString *)title description:(NSString *)description path:(NSArray<NSString *> *)path targetTitle:(NSString *)targetTitle aliases:(NSArray<NSString *> *)aliases;
+- (YTAGSettingsSearchEntry *)ytag_searchPageEntryWithTitle:(NSString *)title description:(NSString *)description path:(NSArray<NSString *> *)path aliases:(NSArray<NSString *> *)aliases;
+- (void)ytag_addSearchEntries:(NSMutableArray<YTAGSettingsSearchEntry *> *)entries forSettingKeys:(NSArray<NSString *> *)keys path:(NSArray<NSString *> *)path aliasesByKey:(NSDictionary<NSString *, NSArray<NSString *> *> *)aliasesByKey;
+- (void)ytag_addSearchEntries:(NSMutableArray<YTAGSettingsSearchEntry *> *)entries forLiteralTitles:(NSArray<NSString *> *)titles path:(NSArray<NSString *> *)path descriptionsByTitle:(NSDictionary<NSString *, NSString *> *)descriptionsByTitle aliasesByTitle:(NSDictionary<NSString *, NSArray<NSString *> *> *)aliasesByTitle;
+- (NSArray<YTAGSettingsSearchEntry *> *)ytag_settingsSearchEntriesForAdvancedMode:(BOOL)isAdvanced;
 @end
 
 #pragma clang diagnostic push
@@ -85,6 +100,8 @@ static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString 
 
 static const NSInteger YTAfterglowSection = 789;
 static YTAGColorPickerDelegate *_colorPickerDelegate = nil;
+static char kYTAGPickerRowsAssociationKey;
+static char kYTAGPickerHighlightIndexAssociationKey;
 
 static UIColor *YTAGAfterglowTintColor(void) {
     return [UIColor colorWithRed:0.95 green:0.41 blue:0.50 alpha:1.0];
@@ -135,6 +152,138 @@ static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString 
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
+static NSString *ytag_localizedStringOrFallback(NSString *key, NSString *fallback) {
+    if (!key.length) return fallback ?: @"";
+
+    NSString *localized = LOC(key);
+    if (localized.length == 0 || [localized isEqualToString:key]) {
+        return fallback ?: key;
+    }
+
+    return localized;
+}
+
+static NSString *ytag_settingDescriptionForKey(NSString *key) {
+    if (!key.length) return nil;
+
+    NSString *descriptionKey = [NSString stringWithFormat:@"%@Desc", key];
+    NSString *description = LOC(descriptionKey);
+    if (description.length == 0 || [description isEqualToString:descriptionKey]) {
+        return nil;
+    }
+
+    return description;
+}
+
+static NSArray<YTSettingsSectionItem *> *ytag_pickerRowsForController(UIViewController *controller) {
+    return objc_getAssociatedObject(controller, &kYTAGPickerRowsAssociationKey);
+}
+
+static UICollectionView *ytag_findCollectionViewInView(UIView *view) {
+    if (!view) return nil;
+    if ([view isKindOfClass:[UICollectionView class]]) {
+        return (UICollectionView *)view;
+    }
+
+    for (UIView *subview in view.subviews) {
+        UICollectionView *collectionView = ytag_findCollectionViewInView(subview);
+        if (collectionView) return collectionView;
+    }
+
+    return nil;
+}
+
+static YTSettingsSectionItem *ytag_firstItemWithTitle(NSArray<YTSettingsSectionItem *> *items, NSString *title) {
+    if (!title.length) return nil;
+
+    for (YTSettingsSectionItem *item in items) {
+        if ([item.title isEqualToString:title]) {
+            return item;
+        }
+    }
+
+    return nil;
+}
+
+static NSInteger ytag_indexOfItemWithTitle(NSArray<YTSettingsSectionItem *> *items, NSString *title) {
+    if (!title.length) return NSNotFound;
+
+    for (NSUInteger index = 0; index < items.count; index++) {
+        if ([items[index].title isEqualToString:title]) {
+            return (NSInteger)index;
+        }
+    }
+
+    return NSNotFound;
+}
+
+static void ytag_flashSettingsCell(UICollectionViewCell *cell) {
+    if (!cell) return;
+
+    UIColor *tintColor = [YTAGAfterglowTintColor() colorWithAlphaComponent:0.16];
+    UIColor *borderColor = YTAGAfterglowTintColor();
+    UIView *targetView = cell.contentView ?: cell;
+    UIColor *originalBackgroundColor = targetView.backgroundColor;
+    CGFloat originalBorderWidth = cell.layer.borderWidth;
+    CGColorRef originalBorderColor = cell.layer.borderColor;
+    CGFloat originalCornerRadius = cell.layer.cornerRadius;
+
+    cell.layer.cornerRadius = 12.0;
+    cell.layer.borderWidth = 1.5;
+    cell.layer.borderColor = borderColor.CGColor;
+
+    [UIView animateWithDuration:0.18 animations:^{
+        targetView.backgroundColor = tintColor;
+    } completion:^(__unused BOOL finished) {
+        [UIView animateWithDuration:0.45 delay:0.85 options:UIViewAnimationOptionCurveEaseOut animations:^{
+            targetView.backgroundColor = originalBackgroundColor;
+            cell.layer.borderWidth = originalBorderWidth;
+            cell.layer.borderColor = originalBorderColor;
+            cell.layer.cornerRadius = originalCornerRadius;
+        } completion:nil];
+    }];
+}
+
+static void ytag_highlightPickerRowIfNeeded(UIViewController *controller, NSInteger attempt) {
+    NSNumber *highlightIndex = objc_getAssociatedObject(controller, &kYTAGPickerHighlightIndexAssociationKey);
+    if (!highlightIndex) return;
+
+    UICollectionView *collectionView = ytag_findCollectionViewInView(controller.view);
+    if (!collectionView) {
+        if (attempt < 6) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.08 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                ytag_highlightPickerRowIfNeeded(controller, attempt + 1);
+            });
+        }
+        return;
+    }
+
+    NSInteger row = highlightIndex.integerValue;
+    if (row < 0 || row >= [collectionView numberOfItemsInSection:0]) {
+        if (attempt < 6) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.08 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                ytag_highlightPickerRowIfNeeded(controller, attempt + 1);
+            });
+        }
+        return;
+    }
+
+    NSIndexPath *indexPath = [NSIndexPath indexPathForItem:row inSection:0];
+    [collectionView layoutIfNeeded];
+    [collectionView scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionCenteredVertically animated:NO];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UICollectionViewCell *cell = [collectionView cellForItemAtIndexPath:indexPath];
+        if (!cell && attempt < 6) {
+            ytag_highlightPickerRowIfNeeded(controller, attempt + 1);
+            return;
+        }
+
+        ytag_flashSettingsCell(cell);
+        objc_setAssociatedObject(controller, &kYTAGPickerHighlightIndexAssociationKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    });
+}
+
 static NSString *GetCacheSize() {
     NSString *cachePath = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
     NSArray *filesArray = [[NSFileManager defaultManager] subpathsOfDirectoryAtPath:cachePath error:nil];
@@ -150,6 +299,201 @@ static NSString *GetCacheSize() {
     formatter.countStyle = NSByteCountFormatterCountStyleFile;
 
     return [formatter stringFromByteCount:folderSize];
+}
+
+@interface YTAGSettingsSearchEntry : NSObject
+@property (nonatomic, copy) NSString *title;
+@property (nonatomic, copy) NSString *entryDescription;
+@property (nonatomic, copy) NSString *breadcrumb;
+@property (nonatomic, copy) NSString *searchText;
+@property (nonatomic, copy) NSArray<NSString *> *pathTitles;
+@property (nonatomic, copy) NSString *targetTitle;
+- (instancetype)initWithTitle:(NSString *)title description:(NSString *)description breadcrumb:(NSString *)breadcrumb searchText:(NSString *)searchText pathTitles:(NSArray<NSString *> *)pathTitles targetTitle:(NSString *)targetTitle;
+@end
+
+@implementation YTAGSettingsSearchEntry
+
+- (instancetype)initWithTitle:(NSString *)title description:(NSString *)description breadcrumb:(NSString *)breadcrumb searchText:(NSString *)searchText pathTitles:(NSArray<NSString *> *)pathTitles targetTitle:(NSString *)targetTitle {
+    self = [super init];
+    if (self) {
+        _title = [title copy];
+        _entryDescription = [description copy];
+        _breadcrumb = [breadcrumb copy];
+        _searchText = [[searchText lowercaseString] copy];
+        _pathTitles = [pathTitles copy] ?: @[];
+        _targetTitle = [targetTitle copy];
+    }
+    return self;
+}
+
+@end
+
+@interface YTAGSettingsSearchController : UITableViewController <UISearchResultsUpdating>
+@property (nonatomic, weak) YTSettingsViewController *settingsViewController;
+@property (nonatomic, copy) NSArray<YTAGSettingsSearchEntry *> *allEntries;
+@property (nonatomic, copy) NSArray<YTAGSettingsSearchEntry *> *filteredEntries;
+@property (nonatomic, strong) UISearchController *searchController;
+@property (nonatomic, assign) BOOL didFocusSearchBar;
+- (instancetype)initWithSettingsViewController:(YTSettingsViewController *)settingsViewController entries:(NSArray<YTAGSettingsSearchEntry *> *)entries;
+@end
+
+@implementation YTAGSettingsSearchController
+
+- (instancetype)initWithSettingsViewController:(YTSettingsViewController *)settingsViewController entries:(NSArray<YTAGSettingsSearchEntry *> *)entries {
+    self = [super initWithStyle:UITableViewStyleInsetGrouped];
+    if (self) {
+        _settingsViewController = settingsViewController;
+        _allEntries = [entries copy] ?: @[];
+        _filteredEntries = _allEntries;
+        self.title = ytag_localizedStringOrFallback(@"SearchSettings", @"Search Settings");
+    }
+    return self;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+
+    self.tableView.tintColor = YTAGAfterglowTintColor();
+    self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
+    self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
+
+    UISearchController *searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
+    searchController.obscuresBackgroundDuringPresentation = NO;
+    searchController.searchResultsUpdater = self;
+    searchController.searchBar.placeholder = ytag_localizedStringOrFallback(@"SearchSettingsPlaceholder", @"Find a setting or category");
+    self.navigationItem.searchController = searchController;
+    self.navigationItem.hidesSearchBarWhenScrolling = NO;
+    self.definesPresentationContext = YES;
+    self.searchController = searchController;
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+
+    if (!self.didFocusSearchBar) {
+        self.didFocusSearchBar = YES;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.searchController.searchBar becomeFirstResponder];
+        });
+    }
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return self.filteredEntries.count == 0 ? 1 : self.filteredEntries.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *identifier = @"YTAGSettingsSearchCell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
+    }
+
+    if (self.filteredEntries.count == 0) {
+        cell.textLabel.text = ytag_localizedStringOrFallback(@"SearchSettingsNoResults", @"No matching settings");
+        cell.detailTextLabel.text = ytag_localizedStringOrFallback(@"SearchSettingsNoResultsDesc", @"Try a broader word like player, overlay, or comments.");
+        cell.accessoryType = UITableViewCellAccessoryNone;
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        cell.textLabel.textColor = [UIColor secondaryLabelColor];
+        cell.detailTextLabel.textColor = [UIColor tertiaryLabelColor];
+        return cell;
+    }
+
+    YTAGSettingsSearchEntry *entry = self.filteredEntries[indexPath.row];
+    cell.textLabel.text = entry.title;
+    cell.textLabel.textColor = [UIColor labelColor];
+
+    NSMutableArray<NSString *> *detailParts = [NSMutableArray array];
+    if (entry.breadcrumb.length) [detailParts addObject:entry.breadcrumb];
+    if (entry.entryDescription.length) [detailParts addObject:entry.entryDescription];
+    cell.detailTextLabel.text = [detailParts componentsJoinedByString:@" • "];
+    cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (self.filteredEntries.count == 0) return;
+
+    YTAGSettingsSearchEntry *entry = self.filteredEntries[indexPath.row];
+    [self.searchController setActive:NO];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (ytag_openSettingsSearchEntry(self.settingsViewController, entry)) return;
+
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:ytag_localizedStringOrFallback(@"Warning", @"Warning")
+                                                                       message:ytag_localizedStringOrFallback(@"SearchSettingsOpenFailed", @"That setting could not be opened right now.")
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+    });
+}
+
+- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
+    NSString *query = [[[searchController.searchBar.text ?: @"" stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] lowercaseString] copy];
+    if (query.length == 0) {
+        self.filteredEntries = self.allEntries;
+        [self.tableView reloadData];
+        return;
+    }
+
+    NSArray<NSString *> *tokens = [[query componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSString *value, __unused NSDictionary *bindings) {
+        return value.length > 0;
+    }]];
+
+    NSMutableArray<YTAGSettingsSearchEntry *> *matches = [NSMutableArray array];
+    for (YTAGSettingsSearchEntry *entry in self.allEntries) {
+        BOOL matchesAllTokens = YES;
+        for (NSString *token in tokens) {
+            if ([entry.searchText rangeOfString:token].location == NSNotFound) {
+                matchesAllTokens = NO;
+                break;
+            }
+        }
+
+        if (matchesAllTokens) {
+            [matches addObject:entry];
+        }
+    }
+
+    self.filteredEntries = matches;
+    [self.tableView reloadData];
+}
+
+@end
+
+static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewController, YTAGSettingsSearchEntry *entry) {
+    if (!settingsViewController || !entry) return NO;
+
+    UINavigationController *navigationController = settingsViewController.navigationController;
+    if (!navigationController) return NO;
+
+    [navigationController popToViewController:settingsViewController animated:NO];
+    [settingsViewController reloadData];
+
+    NSArray<YTSettingsSectionItem *> *currentItems = [settingsViewController settingsSectionControllers][@(YTAfterglowSection)].items;
+    UIViewController *currentController = settingsViewController;
+
+    for (NSString *pathTitle in entry.pathTitles) {
+        YTSettingsSectionItem *item = ytag_firstItemWithTitle(currentItems, pathTitle);
+        if (!item || !item.selectBlock) return NO;
+
+        item.selectBlock(nil, 0);
+        currentController = navigationController.topViewController;
+        currentItems = ytag_pickerRowsForController(currentController);
+    }
+
+    if (entry.targetTitle.length > 0) {
+        NSInteger row = ytag_indexOfItemWithTitle(currentItems, entry.targetTitle);
+        if (row == NSNotFound) return NO;
+
+        objc_setAssociatedObject(currentController, &kYTAGPickerHighlightIndexAssociationKey, @(row), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        ytag_highlightPickerRowIfNeeded(currentController, 0);
+    }
+
+    return YES;
 }
 
 @interface YTAGTabBarEditorController : UITableViewController
@@ -350,6 +694,19 @@ static NSString *GetCacheSize() {
 %hook YTSettingsSectionController
 - (void)setSelectedItem:(NSUInteger)selectedItem {
     if (selectedItem != NSNotFound) %orig;
+}
+%end
+
+%hook YTSettingsPickerViewController
+- (instancetype)initWithNavTitle:(NSString *)navTitle pickerSectionTitle:(NSString *)pickerSectionTitle rows:(NSArray *)rows selectedItemIndex:(NSUInteger)selectedItemIndex parentResponder:(id)parentResponder {
+    YTSettingsPickerViewController *controller = %orig;
+    objc_setAssociatedObject(controller, &kYTAGPickerRowsAssociationKey, rows, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return controller;
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    %orig;
+    ytag_highlightPickerRowIfNeeded(self, 0);
 }
 %end
 
@@ -821,6 +1178,236 @@ static NSString *GetCacheSize() {
     return item;
 }
 
+#pragma mark - Search Helpers
+
+%new
+- (YTAGSettingsSearchEntry *)ytag_searchEntryWithTitle:(NSString *)title description:(NSString *)description path:(NSArray<NSString *> *)path targetTitle:(NSString *)targetTitle aliases:(NSArray<NSString *> *)aliases {
+    NSArray<NSString *> *breadcrumbParts = path ?: @[];
+    if (!targetTitle.length && breadcrumbParts.count > 0) {
+        breadcrumbParts = [breadcrumbParts subarrayWithRange:NSMakeRange(0, breadcrumbParts.count - 1)];
+    }
+
+    NSString *breadcrumb = breadcrumbParts.count > 0 ? [breadcrumbParts componentsJoinedByString:@" > "] : @"YouTube Afterglow";
+
+    NSMutableArray<NSString *> *searchParts = [NSMutableArray array];
+    if (title.length) [searchParts addObject:title];
+    if (description.length) [searchParts addObject:description];
+    if (breadcrumb.length) [searchParts addObject:breadcrumb];
+    if (aliases.count > 0) [searchParts addObjectsFromArray:aliases];
+
+    return [[YTAGSettingsSearchEntry alloc] initWithTitle:title
+                                              description:description
+                                               breadcrumb:breadcrumb
+                                               searchText:[searchParts componentsJoinedByString:@" "]
+                                                pathTitles:path
+                                               targetTitle:targetTitle];
+}
+
+%new
+- (YTAGSettingsSearchEntry *)ytag_searchPageEntryWithTitle:(NSString *)title description:(NSString *)description path:(NSArray<NSString *> *)path aliases:(NSArray<NSString *> *)aliases {
+    return [self ytag_searchEntryWithTitle:title description:description path:path targetTitle:nil aliases:aliases];
+}
+
+%new
+- (void)ytag_addSearchEntries:(NSMutableArray<YTAGSettingsSearchEntry *> *)entries forSettingKeys:(NSArray<NSString *> *)keys path:(NSArray<NSString *> *)path aliasesByKey:(NSDictionary<NSString *,NSArray<NSString *> *> *)aliasesByKey {
+    for (NSString *key in keys) {
+        NSString *title = ytag_localizedStringOrFallback(key, key);
+        NSString *description = ytag_settingDescriptionForKey(key);
+
+        NSMutableArray<NSString *> *aliases = [NSMutableArray arrayWithObject:key];
+        NSArray<NSString *> *extraAliases = aliasesByKey[key];
+        if (extraAliases.count > 0) [aliases addObjectsFromArray:extraAliases];
+
+        [entries addObject:[self ytag_searchEntryWithTitle:title
+                                               description:description
+                                                      path:path
+                                               targetTitle:title
+                                                   aliases:aliases]];
+    }
+}
+
+%new
+- (void)ytag_addSearchEntries:(NSMutableArray<YTAGSettingsSearchEntry *> *)entries forLiteralTitles:(NSArray<NSString *> *)titles path:(NSArray<NSString *> *)path descriptionsByTitle:(NSDictionary<NSString *,NSString *> *)descriptionsByTitle aliasesByTitle:(NSDictionary<NSString *,NSArray<NSString *> *> *)aliasesByTitle {
+    for (NSString *title in titles) {
+        [entries addObject:[self ytag_searchEntryWithTitle:title
+                                               description:descriptionsByTitle[title]
+                                                      path:path
+                                               targetTitle:title
+                                                   aliases:aliasesByTitle[title]]];
+    }
+}
+
+%new
+- (NSArray<YTAGSettingsSearchEntry *> *)ytag_settingsSearchEntriesForAdvancedMode:(BOOL)isAdvanced {
+    NSMutableArray<YTAGSettingsSearchEntry *> *entries = [NSMutableArray array];
+
+    NSString *adsTitle = LOC(@"Ads");
+    NSString *interfaceTitle = LOC(@"Interface");
+    NSString *navbarTitle = LOC(@"Navbar");
+    NSString *tabbarTitle = LOC(@"Tabbar");
+    NSString *legacyTitle = @"Legacy";
+    NSString *themesTitle = @"Themes";
+    NSString *presetsTitle = LOC(@"Presets");
+    NSString *customColorsTitle = LOC(@"CustomColors");
+    NSString *gradientTitle = LOC(@"Gradient");
+    NSString *playerTitle = LOC(@"Player");
+    NSString *playbackTitle = @"Playback";
+    NSString *controlsTitle = @"Controls";
+    NSString *actionBarTitle = @"Action Bar";
+    NSString *menusTitle = @"Menus";
+    NSString *miniplayerTitle = @"Miniplayer";
+    NSString *overlayTitle = LOC(@"Overlay");
+    NSString *shortsTitle = LOC(@"Shorts");
+    NSString *behaviorTitle = @"Behavior";
+    NSString *layoutButtonsTitle = @"Layout & Buttons";
+    NSString *downloadsTitle = LOC(@"Downloads");
+    NSString *extrasTitle = @"Extras";
+    NSString *feedTitle = @"Feed";
+    NSString *commentsTitle = @"Comments";
+    NSString *aboutTitle = LOC(@"About");
+    NSString *creditsTitle = LOC(@"Credits");
+
+    [entries addObject:[self ytag_searchPageEntryWithTitle:adsTitle description:@"Remove ads and promotional clutter." path:@[adsTitle] aliases:@[@"sponsored", @"promotions"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:interfaceTitle description:@"App chrome, tabs, startup, and search behavior." path:@[interfaceTitle] aliases:@[@"navigation", @"search", @"tab bar"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:navbarTitle description:@"Top bar buttons and header presentation." path:@[interfaceTitle, navbarTitle] aliases:@[@"top bar", @"header"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:tabbarTitle description:@"Visible tabs, labels, indicators, and bar styling." path:@[interfaceTitle, tabbarTitle] aliases:@[@"tabs", @"pivot bar"]]];
+    if (isAdvanced) {
+        [entries addObject:[self ytag_searchPageEntryWithTitle:legacyTitle description:@"Experimental fallbacks for older YouTube UI behavior." path:@[interfaceTitle, legacyTitle] aliases:@[@"old youtube", @"compatibility"]]];
+    }
+
+    [entries addObject:[self ytag_searchPageEntryWithTitle:themesTitle description:@"Curated themes, custom colors, gradients, and polish." path:@[themesTitle] aliases:@[@"appearance", @"colors"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:presetsTitle description:@"Complete looks for the whole app, grouped into dark and light palettes." path:@[themesTitle, presetsTitle] aliases:@[@"theme presets", @"afterglow themes"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:customColorsTitle description:@"Fine-tune the exact surfaces and text colors the theme engine touches." path:@[themesTitle, customColorsTitle] aliases:@[@"theme colors", @"color overrides"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:gradientTitle description:@"Optional background wash with a dedicated on or off workflow." path:@[themesTitle, gradientTitle] aliases:@[@"background gradient"]]];
+
+    [entries addObject:[self ytag_searchPageEntryWithTitle:playerTitle description:@"Playback controls, defaults, quality, and on-video UI." path:@[playerTitle] aliases:@[@"video player"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:playbackTitle description:@"Playback defaults, autoplay behavior, and watch-next cleanup." path:@[playerTitle, playbackTitle] aliases:@[@"autoplay", @"speed", @"quality"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:controlsTitle description:@"Gestures, fullscreen behavior, and direct player interactions." path:@[playerTitle, controlsTitle] aliases:@[@"gestures", @"fullscreen"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:actionBarTitle description:@"Buttons shown directly under the player." path:@[playerTitle, actionBarTitle] aliases:@[@"under player buttons", @"player buttons"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:menusTitle description:@"Hide player menu actions you never use." path:@[playerTitle, menusTitle] aliases:@[@"player menu", @"overflow menu"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:miniplayerTitle description:@"Mini player behavior and queue fallback options." path:@[playerTitle, miniplayerTitle] aliases:@[@"mini player", @"picture in picture"]]];
+    if (isAdvanced) {
+        [entries addObject:[self ytag_searchPageEntryWithTitle:overlayTitle description:@"HUD, autoplay, end-screen cards, and player chrome." path:@[playerTitle, overlayTitle] aliases:@[@"hud", @"overlay buttons"]]];
+    }
+
+    [entries addObject:[self ytag_searchPageEntryWithTitle:shortsTitle description:@"Behavior, conversion, and optional UI cleanup for Shorts." path:@[shortsTitle] aliases:@[@"reels"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:behaviorTitle description:@"Open, skip, resume, or convert Shorts." path:@[shortsTitle, behaviorTitle] aliases:@[@"shorts behavior", @"shorts actions"]]];
+    if (isAdvanced) {
+        [entries addObject:[self ytag_searchPageEntryWithTitle:layoutButtonsTitle description:@"Hide specific Shorts UI elements and action buttons." path:@[shortsTitle, layoutButtonsTitle] aliases:@[@"shorts layout", @"shorts buttons"]]];
+    }
+
+    [entries addObject:[self ytag_searchPageEntryWithTitle:downloadsTitle description:@"Download features and offline tools will live here." path:@[downloadsTitle] aliases:@[@"offline"]]];
+
+    [entries addObject:[self ytag_searchPageEntryWithTitle:extrasTitle description:@"Extra tools, browse cleanup, and smaller utility tweaks." path:@[extrasTitle] aliases:@[@"misc", @"utilities"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:feedTitle description:@"Trim browse-surface menus you never use." path:@[extrasTitle, feedTitle] aliases:@[@"browse", @"video menus"]]];
+    if (isAdvanced) {
+        [entries addObject:[self ytag_searchPageEntryWithTitle:commentsTitle description:@"Comment sorting and comment-surface cleanup." path:@[extrasTitle, commentsTitle] aliases:@[@"comment sorting"]]];
+    }
+
+    [entries addObject:[self ytag_searchPageEntryWithTitle:aboutTitle description:@"Maintenance tools, advanced mode, and credits." path:@[aboutTitle] aliases:@[@"settings info", @"maintenance"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:creditsTitle description:@"The people, projects, and libraries behind Afterglow." path:@[aboutTitle, creditsTitle] aliases:@[@"about", @"acknowledgements"]]];
+
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"RemoveAds", @"NoPromotionCards"] path:@[adsTitle] aliasesByKey:nil];
+
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"RemoveCast", @"RemoveNotifications", @"RemoveSearch", @"RemoveVoiceSearch"] path:@[interfaceTitle, navbarTitle] aliasesByKey:nil];
+    if (isAdvanced) {
+        [self ytag_addSearchEntries:entries forSettingKeys:@[@"StickyNavbar", @"NoSubbar", @"NoYTLogo", @"PremiumYTLogo"] path:@[interfaceTitle, navbarTitle] aliasesByKey:nil];
+    }
+
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"OpaqueBar", @"RemoveLabels", @"RemoveIndicators"] path:@[interfaceTitle, tabbarTitle] aliasesByKey:nil];
+    [entries addObject:[self ytag_searchEntryWithTitle:@"Manage Tabs" description:@"Drag tabs between active and inactive sections, or tap a row to toggle it." path:@[interfaceTitle, tabbarTitle] targetTitle:@"Manage Tabs" aliases:@[@"tab editor", @"reorder tabs"]]];
+
+    [entries addObject:[self ytag_searchEntryWithTitle:LOC(@"Startup") description:@"Choose which active tab opens first." path:@[interfaceTitle] targetTitle:LOC(@"Startup") aliases:@[@"startup tab", @"launch tab"]]];
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"StartupAnimation", @"NoSearchHistory", @"FloatingKeyboard"] path:@[interfaceTitle] aliasesByKey:@{
+        @"NoSearchHistory": @[@"search suggestions", @"recent searches"],
+        @"FloatingKeyboard": @[@"ipad keyboard"]
+    }];
+    if (isAdvanced) {
+        [self ytag_addSearchEntries:entries forSettingKeys:@[@"DisableRTL"] path:@[interfaceTitle] aliasesByKey:@{ @"DisableRTL": @[@"right to left", @"ltr"] }];
+        [self ytag_addSearchEntries:entries forSettingKeys:@[@"OldYTUI"] path:@[interfaceTitle, legacyTitle] aliasesByKey:@{ @"OldYTUI": @[@"legacy ui"] }];
+    }
+
+    [entries addObject:[self ytag_searchEntryWithTitle:LOC(@"ResetAllColors") description:@"Clear every theme override and go back to stock colors." path:@[themesTitle] targetTitle:LOC(@"ResetAllColors") aliases:@[@"reset theme", @"default theme"]]];
+    [self ytag_addSearchEntries:entries forLiteralTitles:@[
+        @"OLED Dark", @"Midnight Blue", @"Forest Green", @"Afterglow 1", @"Afterglow 2", @"Afterglow 3", @"Afterglow 4",
+        @"Clean White", @"Warm Sand", @"Ocean Breeze", @"Rose Gold", @"Afterglow Light 1", @"Afterglow Light 2", @"Afterglow Light 3", @"Afterglow Light 4"
+    ] path:@[themesTitle, presetsTitle] descriptionsByTitle:nil aliasesByTitle:@{
+        @"OLED Dark": @[@"black theme"],
+        @"Afterglow 1": @[@"vaporwave"],
+        @"Afterglow 4": @[@"green neon"],
+        @"Afterglow Light 4": @[@"light sky"]
+    }];
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"Background", @"NavigationBar", @"TabBarIcons", @"OverlayButtons", @"SeekBar", @"PrimaryText", @"SecondaryText", @"AccentColor"] path:@[themesTitle, customColorsTitle] aliasesByKey:@{
+        @"NavigationBar": @[@"nav bar color"],
+        @"TabBarIcons": @[@"tab bar color"],
+        @"OverlayButtons": @[@"player overlay color"],
+        @"SeekBar": @[@"progress bar color"]
+    }];
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"GradientStart", @"GradientEnd"] path:@[themesTitle, gradientTitle] aliasesByKey:nil];
+
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"BackgroundPlayback", @"HoldToSpeed", @"DefaultPlaybackRate", @"PlaybackQualityOnWiFi", @"PlaybackQualityOnCellular", @"DisableAutoplay", @"DisableAutoCaptions", @"RememberCaptionState", @"RememberLoopMode", @"ClassicQuality", @"NoContentWarning", @"NoContinueWatching", @"NoRelatedWatchNexts"] path:@[playerTitle, playbackTitle] aliasesByKey:@{
+        @"HoldToSpeed": @[@"long press speed", @"2x"],
+        @"NoContinueWatching": @[@"continue watching"],
+        @"NoRelatedWatchNexts": @[@"watch next", @"videos under player"]
+    }];
+    if (isAdvanced) {
+        [self ytag_addSearchEntries:entries forSettingKeys:@[@"HideAutoplay", @"NoEndScreenCards", @"NoRelatedVids", @"NoContinueWatchingPrompt"] path:@[playerTitle, playbackTitle] aliasesByKey:@{
+            @"NoContinueWatchingPrompt": @[@"are you still watching"],
+            @"NoRelatedVids": @[@"related videos"]
+        }];
+    }
+
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"PortraitFullscreen", @"AutoFullscreen", @"ExitFullscreen", @"TapToSeek", @"DontSnap2Chapter", @"NoTwoFingerSnapToChapter", @"NoDoubleTap2Seek", @"PauseOnOverlay", @"NoFreeZoom", @"CopyWithTimestamp"] path:@[playerTitle, controlsTitle] aliasesByKey:@{
+        @"TapToSeek": @[@"tap seek"],
+        @"DontSnap2Chapter": @[@"chapter snap"],
+        @"NoDoubleTap2Seek": @[@"double tap seek"]
+    }];
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"NoPlayerDownloadButton", @"PlayerNoShare", @"PlayerNoSave", @"NoPlayerRemixButton", @"NoPlayerClipButton"] path:@[playerTitle, actionBarTitle] aliasesByKey:nil];
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"RemoveDownloadMenu", @"RemoveShareMenu"] path:@[playerTitle, menusTitle] aliasesByKey:nil];
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"Miniplayer"] path:@[playerTitle, miniplayerTitle] aliasesByKey:@{ @"Miniplayer": @[@"mini player"] }];
+    if (isAdvanced) {
+        [self ytag_addSearchEntries:entries forSettingKeys:@[@"PlaylistOldMinibar"] path:@[playerTitle, miniplayerTitle] aliasesByKey:@{ @"PlaylistOldMinibar": @[@"playlist panel"] }];
+        [self ytag_addSearchEntries:entries forSettingKeys:@[@"HideSubs", @"ShowPlayerShareButton", @"ShowPlayerSaveButton", @"NoHUDMsgs", @"HidePrevNext", @"ReplacePrevNext", @"NoDarkBg", @"NoFullscreenActions", @"PersistentProgressBar", @"StockVolumeHUD", @"NoWatermarks", @"DisableAmbientMode", @"VideoEndTime", @"24hrFormat", @"HideHeatwaves", @"RedProgressBar"] path:@[playerTitle, overlayTitle] aliasesByKey:@{
+            @"ShowPlayerShareButton": @[@"always show share"],
+            @"ShowPlayerSaveButton": @[@"always show save"],
+            @"RedProgressBar": @[@"classic progress bar"]
+        }];
+    }
+
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"ShortsOnlyMode", @"AutoSkipShorts", @"HideShorts", @"ShortsProgress", @"PinchToFullscreenShorts", @"ShortsToRegular", @"ResumeShorts"] path:@[shortsTitle, behaviorTitle] aliasesByKey:@{
+        @"ShortsToRegular": @[@"convert shorts"],
+        @"PinchToFullscreenShorts": @[@"pinch fullscreen"]
+    }];
+    if (isAdvanced) {
+        [self ytag_addSearchEntries:entries forSettingKeys:@[@"HideShortsLogo", @"HideShortsSearch", @"HideShortsCamera", @"HideShortsMore", @"HideShortsSubscriptions", @"HideShortsLike", @"HideShortsDislike", @"HideShortsComments", @"HideShortsRemix", @"HideShortsShare", @"HideShortsAvatars", @"HideShortsThanks", @"HideShortsSource", @"HideShortsChannelName", @"HideShortsDescription", @"HideShortsAudioTrack", @"HideShortsPromoCards"] path:@[shortsTitle, layoutButtonsTitle] aliasesByKey:nil];
+    }
+
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"RemovePlayNext", @"RemoveWatchLaterMenu", @"RemoveSaveToPlaylistMenu", @"RemoveNotInterestedMenu", @"RemoveDontRecommendMenu", @"RemoveReportMenu"] path:@[extrasTitle, feedTitle] aliasesByKey:@{
+        @"RemoveDontRecommendMenu": @[@"don't recommend channel"]
+    }];
+    if (isAdvanced) {
+        [self ytag_addSearchEntries:entries forSettingKeys:@[@"StickSortComments", @"HideSortComments"] path:@[extrasTitle, commentsTitle] aliasesByKey:nil];
+    }
+
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"CopyVideoInfo", @"SaveProfilePhoto", @"PostManager", @"CommentManager", @"NoLinkTracking", @"NativeShare", @"NoShareChunk", @"FixAlbums"] path:@[extrasTitle] aliasesByKey:@{
+        @"CopyVideoInfo": @[@"copy info", @"video details"],
+        @"SaveProfilePhoto": @[@"avatar"],
+        @"PostManager": @[@"community posts"],
+        @"CommentManager": @[@"long press comments"],
+        @"NoLinkTracking": @[@"tracking links"],
+        @"NativeShare": @[@"share sheet"],
+        @"NoShareChunk": @[@"clean links"]
+    }];
+
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"Advanced", @"ClearCache", @"ResetSettings"] path:@[aboutTitle] aliasesByKey:@{
+        @"Advanced": @[@"advanced mode"],
+        @"ClearCache": @[@"cache"],
+        @"ResetSettings": @[@"reset tweak"]
+    }];
+
+    return entries;
+}
+
 #pragma mark - Settings Section
 
 %new(v@:@)
@@ -828,6 +1415,7 @@ static NSString *GetCacheSize() {
     NSMutableArray *sectionItems = [NSMutableArray array];
     YTSettingsViewController *settingsViewController = [self valueForKey:@"_settingsViewControllerDelegate"];
     BOOL isAdvanced = ytagBool(@"advancedMode");
+    NSArray<YTAGSettingsSearchEntry *> *searchEntries = [self ytag_settingsSearchEntriesForAdvancedMode:isAdvanced];
 
     YTSettingsSectionItem *space = [%c(YTSettingsSectionItem) itemWithTitle:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:nil];
     NSArray *adsKeys = @[@"noAds", @"noPromotionCards"];
@@ -848,6 +1436,18 @@ static NSString *GetCacheSize() {
     NSArray *commentKeys = @[@"stickSortComments", @"hideSortComments"];
     NSArray *extraToolKeys = @[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare", @"noLinkTracking", @"noShareChunk"];
     NSArray *extrasKeys = [[[feedKeys arrayByAddingObjectsFromArray:commentKeys] arrayByAddingObjectsFromArray:extraToolKeys] copy];
+
+    YTSettingsSectionItem *searchSettings = [self pageItemWithTitle:ytag_localizedStringOrFallback(@"SearchSettings", @"Search Settings")
+        titleDescription:ytag_localizedStringOrFallback(@"SearchSettingsDesc", @"Find a setting or category and jump straight to it.")
+        summary:^NSString *() {
+            return ytag_localizedStringOrFallback(@"SearchSettingsSummary", @"Jump to any setting");
+        }
+        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+            YTAGSettingsSearchController *controller = [[YTAGSettingsSearchController alloc] initWithSettingsViewController:settingsViewController entries:searchEntries];
+            [settingsViewController pushViewController:controller];
+            return YES;
+        }];
+    [sectionItems addObject:searchSettings];
 
     YTSettingsSectionItem *ads = [self pageItemWithTitle:LOC(@"Ads")
         titleDescription:@"Remove ads and promotional clutter."

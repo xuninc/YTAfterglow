@@ -1,6 +1,13 @@
 /* Main section */
 "Main" = "Main";
 "Search" = "Search";
+"SearchSettings" = "Search Settings";
+"SearchSettingsDesc" = "Find a setting or category and jump straight to it.";
+"SearchSettingsSummary" = "Jump to any setting";
+"SearchSettingsPlaceholder" = "Find a setting or category";
+"SearchSettingsNoResults" = "No matching settings";
+"SearchSettingsNoResultsDesc" = "Try a broader word like player, overlay, or comments.";
+"SearchSettingsOpenFailed" = "That setting could not be opened right now.";
 
 /* Downloading options */
 "Downloading" = "Downloading";
