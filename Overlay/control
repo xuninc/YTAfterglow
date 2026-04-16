@@ -1,0 +1,9 @@
+Package: i.am.kain.afterglow.overlay
+Name: Afterglow Overlay
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Bundled YTVideoOverlay, YouPiP, YouMute, and YouQuality for YTAfterglow
+Maintainer: Corey Hamilton
+Author: PoomSmart (merged by Corey Hamilton)
+Section: Tweaks
+Depends: mobilesubstrate

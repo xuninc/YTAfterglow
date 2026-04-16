@@ -15,20 +15,8 @@ on:
         required: true
         default: true
 
-      enable_youpip:
-        description: "Integrate YouPiP"
-        type: boolean
-        required: true
-        default: false
-
       enable_ytuhd:
         description: "Integrate YTUHD"
-        type: boolean
-        required: true
-        default: false
-
-      enable_yq:
-        description: "Integrate YouQuality"
         type: boolean
         required: true
         default: false
@@ -77,13 +65,10 @@ jobs:
   build-tweaks:
     uses: ./.github/workflows/_build_tweaks.yml
     with:
-      enable_youpip: ${{ inputs.enable_youpip }}
       enable_ytuhd: ${{ inputs.enable_ytuhd }}
-      enable_yq: ${{ inputs.enable_yq }}
       enable_ryd: ${{ inputs.enable_ryd }}
       enable_ytabc: ${{ inputs.enable_ytabc }}
       enable_demc: ${{ inputs.enable_demc }}
-      tweak_version: ${{ inputs.tweak_version }}
 
   package:
     name: Generate Cyan/TrollFools

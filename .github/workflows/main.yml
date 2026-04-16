@@ -3,20 +3,8 @@ name: Create YouTube Afterglow app
 on:
   workflow_dispatch:
     inputs:
-      enable_youpip:
-        description: "Integrate YouPiP"
-        type: boolean
-        required: true
-        default: false
-
       enable_ytuhd:
         description: "Integrate YTUHD"
-        type: boolean
-        required: true
-        default: false
-
-      enable_yq:
-        description: "Integrate YouQuality"
         type: boolean
         required: true
         default: false
@@ -71,9 +59,7 @@ jobs:
   build-tweaks:
     uses: ./.github/workflows/_build_tweaks.yml
     with:
-      enable_youpip: ${{ inputs.enable_youpip }}
       enable_ytuhd: ${{ inputs.enable_ytuhd }}
-      enable_yq: ${{ inputs.enable_yq }}
       enable_ryd: ${{ inputs.enable_ryd }}
       enable_ytabc: ${{ inputs.enable_ytabc }}
       enable_demc: ${{ inputs.enable_demc }}
@@ -96,7 +82,7 @@ jobs:
       - name: Hide sensitive inputs
         uses: levibostian/action-hide-sensitive-inputs@v1
         with:
-          exclude_inputs: bundle_id,display_name,enable_demc,enable_ryd,enable_ytabc,enable_youpip,enable_yq,enable_ytuhd,info_note
+          exclude_inputs: bundle_id,display_name,enable_demc,enable_ryd,enable_ytabc,enable_ytuhd,info_note
 
       - name: Download and validate IPA
         run: |
