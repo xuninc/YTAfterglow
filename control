@@ -1,7 +1,7 @@
 Package: i.am.kain.afterglow
 Name: YTAfterglow
 Depends: mobilesubstrate
-Version: 0.0.1
+Version: 1.0.0
 Architecture: iphoneos-arm
 Description: Customized YouTube build with theming, downloads, and interface controls
 Maintainer: Corey Hamilton

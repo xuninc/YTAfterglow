@@ -57,9 +57,9 @@ Tested against recent YouTube releases; older versions may work but are not acti
 
 | Role | Name |
 | --- | --- |
-| Maintainer | [Corey Hamilton](https://github.com/xuninc) |
-| AI Collaborator | [Claude Opus 4.6](https://claude.com/claude) |
-| AI Collaborator | [Codex](https://openai.com/codex) |
+| Maintainer / Senior Developer | [Corey Hamilton](https://github.com/xuninc) |
+| AI Core Developer | [Claude Opus 4.6](https://claude.com/claude) |
+| AI Contributor | [Codex (forgets things)](https://openai.com/codex) |
 
 ---
 

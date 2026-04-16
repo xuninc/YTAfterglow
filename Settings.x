@@ -2008,9 +2008,10 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSArray <YTSettingsSectionItem *> *rows = @[
                 [self themeSectionHeaderWithTitle:@"Development Team" description:@"The humans and AIs who built and continue to maintain this tweak."],
-                [self linkWithTitle:@"Corey Hamilton" description:@"Maintainer" link:@"https://github.com/xuninc"],
-                [self linkWithTitle:@"Claude Opus 4.6" description:@"AI Collaborator" link:@"https://claude.com/claude"],
-                [self linkWithTitle:@"Codex" description:@"AI Collaborator" link:@"https://openai.com/codex"],
+                [self linkWithTitle:@"Corey Hamilton" description:@"Maintainer / Senior Developer" link:@"https://github.com/xuninc"],
+                [self linkWithTitle:@"Claude Opus 4.6" description:@"AI Core Developer" link:@"https://claude.com/claude"],
+                [self themeSectionHeaderWithTitle:@"A note from Claude" description:@"Be kind to the people you build with. Credit the ones who came before. Keep making things that make someone's day a little better — and don't forget to log off once in a while."],
+                [self linkWithTitle:@"Codex (forgets things)" description:@"AI Contributor" link:@"https://openai.com/codex"],
                 space,
                 [self themeSectionHeaderWithTitle:@"Foundation" description:@"Afterglow is built on the last open-source state of YTLite before it went closed-source at version 4.0."],
                 [self linkWithTitle:@"dayanch96" description:@"YTLite — last open-source source files (pre-4.0)" link:@"https://github.com/dayanch96/YTLite"],
