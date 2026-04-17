@@ -27,20 +27,33 @@ static NSString *ytag_audioDiagLogPath(void) {
     return path;
 }
 
+static dispatch_queue_t ytag_audioDiagQueue(void) {
+    static dispatch_queue_t q;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        q = dispatch_queue_create("com.ytafterglow.audiodiag", DISPATCH_QUEUE_SERIAL);
+    });
+    return q;
+}
+
 static void ytag_appendAudioDiagLine(NSString *line) {
     NSString *path = ytag_audioDiagLogPath();
     if (!path) return;
-    NSData *data = [[line stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];
-    if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
-        [data writeToFile:path atomically:NO];
-        return;
-    }
-    NSFileHandle *h = [NSFileHandle fileHandleForWritingAtPath:path];
-    if (h) {
-        [h seekToEndOfFile];
-        [h writeData:data];
-        [h closeFile];
-    }
+    NSString *copy = [line copy];
+    dispatch_async(ytag_audioDiagQueue(), ^{
+        NSData *data = [[copy stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];
+        if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+            [data writeToFile:path atomically:NO];
+            return;
+        }
+        NSFileHandle *h = [NSFileHandle fileHandleForWritingAtPath:path];
+        if (!h) return;
+        @try {
+            [h seekToEndOfFile];
+            [h writeData:data];
+        } @catch (id ex) {}
+        @try { [h closeFile]; } @catch (id ex) {}
+    });
 }
 
 static void ytag_logAudioMiss(const char *entry, AudioFormatPropertyID prop, UInt32 specSize) {
