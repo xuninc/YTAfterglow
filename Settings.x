@@ -2204,8 +2204,6 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSMutableArray <YTSettingsSectionItem *> *rows = [@[
                 [self switchWithTitle:@"Advanced" key:@"advancedMode"],
-                [self switchWithTitle:@"AudioLogSilence" key:@"audioLogSilence"],
-                [self switchWithTitle:@"AudioLogDiagnose" key:@"audioLogDiagnose"],
                 [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ClearCache") titleDescription:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:^NSString *() { return GetCacheSize(); } selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
                     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                         NSString *cachePath = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
