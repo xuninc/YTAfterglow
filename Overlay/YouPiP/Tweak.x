@@ -270,8 +270,20 @@ static UIImage *pipImage() {
 
 %new(v@:@)
 - (void)didPressPiP:(id)arg {
-    YTMainAppVideoPlayerOverlayViewController *c = [self valueForKey:@"_eventsDelegate"];
-    YTPlayerViewController *pvc = (YTPlayerViewController *)c.parentViewController;
+    YTMainAppVideoPlayerOverlayViewController *c = nil;
+    @try { c = [self valueForKey:@"_eventsDelegate"]; } @catch (id ex) {}
+    if (!c) {
+        UIResponder *r = self.nextResponder;
+        while (r) {
+            if ([r isKindOfClass:%c(YTMainAppVideoPlayerOverlayViewController)]) {
+                c = (YTMainAppVideoPlayerOverlayViewController *)r;
+                break;
+            }
+            r = r.nextResponder;
+        }
+    }
+    YTPlayerViewController *pvc = c ? (YTPlayerViewController *)c.parentViewController : nil;
+    if (!pvc) return;
     FromUser = YES;
     bootstrapPiP(pvc);
 }
@@ -286,8 +298,20 @@ static UIImage *pipImage() {
 
 %new(v@:@)
 - (void)didPressPiP:(id)arg {
-    YTMainAppVideoPlayerOverlayViewController *c = [self.delegate valueForKey:@"_delegate"];
-    YTPlayerViewController *pvc = (YTPlayerViewController *)c.parentViewController;
+    YTMainAppVideoPlayerOverlayViewController *c = nil;
+    @try { c = [self.delegate valueForKey:@"_delegate"]; } @catch (id ex) {}
+    if (!c) {
+        UIResponder *r = self.nextResponder;
+        while (r) {
+            if ([r isKindOfClass:%c(YTMainAppVideoPlayerOverlayViewController)]) {
+                c = (YTMainAppVideoPlayerOverlayViewController *)r;
+                break;
+            }
+            r = r.nextResponder;
+        }
+    }
+    YTPlayerViewController *pvc = c ? (YTPlayerViewController *)c.parentViewController : nil;
+    if (!pvc) return;
     FromUser = YES;
     bootstrapPiP(pvc);
 }
