@@ -685,6 +685,10 @@
 "PreImportMessage" = "This action will replace the current preferences with those from the selected file.\n\nAre you sure you want to continue?";
 "ExportPreferences" = "Export preferences";
 "Advanced" = "Advanced mode";
+"AudioLogSilence" = "Silence iOS 26 audio log spam";
+"AudioLogSilenceDesc" = "Drops the per-frame 'AudioFormatDescription err=-12710' noise iOS 26 CoreMedia emits during playback. Apple bug; reduces log/CPU overhead. Toggle requires a YouTube restart.";
+"AudioLogDiagnose" = "Diagnose audio log errors";
+"AudioLogDiagnoseDesc" = "Writes the property ID and caller stack of each audio format miss to Documents/Afterglow-audio-diag.log (accessible via Files app). Debug only. Toggle requires a YouTube restart.";
 "AdvancedDesc" = "Shows extra power-user settings and advanced UI controls.";
 "AdvancedModePromptTitle" = "Enable Advanced Mode?";
 "AdvancedModePromptMessage" = "Advanced Mode unlocks extra settings for power users, including additional player cleanup, layout controls, legacy fallbacks, and other advanced tweaks.\n\nIt does not change your setup automatically beyond showing more options, and you can turn it off later in About.";

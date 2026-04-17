@@ -1,13 +1,12 @@
-#import <Foundation/Foundation.h>
+#import "YTAfterglow.h"
 #import <dlfcn.h>
 #import <substrate.h>
 #include <string.h>
 
 // iOS 26 CoreMedia emits a flood of "AudioFormatDescription signalled err=-12710"
-// log lines during DASH audio playback. Stock YouTube hits it too — it's Apple's
-// beta logging verbosity, not something we can fix at the call site. We hook the
-// unified log entry point and drop messages whose format string identifies them
-// as that specific noise. Everything else passes through untouched.
+// during DASH audio playback. Stock YouTube hits it too — beta verbosity, not our
+// bug. Hook _os_log_impl and drop messages whose format string identifies them.
+// Gated on the audioLogSilence setting.
 
 typedef void (*os_log_impl_t)(void *dso, void *log, uint8_t type,
                               const char *format, uint8_t *buf, uint32_t size);
@@ -21,6 +20,7 @@ static void ytag_os_log_impl(void *dso, void *log, uint8_t type,
 }
 
 %ctor {
+    if (!ytagBool(@"audioLogSilence")) return;
     void *sym = dlsym(RTLD_DEFAULT, "_os_log_impl");
     if (sym) {
         MSHookFunction(sym, (void *)ytag_os_log_impl, (void **)&orig_os_log_impl);
