@@ -153,7 +153,7 @@
 "ClassicQualityDesc" = "Brings back classic video quality selection menu.";
 "NoDarkBg" = "Remove dark background";
 "NoDarkBgDesc" = "Removes overlay dark background.";
-"NoEndScreenCards" = "Hide End screens hover cards";
+"NoEndScreenCards" = "Hide end-screen cards";
 "NoEndScreenCardsDesc" = "Hides End screens (thumbnails) at the end of videos.";
 "NoAutonavEndScreenCards" = "Hide auto-play end screen";
 "NoAutonavEndScreenCardsDesc" = "Hides the screen that shows what you can play next after playback ended. Disabling this option also disables auto-play.";
@@ -169,8 +169,8 @@
 "RedProgressBarDesc" = "Brings back red progress bar.";
 "StockVolumeHUD" = "Stock volume HUD";
 "StockVolumeHUDDesc" = "Displays system volume HUD in fullscreen.";
-"NoRelatedVids" = "No related videos in overlay";
-"NoRelatedVidsDesc" = "Removes related videos displayed in the overlay by swiping up.";
+"NoRelatedVids" = "Hide end-screen related videos";
+"NoRelatedVidsDesc" = "When a video ends in fullscreen, YouTube shows related video thumbnails on the player — this hides them.";
 "NoPromotionCards" = "Hide Paid Promotion cards";
 "NoPromotionCardsDesc" = "Hides \"Includes Paid Promotions\" card in promotions included videos.";
 "NoWatermarks" = "Hide Watermarks";
@@ -183,10 +183,10 @@
 "24hrFormatDesc" = "Shows end time in 24-hour format.";
 "HideHeatwaves" = "Hide most replayed graph";
 "HideHeatwavesDesc" = "Removes the heatwave graph from the player seek bar.";
-"NoContinueWatchingPrompt" = "Disable \"Are you still watching?\"";
-"NoContinueWatchingPromptDesc" = "Prevents YouTube from showing the continue-watching prompt during playback.";
-"NoRelatedWatchNexts" = "Hide all videos under player";
-"NoRelatedWatchNextsDesc" = "Hides all videos below the player, leaving only the video info and comments section.";
+"NoContinueWatchingPrompt" = "Hide resume-video prompt";
+"NoContinueWatchingPromptDesc" = "Disables the 'Are you still watching?' alert that pauses long sessions.";
+"NoRelatedWatchNexts" = "Hide up-next panel";
+"NoRelatedWatchNextsDesc" = "Hides the up-next panel that appears below the player.";
 "RemoveInlineComment" = "Remove inline comment";
 "RemoveInlineCommentDesc" = "Removes comment section under the player.";
 "NoSubUnderPlayer" = "Remove \"Subscribe\" button";
@@ -496,7 +496,7 @@
 "Other" = "Other";
 "CopyVideoInfo" = "Copy video details";
 "CopyVideoInfoDesc" = "Long press the video details panel to copy video details.";
-"NoContinueWatching" = "Hide \"Continue watching\"";
+"NoContinueWatching" = "Hide Continue Watching feed card";
 "NoContinueWatchingDesc" = "Hides YouTube's \"Continue watching\" surface.";
 "NoLinkTracking" = "Disable link tracking";
 "NoLinkTrackingDesc" = "Prevents tracking information from being sent when tapping links. Opens links directly instead of going through Google redirects.";
@@ -819,3 +819,34 @@
 "Conflicts.CloseYT" = "Close YouTube";
 
 "DonationReminder" = "Your support helps to make YTAfterglow even better.\n\nYou can contribute or choose to disable these notifications in the YTAfterglow settings. Thank you💜";
+
+
+"PlayerShareButton" = "Share button";
+"PlayerShareButtonDesc" = "Choose whether the Share button is automatic, always shown, or always hidden.";
+"PlayerSaveButton" = "Save button";
+"PlayerSaveButtonDesc" = "Choose whether the Save button is automatic, always shown, or always hidden.";
+"Auto" = "Auto";
+"AlwaysShow" = "Always show";
+"AlwaysHide" = "Always hide";
+"Pinned" = "Pinned";
+"Hidden" = "Hidden";
+"CommentsHeader" = "Comments header";
+"CommentsHeaderDesc" = "Choose default behavior for the comments sort header.";
+"Autoplay" = "Autoplay";
+"AutoplayDesc" = "Choose whether autoplay stays default, turns off, or turns off and hides the switch.";
+"EnableGlow" = "Enable glow";
+"EnableGlowDesc" = "Enables branded glow effects across selected UI surfaces.";
+"GlowStrength" = "Glow strength";
+"GlowStrengthDesc" = "Controls glow intensity for enabled glow surfaces.";
+"GlowPivot" = "Glow pivot bar";
+"GlowPivotDesc" = "Applies glow styling to the pivot/tab bar.";
+"GlowOverlay" = "Glow overlay buttons";
+"GlowOverlayDesc" = "Applies glow styling to overlay controls.";
+"GlowScrubber" = "Glow scrubber";
+"GlowScrubberDesc" = "Applies glow styling to the seek scrubber thumb.";
+"GlowSeekBar" = "Glow seek bar";
+"GlowSeekBarDesc" = "Applies glow styling to the seek bar track.";
+"AnimateSeek" = "Animate seek";
+"AnimateSeekDesc" = "Adds subtle animation when the seek bar updates.";
+"SeekBarGradient" = "Seek bar gradient";
+"SeekBarGradientDesc" = "Enables gradient rendering for the seek bar.";
