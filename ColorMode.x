@@ -137,7 +137,7 @@ static void ytag_applyThemeInterfaceStyleToWindow(UIWindow *window) {
     }
 }
 
-static void ytag_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity, CGFloat radius) {
+void ytag_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity, CGFloat radius) {
     if (!layer) return;
 
     if (!ytag_themeGlowEnabled() || !color) {
@@ -307,7 +307,11 @@ static CAGradientLayer *ytag_createGradient(CGRect bounds) {
 
     CAGradientLayer *gradient = [CAGradientLayer layer];
     gradient.frame = bounds;
-    gradient.colors = @[(id)start.CGColor, (id)end.CGColor];
+    // Saturated endpoints: top 35% holds pure start, bottom 35% holds pure end,
+    // only the middle 30% is the interpolated blend. Makes slivers of gradient
+    // visible through opaque chrome (feed thumbnails, pivot bar) feel punchier.
+    gradient.colors = @[(id)start.CGColor, (id)start.CGColor, (id)end.CGColor, (id)end.CGColor];
+    gradient.locations = @[@0.0, @0.35, @0.65, @1.0];
     gradient.startPoint = CGPointMake(0.5, 0.0);
     gradient.endPoint = CGPointMake(0.5, 1.0);
     gradient.name = @"ytag_gradient";
@@ -407,10 +411,50 @@ static void ytag_applyGradient(UIView *view) {
 - (void)layoutSubviews {
     %orig;
 
+    UIColor *iconColor = themeColor(kThemeTabBarIcons);
+    if (iconColor) {
+        // YT's pivot button icons are template-rendered UIImage assets; tintColor
+        // on the button itself (and the host view) paints them in the theme hue.
+        // Without this, the YTCommonColorPalette hooks only reach the settings
+        // icons — the bottom pivot bar stays in YT's default white/gray.
+        self.tintColor = iconColor;
+        if (self.navigationButton) {
+            self.navigationButton.tintColor = iconColor;
+            [self.navigationButton setTitleColor:iconColor forState:UIControlStateNormal];
+            [self.navigationButton setTitleColor:iconColor forState:UIControlStateSelected];
+        }
+    }
+
     UIColor *glowColor = themeColor(kThemeAccent) ?: themeColor(kThemeTabBarIcons);
     CALayer *targetLayer = self.navigationButton ? self.navigationButton.layer : self.layer;
-    CGFloat opacity = self.navigationButton.alpha > 0.9 ? 0.40 : 0.16;
-    ytag_applyGlowToLayer(targetLayer, glowColor, opacity, 7.0);
+    CGFloat opacity = self.navigationButton.alpha > 0.9 ? 0.90 : 0.45;
+    ytag_applyGlowToLayer(targetLayer, glowColor, opacity, 12.0);
+}
+%end
+
+// When a gradient is active, clear the pivot bar's opaque chrome so the
+// saturated bottom portion of the gradient shines through the bottom ~12% of
+// the screen. We only clear container backgroundColors — visual-effect blurs
+// get alpha-dimmed rather than hidden, so icons remain visible through the
+// backdrop but the saturated orange behind still reads.
+%hook YTPivotBarView
+- (void)layoutSubviews {
+    %orig;
+    if (!ytag_themeGradientEnabled()) return;
+
+    self.backgroundColor = [UIColor clearColor];
+    self.opaque = NO;
+
+    for (UIView *subview in self.subviews) {
+        if ([subview isKindOfClass:[UIVisualEffectView class]]) {
+            subview.alpha = 0.35;
+        } else {
+            NSString *cls = NSStringFromClass([subview class]);
+            if ([cls containsString:@"Background"] || [cls containsString:@"Backdrop"] || [cls containsString:@"Separator"]) {
+                subview.backgroundColor = [UIColor clearColor];
+            }
+        }
+    }
 }
 %end
 

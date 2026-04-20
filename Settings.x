@@ -2282,6 +2282,35 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             ] mutableCopy];
 
             [rows addObject:space];
+            [rows addObject:[self themeSectionHeaderWithTitle:LOC(@"DebugLogging") description:LOC(@"DebugLoggingDesc")]];
+            [rows addObject:[self switchWithTitle:@"DebugLogging" key:@"debugLogEnabled"]];
+            [rows addObject:[%c(YTSettingsSectionItem) switchItemWithTitle:LOC(@"ShowDebugHUD") titleDescription:LOC(@"ShowDebugHUDDesc") accessibilityIdentifier:@"YTAfterglowSectionItem" switchOn:ytagBool(@"debugHUDEnabled") switchBlock:^BOOL (YTSettingsCell *cell, BOOL enabled) {
+                ytagSetBool(enabled, @"debugHUDEnabled");
+                if (enabled) [[YTAGDebugHUD sharedHUD] show];
+                else [[YTAGDebugHUD sharedHUD] hide];
+                return YES;
+            } settingItemId:0]];
+            [rows addObject:[%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ShareDebugLog") titleDescription:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+                NSString *logPath = YTAGLogFilePath();
+                if (![[NSFileManager defaultManager] fileExistsAtPath:logPath]) {
+                    [[%c(YTToastResponderEvent) eventWithMessage:LOC(@"NoDebugLog") firstResponder:[self parentResponder]] send];
+                    return YES;
+                }
+                NSURL *logURL = [NSURL fileURLWithPath:logPath];
+                UIActivityViewController *share = [[UIActivityViewController alloc] initWithActivityItems:@[logURL] applicationActivities:nil];
+                UIViewController *presenter = ytag_viewControllerForResponder([self parentResponder]);
+                share.popoverPresentationController.sourceView = cell;
+                share.popoverPresentationController.sourceRect = cell.bounds;
+                [presenter presentViewController:share animated:YES completion:nil];
+                return YES;
+            }]];
+            [rows addObject:[%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ClearDebugLog") titleDescription:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+                YTAGLogClear();
+                [[%c(YTToastResponderEvent) eventWithMessage:LOC(@"Done") firstResponder:[self parentResponder]] send];
+                return YES;
+            }]];
+
+            [rows addObject:space];
             [rows addObject:credits];
 
             YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"About") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];

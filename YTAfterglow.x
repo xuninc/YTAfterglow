@@ -497,8 +497,16 @@ static BOOL canRememberLoopMode = NO;
 
 // Disable Fullscreen Actions
 %hook YTFullscreenActionsView
-- (BOOL)enabled { return ytagBool(@"noFullscreenActions") ? NO : YES; }
-- (void)setEnabled:(BOOL)arg1 { ytagBool(@"noFullscreenActions") ? %orig(NO) : %orig; }
+- (BOOL)enabled {
+    BOOL on = ytagBool(@"noFullscreenActions");
+    YTAGLog(@"fullscreen", @"YTFullscreenActionsView.enabled read, toggle=%@", on ? @"ON" : @"OFF");
+    return on ? NO : YES;
+}
+- (void)setEnabled:(BOOL)arg1 {
+    BOOL on = ytagBool(@"noFullscreenActions");
+    YTAGLog(@"fullscreen", @"YTFullscreenActionsView.setEnabled:%@ toggle=%@", arg1 ? @"YES" : @"NO", on ? @"ON" : @"OFF");
+    on ? %orig(NO) : %orig;
+}
 %end
 
 // Dont Show Related Videos on Finish
@@ -1948,6 +1956,10 @@ static NSURL *newCoverURL(NSURL *originalURL) {
 %end
 
 %ctor {
+    [YTAGDebugHUD applyPreferenceOnLaunch];
+    YTAGLog(@"ctor", @"YTAfterglow main dylib loaded");
+    YTAGLog(@"ctor", @"YTFullscreenActionsView class exists: %@", NSClassFromString(@"YTFullscreenActionsView") ? @"YES" : @"NO");
+
     // Ensure Shorts tab is active if shortsOnlyMode is enabled
     if (ytagBool(@"shortsOnlyMode")) {
         NSMutableArray *tabs = [[[YTAGUserDefaults standardUserDefaults] currentActiveTabs] mutableCopy];

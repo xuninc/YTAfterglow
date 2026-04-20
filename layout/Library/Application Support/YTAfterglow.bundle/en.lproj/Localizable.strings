@@ -698,6 +698,14 @@
 "ClearCacheAtStartDesc" = "Automatically clears the cache on startup.";
 "ClearCache" = "Clear cache";
 
+"DebugLogging" = "Debug logging";
+"DebugLoggingDesc" = "Enables an in-memory + on-disk log of hook decisions (PiP, fullscreen actions, etc.) used to diagnose misbehavior. Off by default; no runtime cost when off.";
+"ShowDebugHUD" = "Show debug HUD";
+"ShowDebugHUDDesc" = "Floating on-screen overlay showing the latest log lines. Drag to reposition, double-tap to clear, long-press to hide.";
+"ShareDebugLog" = "Share debug log";
+"ClearDebugLog" = "Clear debug log";
+"NoDebugLog" = "No log yet — enable Debug Logging first.";
+
 "NoDonationReminder" = "Disable donation reminder";
 "NoDonationReminderDesc" = "Turns off the rarely shown donation reminder.";
 
