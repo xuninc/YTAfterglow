@@ -1,7 +1,7 @@
 #import "YTAGDebugHUD.h"
 #import "YTAGLog.h"
 
-static NSString *const kSuiteName = @"afterglow.tweak";
+static NSString *const kSuiteName = @"afterglow.vault";
 static NSString *const kHUDEnabledKey = @"debugHUDEnabled";
 
 @interface YTAGDebugHUDView : UIView

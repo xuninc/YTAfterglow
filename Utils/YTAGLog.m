@@ -7,7 +7,7 @@
 
 NSString *const YTAGLogDidAppendNotification = @"YTAGLogDidAppend";
 
-static NSString *const kSuiteName = @"afterglow.tweak";
+static NSString *const kSuiteName = @"afterglow.vault";
 static NSString *const kEnabledKey = @"debugLogEnabled";
 static const NSUInteger kMaxRingEntries = 200;
 static const off_t kRollBytes = 1024 * 1024;
