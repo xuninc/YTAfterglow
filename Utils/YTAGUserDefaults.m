@@ -3,9 +3,7 @@
 
 @implementation YTAGUserDefaults
 
-static NSString *const kDefaultsSuiteName = @"afterglow.prefs";
-static NSString *const kLegacyDefaultsSuiteName = @"i.am.kain.afterglow";
-static NSString *const kLegacySuiteMigrationDoneKey = @"_afterglowLegacySuiteMigrationDone";
+static NSString *const kDefaultsSuiteName = @"afterglow.tweak";
 static NSString *const kActiveTabsKey = @"activeTabs";
 static NSString *const kStartupTabKey = @"startupTab";
 static NSString *const kThemeMigrationVersionKey = @"themePresetMigrationVersion";
@@ -64,7 +62,6 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
 
     dispatch_once(&onceToken, ^{
         defaults = [[self alloc] initWithSuiteName:kDefaultsSuiteName];
-        [defaults migrateFromLegacySuiteIfNeeded];
         [defaults registerDefaults];
         [defaults migrateThemePresetsIfNeeded];
         [defaults migrateSettingsIfNeeded];
@@ -159,21 +156,6 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         @"debugLogEnabled": @NO,
         @"debugHUDEnabled": @NO
     }];
-}
-
-- (void)migrateFromLegacySuiteIfNeeded {
-    if ([self boolForKey:kLegacySuiteMigrationDoneKey]) return;
-
-    NSUserDefaults *legacy = [[NSUserDefaults alloc] initWithSuiteName:kLegacyDefaultsSuiteName];
-    NSDictionary<NSString *, id> *legacyData = [legacy persistentDomainForName:kLegacyDefaultsSuiteName];
-
-    for (NSString *key in legacyData) {
-        if ([key hasPrefix:@"_"]) continue;
-        if ([self objectForKey:key] != nil) continue;
-        [self setObject:legacyData[key] forKey:key];
-    }
-
-    [self setBool:YES forKey:kLegacySuiteMigrationDoneKey];
 }
 
 - (void)migrateThemePresetsIfNeeded {
