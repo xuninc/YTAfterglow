@@ -122,6 +122,54 @@ static UIColor *seekBarSliderColor(BOOL live) {
     return nil;
 }
 
+// Gradient seek bar: paint the played portion with a horizontal rainbow using
+// the active theme's signature colors. Implemented as a UIColor pattern image
+// so existing `backgroundColor = seekBarFillColor(...)` call sites keep working
+// — the fill view simply gets a tiled pattern instead of a solid color.
+static BOOL seekBarGradientEnabled(void) {
+    id stored = [[YTAGUserDefaults standardUserDefaults] objectForKey:@"seekBarGradient"];
+    if (![stored isKindOfClass:[NSNumber class]]) return YES; // default on
+    return [(NSNumber *)stored boolValue];
+}
+
+static UIColor *seekBarGradientPatternColor(void) {
+    NSArray *keys = @[
+        @"theme_gradientStart", @"theme_overlayButtons", @"theme_tabBarIcons",
+        @"theme_seekBar", @"theme_accent", @"theme_gradientEnd"
+    ];
+    NSMutableArray *cgColors = [NSMutableArray array];
+    for (NSString *k in keys) {
+        UIColor *c = themeColor(k);
+        if (c) [cgColors addObject:(id)c.CGColor];
+    }
+    if (cgColors.count < 2) return nil;
+
+    CGSize size = CGSizeMake(1200.0, 4.0);
+    UIGraphicsBeginImageContextWithOptions(size, NO, 0);
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGGradientRef gradient = CGGradientCreateWithColors(space, (__bridge CFArrayRef)cgColors, NULL);
+    CGContextDrawLinearGradient(ctx, gradient, CGPointZero, CGPointMake(size.width, 0.0), 0);
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    CGGradientRelease(gradient);
+    CGColorSpaceRelease(space);
+
+    return image ? [UIColor colorWithPatternImage:image] : nil;
+}
+
+// Used wherever we paint the *played* portion of the seek bar. Returns either
+// a pattern-image gradient (when theme gradient mode is on) or the normal
+// solid slider color. Scrubber colors stay solid — patterns look wrong on a
+// tiny circle.
+static UIColor *seekBarFillColor(BOOL live) {
+    if (seekBarGradientEnabled()) {
+        UIColor *grad = seekBarGradientPatternColor();
+        if (grad) return grad;
+    }
+    return seekBarSliderColor(live);
+}
+
 static UIColor *seekBarScrubberColor(BOOL live) {
     if (live) {
         UIColor *c = themeColor(kThemeSeekBarScrubberLive);
@@ -183,10 +231,12 @@ static void seekBarInitScrubberCircleBase(UIView *scrubberCircle, BOOL setColor)
     if (!setColor) return;
     if (seekBarCustomImageEnabled()) {
         scrubberCircle.backgroundColor = nil;
-        return;
+    } else {
+        UIColor *color = seekBarScrubberColor(NO);
+        if (color) scrubberCircle.backgroundColor = color;
     }
-    UIColor *color = seekBarScrubberColor(NO);
-    if (color) scrubberCircle.backgroundColor = color;
+    UIColor *glowColor = seekBarScrubberColor(NO) ?: themeColor(@"theme_accent");
+    ytag_applyGlowToLayer(scrubberCircle.layer, glowColor, 1.0, 30.0);
 }
 
 static void seekBarInitScrubberCircle(UIView *view, BOOL setColor) {
@@ -208,6 +258,8 @@ static void seekBarUpdateScrubberColorAndPosition(UIView *view, BOOL alterScrubb
             UIColor *color = seekBarScrubberColor(seekBarViewIsLive(view));
             if (color) scrubberCircle.backgroundColor = color;
         }
+        UIColor *glowColor = seekBarScrubberColor(seekBarViewIsLive(view)) ?: themeColor(@"theme_accent");
+        ytag_applyGlowToLayer(scrubberCircle.layer, glowColor, 1.0, 30.0);
     }
     if (!seekBarAnimationsEnabled() || CGPointEqualToPoint(originalCenter, CGPointZero)) return;
     CGPoint newCenter = scrubberCircle.center;
@@ -352,7 +404,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
 
 - (void)resetPlayerBarModeColors {
     %orig;
-    UIColor *color = seekBarSliderColor([self isVideoModeLive]);
+    UIColor *color = seekBarFillColor([self isVideoModeLive]);
     if (color) {
         [self setValue:color forKey:@"_progressBarColor"];
         [self setValue:color forKey:@"_userIsScrubbingProgressBarColor"];
@@ -361,7 +413,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
 }
 
 - (void)setPlayedProgressBarColor:(id)color {
-    UIColor *c = seekBarSliderColor([self isVideoModeLive]);
+    UIColor *c = seekBarFillColor([self isVideoModeLive]);
     %orig(c ?: color);
 }
 
@@ -399,7 +451,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
 - (void)setMode:(int)mode {
     %orig;
     seekBarUpdateScrubberColorAndPosition(self, YES, CGPointZero);
-    UIColor *color = seekBarSliderColor(seekBarIsLiveMode(mode));
+    UIColor *color = seekBarFillColor(seekBarIsLiveMode(mode));
     if (color) {
         @try {
             UIView *playing = [self valueForKey:@"_playingProgress"];
@@ -423,7 +475,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
 - (void)drawHighlightedChapter:(CGRect)rect {
     void (^animated)(void) = ^{
         %orig;
-        UIColor *color = seekBarSliderColor(NO);
+        UIColor *color = seekBarFillColor(NO);
         if (!color) return;
         CGFloat playingProgress = 0.0;
         @try {
@@ -445,7 +497,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
 - (void)drawUnhighlightedChapter:(CGRect)rect {
     void (^animated)(void) = ^{
         %orig;
-        UIColor *color = seekBarSliderColor(NO);
+        UIColor *color = seekBarFillColor(NO);
         if (!color) return;
         CGFloat playingProgress = 0.0;
         @try {
@@ -510,7 +562,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
         id playingState = [model valueForKey:@"playingState"];
         NSInteger mode = [[playingState valueForKey:@"mode"] integerValue];
         BOOL isLive = seekBarIsLiveMode(mode);
-        UIColor *override = seekBarSliderColor(isLive);
+        UIColor *override = seekBarFillColor(isLive);
         if (override) targetColor = override;
     } @catch (id ex) {}
     if (seekBarAnimationsEnabled()) {
@@ -597,7 +649,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
 }
 
 - (void)setProgressBarColor:(UIColor *)color {
-    UIColor *c = seekBarSliderColor(NO);
+    UIColor *c = seekBarFillColor(NO);
     %orig(c ?: color);
 }
 
@@ -621,7 +673,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
     if (mode == 0) return;
     @try {
         YTInlineMutedPlaybackScrubbingSlider *slider = [self valueForKey:@"_playingProgress"];
-        UIColor *color = seekBarSliderColor(seekBarIsLiveMode(mode));
+        UIColor *color = seekBarFillColor(seekBarIsLiveMode(mode));
         if (color) {
             UIImage *tracked = slider.currentMinimumTrackImage;
             if (tracked) {
@@ -689,7 +741,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
 
 - (void)willDrawInContext:(CGContextRef)ctx drawParameters:(ASImageNodeDrawParameters *)drawParameters {
     if (seekBarHasColor()) {
-        UIColor *color = seekBarSliderColor(NO);
+        UIColor *color = seekBarFillColor(NO);
         if (color) {
             CGRect totalRect = CGContextGetClipBoundingBox(ctx);
             CGRect progressRect = CGRectIntersection([drawParameters drawRect], totalRect);
