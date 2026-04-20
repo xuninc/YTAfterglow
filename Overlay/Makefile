@@ -20,8 +20,7 @@ $(TWEAK_NAME)_FILES = \
     YouPiP/Settings.x \
     YouPiP/LegacyPiPCompat.x \
     YouMute/Tweak.x \
-    YouQuality/Tweak.x \
-    ../Utils/YTAGLog.m
+    YouQuality/Tweak.x
 
 $(TWEAK_NAME)_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable -Wno-unused-function
 $(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation AVFoundation AVKit

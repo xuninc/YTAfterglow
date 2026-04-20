@@ -28,7 +28,6 @@
 #import "Header.h"
 #import "../YTVideoOverlay/Header.h"
 #import "../YTVideoOverlay/Init.x"
-#import "../../Utils/YTAGLog.h"
 
 @interface YTMainAppControlsOverlayView (YouPiP)
 - (void)didPressPiP:(id)arg;
@@ -81,66 +80,38 @@ static NSString *PiPIconPath;
 static NSString *TabBarPiPIconPath;
 
 static void activatePiPBase(YTPlayerPIPController *controller) {
-    YTAGLog(@"pip", @"activatePiPBase controller=%@ class=%@", controller, NSStringFromClass([controller class]));
-    if (!controller) { YTAGLog(@"pip", @"  controller nil, abort"); return; }
     YTBackgroundabilityPolicy *backgroundabilityPolicy = [controller valueForKey:@"_backgroundabilityPolicy"];
-    BOOL allowed = backgroundabilityPolicy.playableInPiPByUserSettings;
-    YTAGLog(@"pip", @"  backgroundabilityPolicy=%@ playableInPiPByUserSettings=%@", backgroundabilityPolicy, allowed ? @"YES" : @"NO");
-    if (!allowed) { YTAGLog(@"pip", @"  early-return (user-settings says no)"); return; }
+    if (!backgroundabilityPolicy.playableInPiPByUserSettings) return;
     MLPIPController *pip = [controller valueForKey:@"_pipController"];
-    YTAGLog(@"pip", @"  _pipController=%@ class=%@", pip, NSStringFromClass([pip class]));
-    if ([controller respondsToSelector:@selector(maybeEnablePictureInPicture)]) {
-        YTAGLog(@"pip", @"  -> maybeEnablePictureInPicture");
+    if ([controller respondsToSelector:@selector(maybeEnablePictureInPicture)])
         [controller maybeEnablePictureInPicture];
-    } else if ([controller respondsToSelector:@selector(maybeInvokePictureInPicture)]) {
-        YTAGLog(@"pip", @"  -> maybeInvokePictureInPicture");
+    else if ([controller respondsToSelector:@selector(maybeInvokePictureInPicture)])
         [controller maybeInvokePictureInPicture];
-    } else {
+    else {
         BOOL canPiP = [controller respondsToSelector:@selector(canEnablePictureInPicture)] && [controller canEnablePictureInPicture];
         if (!canPiP)
             canPiP = [controller respondsToSelector:@selector(canInvokePictureInPicture)] && [controller canInvokePictureInPicture];
-        YTAGLog(@"pip", @"  canPiP=%@", canPiP ? @"YES" : @"NO");
         if (canPiP) {
-            if ([pip respondsToSelector:@selector(activatePiPController)]) {
-                YTAGLog(@"pip", @"  -> pip activatePiPController");
+            if ([pip respondsToSelector:@selector(activatePiPController)])
                 [pip activatePiPController];
-            } else {
-                YTAGLog(@"pip", @"  -> pip startPictureInPicture");
+            else
                 [pip startPictureInPicture];
-            }
         }
     }
     AVPictureInPictureController *avpip = [pip valueForKey:@"_pictureInPictureController"];
-    YTAGLog(@"pip", @"  AVPiP=%@ possible=%@", avpip, avpip.pictureInPicturePossible ? @"YES" : @"NO");
-    if (avpip.pictureInPicturePossible) {
-        YTAGLog(@"pip", @"  -> avpip startPictureInPicture");
+    if (avpip.pictureInPicturePossible)
         [avpip startPictureInPicture];
-    }
 }
 
 static void activatePiP(YTLocalPlaybackController *local) {
-    YTAGLog(@"pip", @"activatePiP local=%@ class=%@", local, NSStringFromClass([local class]));
-    if (![local isKindOfClass:%c(YTLocalPlaybackController)]) {
-        YTAGLog(@"pip", @"  local is not YTLocalPlaybackController, abort");
+    if (![local isKindOfClass:%c(YTLocalPlaybackController)])
         return;
-    }
-    YTPlayerPIPController *controller = nil;
-    @try {
-        controller = [local valueForKey:@"_playerPIPController"];
-    } @catch (id ex) {
-        YTAGLog(@"pip", @"  _playerPIPController KVC failed: %@", ex);
-    }
+    YTPlayerPIPController *controller = [local valueForKey:@"_playerPIPController"];
     activatePiPBase(controller);
 }
 
 static void bootstrapPiP(YTPlayerViewController *self) {
-    YTAGLog(@"pip", @"bootstrapPiP self=%@", self);
-    YTLocalPlaybackController *local = nil;
-    @try {
-        local = [self valueForKey:@"_playbackController"];
-    } @catch (id ex) {
-        YTAGLog(@"pip", @"  _playbackController KVC failed: %@", ex);
-    }
+    YTLocalPlaybackController *local = [self valueForKey:@"_playbackController"];
     activatePiP(local);
 }
 
@@ -253,30 +224,19 @@ static UIButton *makeUnderNewPlayerButton(ELMCellNode *node, NSString *title, NS
 
 %new(v@:@@)
 - (void)didPressPiP:(UIButton *)button event:(UIEvent *)event {
-    YTAGLog(@"pip", @"ASCollectionView.didPressPiP: tab-bar button");
     CGPoint location = [[[event allTouches] anyObject] locationInView:button];
     if (CGRectContainsPoint(button.bounds, location)) {
         UIViewController *controller = [self.collectionNode closestViewController];
-        YTAGLog(@"pip", @"  closestViewController=%@", NSStringFromClass([controller class]));
-        YTPlaybackStrippedWatchController *provider = nil;
+        YTPlaybackStrippedWatchController *provider;
         @try {
             provider = [controller valueForKey:@"_metadataPanelStateProvider"];
         } @catch (id ex) {
-            YTAGLog(@"pip", @"  _metadataPanelStateProvider failed, trying _ngw: %@", ex);
-            @try { provider = [controller valueForKey:@"_ngwMetadataPanelStateProvider"]; }
-            @catch (id ex2) { YTAGLog(@"pip", @"  both providers failed: %@", ex2); }
+            provider = [controller valueForKey:@"_ngwMetadataPanelStateProvider"];
         }
-        YTWatchViewController *watchViewController = nil;
-        @try { watchViewController = [provider valueForKey:@"_watchViewController"]; }
-        @catch (id ex) { YTAGLog(@"pip", @"  _watchViewController failed: %@", ex); }
-        YTPlayerViewController *playerViewController = nil;
-        @try { playerViewController = [watchViewController valueForKey:@"_playerViewController"]; }
-        @catch (id ex) { YTAGLog(@"pip", @"  _playerViewController failed: %@", ex); }
-        YTAGLog(@"pip", @"  playerViewController=%@ watchVC=%@ provider=%@", playerViewController, watchViewController, provider);
+        YTWatchViewController *watchViewController = [provider valueForKey:@"_watchViewController"];
+        YTPlayerViewController *playerViewController = [watchViewController valueForKey:@"_playerViewController"];
         FromUser = YES;
         bootstrapPiP(playerViewController);
-    } else {
-        YTAGLog(@"pip", @"  tap outside button bounds, ignoring");
     }
 }
 
@@ -310,12 +270,9 @@ static UIImage *pipImage() {
 
 %new(v@:@)
 - (void)didPressPiP:(id)arg {
-    YTAGLog(@"pip", @"YTMainAppControlsOverlayView.didPressPiP: overlay button");
     YTMainAppVideoPlayerOverlayViewController *c = nil;
-    @try { c = [self valueForKey:@"_eventsDelegate"]; }
-    @catch (id ex) { YTAGLog(@"pip", @"  _eventsDelegate KVC failed: %@", ex); }
+    @try { c = [self valueForKey:@"_eventsDelegate"]; } @catch (id ex) {}
     if (!c) {
-        YTAGLog(@"pip", @"  _eventsDelegate nil, walking responder chain");
         UIResponder *r = self.nextResponder;
         while (r) {
             if ([r isKindOfClass:%c(YTMainAppVideoPlayerOverlayViewController)]) {
@@ -325,10 +282,8 @@ static UIImage *pipImage() {
             r = r.nextResponder;
         }
     }
-    YTAGLog(@"pip", @"  overlay VC=%@", c);
     YTPlayerViewController *pvc = c ? (YTPlayerViewController *)c.parentViewController : nil;
-    YTAGLog(@"pip", @"  parent pvc=%@ class=%@", pvc, NSStringFromClass([pvc class]));
-    if (!pvc) { YTAGLog(@"pip", @"  no pvc, abort"); return; }
+    if (!pvc) return;
     FromUser = YES;
     bootstrapPiP(pvc);
 }
@@ -343,12 +298,9 @@ static UIImage *pipImage() {
 
 %new(v@:@)
 - (void)didPressPiP:(id)arg {
-    YTAGLog(@"pip", @"YTInlinePlayerBarContainerView.didPressPiP: inline bar button");
     YTMainAppVideoPlayerOverlayViewController *c = nil;
-    @try { c = [self.delegate valueForKey:@"_delegate"]; }
-    @catch (id ex) { YTAGLog(@"pip", @"  self.delegate._delegate KVC failed: %@", ex); }
+    @try { c = [self.delegate valueForKey:@"_delegate"]; } @catch (id ex) {}
     if (!c) {
-        YTAGLog(@"pip", @"  delegate nil, walking responder chain");
         UIResponder *r = self.nextResponder;
         while (r) {
             if ([r isKindOfClass:%c(YTMainAppVideoPlayerOverlayViewController)]) {
@@ -358,10 +310,8 @@ static UIImage *pipImage() {
             r = r.nextResponder;
         }
     }
-    YTAGLog(@"pip", @"  overlay VC=%@", c);
     YTPlayerViewController *pvc = c ? (YTPlayerViewController *)c.parentViewController : nil;
-    YTAGLog(@"pip", @"  parent pvc=%@ class=%@", pvc, NSStringFromClass([pvc class]));
-    if (!pvc) { YTAGLog(@"pip", @"  no pvc, abort"); return; }
+    if (!pvc) return;
     FromUser = YES;
     bootstrapPiP(pvc);
 }
@@ -570,20 +520,13 @@ NSBundle *YouPiPBundle() {
 }
 
 %ctor {
-    YTAGLog(@"pip", @"YouPiP ctor starting");
     NSBundle *tweakBundle = YouPiPBundle();
     TabBarPiPIconPath = [tweakBundle pathForResource:@"yt-pip-tabbar" ofType:@"png"];
     %init(Icon);
     [[NSUserDefaults standardUserDefaults] registerDefaults:@{
         EnabledKey: @YES,
     }];
-    if (!TweakEnabled()) { YTAGLog(@"pip", @"YouPiP disabled via user setting"); return; }
-    YTAGLog(@"pip", @"YouPiP enabled. Class checks:");
-    YTAGLog(@"pip", @"  YTPlayerViewController=%@", NSClassFromString(@"YTPlayerViewController") ? @"YES" : @"NO");
-    YTAGLog(@"pip", @"  YTLocalPlaybackController=%@", NSClassFromString(@"YTLocalPlaybackController") ? @"YES" : @"NO");
-    YTAGLog(@"pip", @"  YTPlayerPIPController=%@", NSClassFromString(@"YTPlayerPIPController") ? @"YES" : @"NO");
-    YTAGLog(@"pip", @"  MLPIPController=%@", NSClassFromString(@"MLPIPController") ? @"YES" : @"NO");
-    YTAGLog(@"pip", @"  YTBackgroundabilityPolicy=%@", NSClassFromString(@"YTBackgroundabilityPolicy") ? @"YES" : @"NO");
+    if (!TweakEnabled()) return;
     PiPIconPath = [tweakBundle pathForResource:@"yt-pip-overlay" ofType:@"png"];
     initYTVideoOverlay(TweakName, @{
         AccessibilityLabelKey: @"PiP",
@@ -591,5 +534,4 @@ NSBundle *YouPiPBundle() {
         ToggleKey: PiPActivationMethodKey
     });
     %init;
-    YTAGLog(@"pip", @"YouPiP ctor done");
 }

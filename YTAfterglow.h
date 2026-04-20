@@ -3,8 +3,6 @@
 #import <Photos/Photos.h>
 #import "Utils/NSBundle+YTAfterglow.h"
 #import "Utils/YTAGUserDefaults.h"
-#import "Utils/YTAGLog.h"
-#import "Utils/YTAGDebugHUD.h"
 #import "Utils/Reachability.h"
 #import "YouTubeHeaders.h"
 
@@ -15,9 +13,6 @@
 
 // Exposed from ColorMode.x so SeekBar.x (and future files) can read theme colors
 UIColor *themeColor(NSString *key);
-// Exposed glow helper. Apply a colored shadow to any layer; respects the
-// theme_glowEnabled toggle internally (no-ops when disabled).
-void ytag_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity, CGFloat radius);
 
 #define ytagSetBool(value, key) [[YTAGUserDefaults standardUserDefaults] setBool:(value) forKey:(key)]
 #define ytagSetInt(value, key) [[YTAGUserDefaults standardUserDefaults] setInteger:(value) forKey:(key)]
