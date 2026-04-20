@@ -7,11 +7,9 @@ static NSString *const kDefaultsSuiteName = @"i.am.kain.afterglow";
 static NSString *const kActiveTabsKey = @"activeTabs";
 static NSString *const kStartupTabKey = @"startupTab";
 static NSString *const kThemeMigrationVersionKey = @"themePresetMigrationVersion";
-static NSString *const kSettingsMigrationVersionKey = @"settingsMigrationVersion";
 static const NSUInteger kMinimumActiveTabsCount = 2;
 static const NSUInteger kMaximumActiveTabsCount = 6;
 static const NSInteger kCurrentThemeMigrationVersion = 1;
-static const NSInteger kCurrentSettingsMigrationVersion = 1;
 
 static NSData *YTAGArchiveColor(UIColor *color) {
     return [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
@@ -64,7 +62,6 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         defaults = [[self alloc] initWithSuiteName:kDefaultsSuiteName];
         [defaults registerDefaults];
         [defaults migrateThemePresetsIfNeeded];
-        [defaults migrateSettingsIfNeeded];
     });
 
     return defaults;
@@ -143,16 +140,7 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         @"cellQualityIndex": @0,
         kActiveTabsKey: [YTAGUserDefaults defaultActiveTabs],
         kStartupTabKey: @"FEwhat_to_watch",
-        @"frostedPivot": @YES,
-        @"theme_glowPivot": @YES,
-        @"theme_glowOverlay": @YES,
-        @"theme_glowScrubber": @YES,
-        @"theme_glowSeekBar": @NO,
-        @"theme_glowStrength": @1,
-        @"autoplayMode": @0,
-        @"playerShareButtonMode": @0,
-        @"playerSaveButtonMode": @0,
-        @"commentsHeaderMode": @0
+        @"frostedPivot": @YES
     }];
 }
 
@@ -165,54 +153,6 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
     }
 
     [self setInteger:kCurrentThemeMigrationVersion forKey:kThemeMigrationVersionKey];
-}
-
-- (void)migrateSettingsIfNeeded {
-    NSInteger recordedVersion = [self integerForKey:kSettingsMigrationVersionKey];
-    if (recordedVersion >= kCurrentSettingsMigrationVersion) return;
-
-    if ([self objectForKey:@"playerShareButtonMode"] == nil) {
-        BOOL alwaysShow = [self boolForKey:@"showPlayerShareButton"];
-        BOOL alwaysHide = [self boolForKey:@"playerNoShare"];
-        NSInteger mode = alwaysHide ? 2 : (alwaysShow ? 1 : 0);
-        [self setInteger:mode forKey:@"playerShareButtonMode"];
-    }
-    [self removeObjectForKey:@"showPlayerShareButton"];
-    [self removeObjectForKey:@"playerNoShare"];
-
-    if ([self objectForKey:@"playerSaveButtonMode"] == nil) {
-        BOOL alwaysShow = [self boolForKey:@"showPlayerSaveButton"];
-        BOOL alwaysHide = [self boolForKey:@"playerNoSave"];
-        NSInteger mode = alwaysHide ? 2 : (alwaysShow ? 1 : 0);
-        [self setInteger:mode forKey:@"playerSaveButtonMode"];
-    }
-    [self removeObjectForKey:@"showPlayerSaveButton"];
-    [self removeObjectForKey:@"playerNoSave"];
-
-    if ([self objectForKey:@"commentsHeaderMode"] == nil) {
-        BOOL pinned = [self boolForKey:@"stickSortComments"];
-        BOOL hidden = [self boolForKey:@"hideSortComments"];
-        NSInteger mode = hidden ? 2 : (pinned ? 1 : 0);
-        [self setInteger:mode forKey:@"commentsHeaderMode"];
-    }
-    [self removeObjectForKey:@"stickSortComments"];
-    [self removeObjectForKey:@"hideSortComments"];
-
-    if ([self objectForKey:@"autoplayMode"] == nil) {
-        BOOL disableAutoplay = [self boolForKey:@"disableAutoplay"];
-        BOOL hideAutoplay = [self boolForKey:@"hideAutoplay"];
-        NSInteger mode = hideAutoplay ? 2 : (disableAutoplay ? 1 : 0);
-        [self setInteger:mode forKey:@"autoplayMode"];
-    }
-    [self removeObjectForKey:@"disableAutoplay"];
-    [self removeObjectForKey:@"hideAutoplay"];
-
-    if ([self objectForKey:@"hideEndScreenCards"] == nil && [self objectForKey:@"endScreenCards"] != nil) {
-        [self setBool:[self boolForKey:@"endScreenCards"] forKey:@"hideEndScreenCards"];
-    }
-    [self removeObjectForKey:@"endScreenCards"];
-
-    [self setInteger:kCurrentSettingsMigrationVersion forKey:kSettingsMigrationVersionKey];
 }
 
 + (NSArray<NSString *> *)defaultActiveTabs {

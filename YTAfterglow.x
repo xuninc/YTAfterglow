@@ -12,14 +12,6 @@ static const void *kYTAGPauseOnOverlayInternalChangeKey = &kYTAGPauseOnOverlayIn
 static BOOL ytagDidScheduleAdvancedModePrompt = NO;
 static id ytagAdvancedModePromptObserver = nil;
 
-static BOOL ytag_commentsPinned(void) {
-    return ytagInt(@"commentsHeaderMode") == 1;
-}
-
-static BOOL ytag_commentsHidden(void) {
-    return ytagInt(@"commentsHeaderMode") == 2;
-}
-
 static UIViewController *ytagTopViewController(UIViewController *controller) {
     UIViewController *topController = controller;
     while (topController.presentedViewController) {
@@ -380,14 +372,14 @@ static BOOL canRememberLoopMode = NO;
 
 %hook YTMainAppControlsOverlayView
 // Hide Autoplay Switch
-- (void)setAutoplaySwitchButtonRenderer:(id)arg1 { if (ytagInt(@"autoplayMode") != 2) %orig; }
+- (void)setAutoplaySwitchButtonRenderer:(id)arg1 { if (!ytagBool(@"hideAutoplay")) %orig; }
 
 // Hide Subs Button
 - (void)setClosedCaptionsOrSubtitlesButtonAvailable:(BOOL)arg1 { ytagBool(@"hideSubs") ? %orig(NO) : %orig; }
 
 // Force Share / Save buttons to stay available in the overlay.
-- (void)setShareButtonAvailable:(BOOL)arg1 { %orig(ytagInt(@"playerShareButtonMode") == 1 ? YES : arg1); }
-- (void)setAddToButtonAvailable:(BOOL)arg1 { %orig(ytagInt(@"playerSaveButtonMode") == 1 ? YES : arg1); }
+- (void)setShareButtonAvailable:(BOOL)arg1 { %orig(ytagBool(@"showPlayerShareButton") ? YES : arg1); }
+- (void)setAddToButtonAvailable:(BOOL)arg1 { %orig(ytagBool(@"showPlayerSaveButton") ? YES : arg1); }
 
 // Pause On Overlay
 - (void)setOverlayVisible:(BOOL)visible {
@@ -425,9 +417,9 @@ static BOOL canRememberLoopMode = NO;
 // Disable Free Zoom
 - (BOOL)videoZoomFreeZoomEnabledGlobalConfig { return ytagBool(@"noFreeZoom") ? NO : %orig; }
 // Stick Sort Buttons in Comments Section
-- (BOOL)enableHideChipsInTheCommentsHeaderOnScrollIos { return ytag_commentsPinned() ? NO : %orig; }
+- (BOOL)enableHideChipsInTheCommentsHeaderOnScrollIos { return ytagBool(@"stickSortComments") ? NO : %orig; }
 // Hide Sort Buttons in Comments Section
-- (BOOL)enableChipsInTheCommentsHeaderIos { return ytag_commentsHidden() ? NO : %orig; }
+- (BOOL)enableChipsInTheCommentsHeaderIos { return ytagBool(@"hideSortComments") ? NO : %orig; }
 // Disable Ambient Mode
 - (BOOL)disableCinematicForLowPowerMode { return ytagBool(@"disableAmbientMode") ? NO : %orig; }
 - (BOOL)enableCinematicContainer { return ytagBool(@"disableAmbientMode") ? NO : %orig; }
@@ -492,7 +484,7 @@ static BOOL canRememberLoopMode = NO;
 
 // No Endscreen Cards
 %hook YTCreatorEndscreenView
-- (void)setHidden:(BOOL)arg1 { ytagBool(@"hideEndScreenCards") ? %orig(YES) : %orig; }
+- (void)setHidden:(BOOL)arg1 { ytagBool(@"endScreenCards") ? %orig(YES) : %orig; }
 %end
 
 // Disable Fullscreen Actions
@@ -544,7 +536,7 @@ static BOOL canRememberLoopMode = NO;
 
 // Disable Autoplay
 %hook YTPlaybackConfig
-- (void)setStartPlayback:(BOOL)arg1 { ytagInt(@"autoplayMode") >= 1 ? %orig(NO) : %orig; }
+- (void)setStartPlayback:(BOOL)arg1 { ytagBool(@"disableAutoplay") ? %orig(NO) : %orig; }
 %end
 
 // Skip Content Warning (https://github.com/qnblackcat/uYouPlus/blob/main/uYouPlus.xm#L452-L454)
@@ -1167,7 +1159,7 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
             return CGSizeZero;
         }
 
-        if (ytagInt(@"playerShareButtonMode") == 2 && findCell(nodeController, @[@"id.video.share.button"])) {
+        if (ytagBool(@"playerNoShare") && findCell(nodeController, @[@"id.video.share.button"])) {
             return CGSizeZero;
         }
 
@@ -1179,7 +1171,7 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
             return CGSizeZero;
         }
 
-        if (ytagInt(@"playerSaveButtonMode") == 2 && findCell(nodeController, @[@"id.video.add_to.button"])) {
+        if (ytagBool(@"playerNoSave") && findCell(nodeController, @[@"id.video.add_to.button"])) {
             return CGSizeZero;
         }
     }
