@@ -64,8 +64,26 @@ static NSString *const kHUDEnabledKey = @"debugHUDEnabled";
 @end
 
 
+@interface YTAGPassthroughWindow : UIWindow
+@property (nonatomic, weak) UIView *passthroughTarget;
+@end
+
+@implementation YTAGPassthroughWindow
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hit = [super hitTest:point withEvent:event];
+    if (!self.passthroughTarget) return hit;
+    UIView *v = hit;
+    while (v) {
+        if (v == self.passthroughTarget) return hit;
+        v = v.superview;
+    }
+    return nil;
+}
+@end
+
+
 @interface YTAGDebugHUD ()
-@property (nonatomic, strong, nullable) UIWindow *window;
+@property (nonatomic, strong, nullable) YTAGPassthroughWindow *window;
 @property (nonatomic, strong, nullable) YTAGDebugHUDView *hudView;
 @end
 
@@ -97,15 +115,13 @@ static NSString *const kHUDEnabledKey = @"debugHUDEnabled";
         }
         if (!scene) return;
 
-        UIWindow *w = [[UIWindow alloc] initWithWindowScene:scene];
+        YTAGPassthroughWindow *w = [[YTAGPassthroughWindow alloc] initWithWindowScene:scene];
         w.windowLevel = UIWindowLevelStatusBar + 10;
         w.backgroundColor = [UIColor clearColor];
         w.hidden = NO;
-        w.userInteractionEnabled = YES;
 
         UIViewController *vc = [UIViewController new];
         vc.view.backgroundColor = [UIColor clearColor];
-        vc.view.userInteractionEnabled = NO;
         w.rootViewController = vc;
 
         CGFloat width = MIN(CGRectGetWidth(scene.coordinateSpace.bounds) - 24, 320);
@@ -116,7 +132,7 @@ static NSString *const kHUDEnabledKey = @"debugHUDEnabled";
 
         YTAGDebugHUDView *hud = [[YTAGDebugHUDView alloc] initWithFrame:CGRectMake(x, y, width, height)];
         [vc.view addSubview:hud];
-        vc.view.userInteractionEnabled = YES;
+        w.passthroughTarget = hud;
 
         self.window = w;
         self.hudView = hud;

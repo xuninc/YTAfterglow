@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <dlfcn.h>
+#import "Utils/YTAGLog.h"
 
 #define YT_BUNDLE_ID @"com.google.ios.youtube"
 #define YT_NAME @"YouTube"
@@ -111,21 +112,29 @@ BOOL isSelf() {
 // Fix login for YouTube 18.13.2 and higher
 %hook SSOKeychainHelper
 + (NSString *)accessGroup {
-    return accessGroupID();
+    NSString *g = accessGroupID();
+    YTAGLogForce(@"keychain", @"SSOKeychainHelper.accessGroup -> %@", g ?: @"(nil)");
+    return g;
 }
 + (NSString *)sharedAccessGroup {
-    return accessGroupID();
+    NSString *g = accessGroupID();
+    YTAGLogForce(@"keychain", @"SSOKeychainHelper.sharedAccessGroup -> %@", g ?: @"(nil)");
+    return g;
 }
 %end
 
 // Fix login for YouTube 17.33.2 and higher
 %hook SSOKeychainCore
 + (NSString *)accessGroup {
-    return accessGroupID();
+    NSString *g = accessGroupID();
+    YTAGLogForce(@"keychain", @"SSOKeychainCore.accessGroup -> %@", g ?: @"(nil)");
+    return g;
 }
 
 + (NSString *)sharedAccessGroup {
-    return accessGroupID();
+    NSString *g = accessGroupID();
+    YTAGLogForce(@"keychain", @"SSOKeychainCore.sharedAccessGroup -> %@", g ?: @"(nil)");
+    return g;
 }
 %end
 
@@ -143,6 +152,13 @@ BOOL isSelf() {
 %end
 
 %ctor {
-    BOOL isAppStoreApp = [[NSFileManager defaultManager] fileExistsAtPath:[[NSBundle mainBundle] appStoreReceiptURL].path];
-    if (!isAppStoreApp) %init(gSideloading);
+    NSString *receiptPath = [[NSBundle mainBundle] appStoreReceiptURL].path;
+    BOOL isAppStoreApp = [[NSFileManager defaultManager] fileExistsAtPath:receiptPath];
+    YTAGLogForce(@"sideload", @"ctor: receiptPath=%@ isAppStore=%@", receiptPath, isAppStoreApp ? @"YES" : @"NO");
+    if (!isAppStoreApp) {
+        %init(gSideloading);
+        YTAGLogForce(@"sideload", @"gSideloading hooks initialized");
+    } else {
+        YTAGLogForce(@"sideload", @"SKIPPED gSideloading hooks (app-store build detected)");
+    }
 }

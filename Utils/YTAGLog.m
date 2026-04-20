@@ -1,4 +1,5 @@
 #import "YTAGLog.h"
+#import <os/log.h>
 #import <fcntl.h>
 #import <unistd.h>
 #import <sys/file.h>
@@ -76,11 +77,10 @@ static void append_to_file(NSString *line) {
     close(fd);
 }
 
-void YTAGLogWrite(NSString *category, NSString *message) {
-    if (!YTAGLogEnabled()) return;
+static void ytag_log_emit(NSString *category, NSString *message) {
     NSString *stamp = [time_formatter() stringFromDate:[NSDate date]];
     NSString *line = [NSString stringWithFormat:@"%@ [%@] %@", stamp, category ?: @"log", message ?: @""];
-    NSLog(@"[ytag] %@", line);
+    os_log(OS_LOG_DEFAULT, "[ytag] %{public}s", line.UTF8String);
     dispatch_async(log_queue(), ^{
         NSMutableArray *buf = ring_buffer();
         [buf addObject:line];
@@ -90,6 +90,15 @@ void YTAGLogWrite(NSString *category, NSString *message) {
             [[NSNotificationCenter defaultCenter] postNotificationName:YTAGLogDidAppendNotification object:nil];
         });
     });
+}
+
+void YTAGLogWrite(NSString *category, NSString *message) {
+    if (!YTAGLogEnabled()) return;
+    ytag_log_emit(category, message);
+}
+
+void YTAGLogWriteForce(NSString *category, NSString *message) {
+    ytag_log_emit(category, message);
 }
 
 NSArray<NSString *> *YTAGLogRecentEntries(void) {

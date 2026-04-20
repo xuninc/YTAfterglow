@@ -2292,16 +2292,24 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             } settingItemId:0]];
             [rows addObject:[%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ShareDebugLog") titleDescription:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
                 NSString *logPath = YTAGLogFilePath();
-                if (![[NSFileManager defaultManager] fileExistsAtPath:logPath]) {
+                NSString *body = nil;
+                @try {
+                    if ([[NSFileManager defaultManager] fileExistsAtPath:logPath]) {
+                        body = [NSString stringWithContentsOfFile:logPath encoding:NSUTF8StringEncoding error:nil];
+                    }
+                    if (!body || body.length == 0) {
+                        NSArray *entries = YTAGLogRecentEntries();
+                        body = entries.count ? [entries componentsJoinedByString:@"\n"] : @"";
+                    }
+                } @catch (id ex) {
+                    body = [NSString stringWithFormat:@"(read failed: %@)", ex];
+                }
+                if (!body || body.length == 0) {
                     [[%c(YTToastResponderEvent) eventWithMessage:LOC(@"NoDebugLog") firstResponder:[self parentResponder]] send];
                     return YES;
                 }
-                NSURL *logURL = [NSURL fileURLWithPath:logPath];
-                UIActivityViewController *share = [[UIActivityViewController alloc] initWithActivityItems:@[logURL] applicationActivities:nil];
-                UIViewController *presenter = ytag_viewControllerForResponder([self parentResponder]);
-                share.popoverPresentationController.sourceView = cell;
-                share.popoverPresentationController.sourceRect = cell.bounds;
-                [presenter presentViewController:share animated:YES completion:nil];
+                [UIPasteboard generalPasteboard].string = body;
+                [[%c(YTToastResponderEvent) eventWithMessage:@"Log copied to clipboard" firstResponder:[self parentResponder]] send];
                 return YES;
             }]];
             [rows addObject:[%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ClearDebugLog") titleDescription:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
