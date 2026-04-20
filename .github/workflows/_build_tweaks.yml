@@ -116,6 +116,10 @@ jobs:
         if: ${{ inputs.enable_ytuhd }}
         run: git clone --quiet --depth=1 https://github.com/Tonwalter888/YTUHD.git
 
+      - name: Link YTVideoOverlay source for YTUHD
+        if: ${{ inputs.enable_ytuhd }}
+        run: ln -s YTAfterglow/Overlay/YTVideoOverlay YTVideoOverlay
+
       - name: Clone Return-YouTube-Dislikes
         if: ${{ inputs.enable_ryd }}
         run: git clone --quiet --depth=1 https://github.com/PoomSmart/Return-YouTube-Dislikes.git
