@@ -6,14 +6,15 @@
 // jumps to NULL and the process dies. Providing our own definition here binds
 // the symbol at link time in every dylib that links this file.
 //
-// Safe to keep even on Xcode/macOS builds: clang's libclang_rt wins because we
-// aren't forcing load order, and the signatures match. See Apple's LLVM source
-// for the canonical implementation.
+// Marked weak so Xcode/macOS builds (which link libclang_rt.ios.a) pick up
+// clang's strong definition and discard ours — otherwise ld64 errors with
+// "duplicate symbol ___isOSVersionAtLeast". On the Linux toolchain ours is the
+// only definition, so it gets used.
 
 #import <Foundation/Foundation.h>
 #include <stdint.h>
 
-__attribute__((visibility("default")))
+__attribute__((weak, visibility("default")))
 int32_t __isOSVersionAtLeast(int32_t major, int32_t minor, int32_t subminor) {
     NSOperatingSystemVersion current = [[NSProcessInfo processInfo] operatingSystemVersion];
     if ((NSInteger)current.majorVersion != (NSInteger)major) {
