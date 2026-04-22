@@ -1,20 +1,20 @@
-#import "YTAFURLExtractor.h"
+#import "YTAGURLExtractor.h"
 #import "YTAGLog.h"
 
-static NSString *const YTAFURLExtractorErrorDomain = @"YTAFURLExtractor";
+static NSString *const YTAGURLExtractorErrorDomain = @"YTAGURLExtractor";
 
-#pragma mark - YTAFFormat
+#pragma mark - YTAGFormat
 
-@implementation YTAFFormat
+@implementation YTAGFormat
 @end
 
-#pragma mark - YTAFExtractionResult
+#pragma mark - YTAGExtractionResult
 
-@implementation YTAFExtractionResult
+@implementation YTAGExtractionResult
 
-- (NSArray<YTAFFormat *> *)videoFormats {
-    NSMutableArray<YTAFFormat *> *out = [NSMutableArray array];
-    for (YTAFFormat *f in self.formats) {
+- (NSArray<YTAGFormat *> *)videoFormats {
+    NSMutableArray<YTAGFormat *> *out = [NSMutableArray array];
+    for (YTAGFormat *f in self.formats) {
         if (f.isVideoOnly) {
             [out addObject:f];
         }
@@ -22,9 +22,9 @@ static NSString *const YTAFURLExtractorErrorDomain = @"YTAFURLExtractor";
     return [out copy];
 }
 
-- (NSArray<YTAFFormat *> *)audioFormats {
-    NSMutableArray<YTAFFormat *> *out = [NSMutableArray array];
-    for (YTAFFormat *f in self.formats) {
+- (NSArray<YTAGFormat *> *)audioFormats {
+    NSMutableArray<YTAGFormat *> *out = [NSMutableArray array];
+    for (YTAGFormat *f in self.formats) {
         if (f.isAudioOnly) {
             [out addObject:f];
         }
@@ -37,28 +37,28 @@ static NSString *const YTAFURLExtractorErrorDomain = @"YTAFURLExtractor";
 #pragma mark - Helpers
 
 /// Coerce a JSON value (which may be NSNumber or NSString) to NSInteger. Returns 0 for nil/NSNull.
-static NSInteger YTAFIntegerValue(id value) {
+static NSInteger YTAGIntegerValue(id value) {
     if (value == nil || value == [NSNull null]) return 0;
     if ([value isKindOfClass:[NSNumber class]]) return [(NSNumber *)value integerValue];
     if ([value isKindOfClass:[NSString class]]) return [(NSString *)value integerValue];
     return 0;
 }
 
-static long long YTAFLongLongValue(id value) {
+static long long YTAGLongLongValue(id value) {
     if (value == nil || value == [NSNull null]) return 0;
     if ([value isKindOfClass:[NSNumber class]]) return [(NSNumber *)value longLongValue];
     if ([value isKindOfClass:[NSString class]]) return [(NSString *)value longLongValue];
     return 0;
 }
 
-static NSString * _Nullable YTAFStringValue(id value) {
+static NSString * _Nullable YTAGStringValue(id value) {
     if (value == nil || value == [NSNull null]) return nil;
     if ([value isKindOfClass:[NSString class]]) return (NSString *)value;
     if ([value isKindOfClass:[NSNumber class]]) return [(NSNumber *)value stringValue];
     return nil;
 }
 
-static BOOL YTAFBoolValue(id value) {
+static BOOL YTAGBoolValue(id value) {
     if (value == nil || value == [NSNull null]) return NO;
     if ([value isKindOfClass:[NSNumber class]]) return [(NSNumber *)value boolValue];
     if ([value isKindOfClass:[NSString class]]) {
@@ -69,7 +69,7 @@ static BOOL YTAFBoolValue(id value) {
 }
 
 /// Parse "video/mp4; codecs=\"avc1.64002A\"" -> container "mp4", codec "avc1.64002A".
-static void YTAFParseMimeType(NSString * _Nullable mimeType, NSString * _Nullable * _Nullable outContainer, NSString * _Nullable * _Nullable outCodec) {
+static void YTAGParseMimeType(NSString * _Nullable mimeType, NSString * _Nullable * _Nullable outContainer, NSString * _Nullable * _Nullable outCodec) {
     if (outContainer) *outContainer = nil;
     if (outCodec) *outCodec = nil;
     if (mimeType.length == 0) return;
@@ -107,7 +107,7 @@ static void YTAFParseMimeType(NSString * _Nullable mimeType, NSString * _Nullabl
 }
 
 /// Detect DRC by inspecting the URL's xtags query parameter for "drc=1".
-static BOOL YTAFDetectDRCFromURL(NSString * _Nullable urlString) {
+static BOOL YTAGDetectDRCFromURL(NSString * _Nullable urlString) {
     if (urlString.length == 0) return NO;
     // xtags is typically URL-encoded: xtags=drc%3D1 or xtags=acont%3Ddubbed%3Alang%3Den%3Adrc%3D1
     NSURLComponents *comps = [NSURLComponents componentsWithString:urlString];
@@ -123,7 +123,7 @@ static BOOL YTAFDetectDRCFromURL(NSString * _Nullable urlString) {
 }
 
 /// Pick the highest-resolution thumbnail from videoDetails.thumbnail.thumbnails.
-static NSString * _Nullable YTAFPickBestThumbnail(NSDictionary *videoDetails) {
+static NSString * _Nullable YTAGPickBestThumbnail(NSDictionary *videoDetails) {
     NSDictionary *thumbnail = videoDetails[@"thumbnail"];
     if (![thumbnail isKindOfClass:[NSDictionary class]]) return nil;
     NSArray *thumbnails = thumbnail[@"thumbnails"];
@@ -133,9 +133,9 @@ static NSString * _Nullable YTAFPickBestThumbnail(NSDictionary *videoDetails) {
     NSInteger bestArea = -1;
     for (id entry in thumbnails) {
         if (![entry isKindOfClass:[NSDictionary class]]) continue;
-        NSString *url = YTAFStringValue(entry[@"url"]);
-        NSInteger w = YTAFIntegerValue(entry[@"width"]);
-        NSInteger h = YTAFIntegerValue(entry[@"height"]);
+        NSString *url = YTAGStringValue(entry[@"url"]);
+        NSInteger w = YTAGIntegerValue(entry[@"width"]);
+        NSInteger h = YTAGIntegerValue(entry[@"height"]);
         NSInteger area = w * h;
         if (url.length > 0 && area > bestArea) {
             bestArea = area;
@@ -146,23 +146,23 @@ static NSString * _Nullable YTAFPickBestThumbnail(NSDictionary *videoDetails) {
     if (bestURL == nil) {
         id last = thumbnails.lastObject;
         if ([last isKindOfClass:[NSDictionary class]]) {
-            bestURL = YTAFStringValue(((NSDictionary *)last)[@"url"]);
+            bestURL = YTAGStringValue(((NSDictionary *)last)[@"url"]);
         }
     }
     return bestURL;
 }
 
-#pragma mark - YTAFURLExtractor
+#pragma mark - YTAGURLExtractor
 
-@implementation YTAFURLExtractor
+@implementation YTAGURLExtractor
 
 + (void)extractVideoID:(NSString *)videoID
-              clientID:(YTAFClientID)clientID
-            completion:(YTAFExtractionCompletion)completion {
+              clientID:(YTAGClientID)clientID
+            completion:(YTAGExtractionCompletion)completion {
     if (completion == nil) return;
 
     if (videoID.length == 0) {
-        NSError *err = [NSError errorWithDomain:YTAFURLExtractorErrorDomain
+        NSError *err = [NSError errorWithDomain:YTAGURLExtractorErrorDomain
                                            code:-1
                                        userInfo:@{NSLocalizedDescriptionKey: @"Missing videoID"}];
         dispatch_async(dispatch_get_main_queue(), ^{ completion(nil, err); });
@@ -175,12 +175,12 @@ static NSString * _Nullable YTAFPickBestThumbnail(NSDictionary *videoDetails) {
     NSString *deviceModel = nil;
 
     switch (clientID) {
-        case YTAFClientIDMediaConnect:
+        case YTAGClientIDMediaConnect:
             innertubeKey = @"AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w";
             clientName = @"MEDIA_CONNECT_FRONTEND";
             clientVersion = @"0.1";
             break;
-        case YTAFClientIDiOS:
+        case YTAGClientIDiOS:
         default:
             innertubeKey = @"AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc";
             clientName = @"IOS";
@@ -209,7 +209,7 @@ static NSString * _Nullable YTAFPickBestThumbnail(NSDictionary *videoDetails) {
     NSError *jsonErr = nil;
     NSData *bodyData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonErr];
     if (bodyData == nil) {
-        NSError *err = [NSError errorWithDomain:YTAFURLExtractorErrorDomain
+        NSError *err = [NSError errorWithDomain:YTAGURLExtractorErrorDomain
                                            code:-2
                                        userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to serialize request body: %@", jsonErr.localizedDescription ?: @"unknown"]}];
         dispatch_async(dispatch_get_main_queue(), ^{ completion(nil, err); });
@@ -227,7 +227,7 @@ static NSString * _Nullable YTAFPickBestThumbnail(NSDictionary *videoDetails) {
 
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
                                                                  completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
-        void (^finish)(YTAFExtractionResult *, NSError *) = ^(YTAFExtractionResult *r, NSError *e) {
+        void (^finish)(YTAGExtractionResult *, NSError *) = ^(YTAGExtractionResult *r, NSError *e) {
             dispatch_async(dispatch_get_main_queue(), ^{ completion(r, e); });
         };
 
@@ -237,7 +237,7 @@ static NSString * _Nullable YTAFPickBestThumbnail(NSDictionary *videoDetails) {
             return;
         }
         if (data == nil) {
-            NSError *err = [NSError errorWithDomain:YTAFURLExtractorErrorDomain
+            NSError *err = [NSError errorWithDomain:YTAGURLExtractorErrorDomain
                                                code:-3
                                            userInfo:@{NSLocalizedDescriptionKey: @"Empty response body"}];
             finish(nil, err);
@@ -248,7 +248,7 @@ static NSString * _Nullable YTAFPickBestThumbnail(NSDictionary *videoDetails) {
         id parsed = [NSJSONSerialization JSONObjectWithData:data options:0 error:&parseErr];
         if (![parsed isKindOfClass:[NSDictionary class]]) {
             NSString *msg = parseErr ? [NSString stringWithFormat:@"JSON parse failed: %@", parseErr.localizedDescription] : @"Malformed JSON response";
-            NSError *err = [NSError errorWithDomain:YTAFURLExtractorErrorDomain
+            NSError *err = [NSError errorWithDomain:YTAGURLExtractorErrorDomain
                                                code:-4
                                            userInfo:@{NSLocalizedDescriptionKey: msg}];
             YTAGLog(@"extractor", @"%@", msg);
@@ -261,10 +261,10 @@ static NSString * _Nullable YTAFPickBestThumbnail(NSDictionary *videoDetails) {
         // playabilityStatus check
         NSDictionary *playability = json[@"playabilityStatus"];
         if ([playability isKindOfClass:[NSDictionary class]]) {
-            NSString *status = YTAFStringValue(playability[@"status"]);
+            NSString *status = YTAGStringValue(playability[@"status"]);
             if (status.length > 0 && ![status isEqualToString:@"OK"]) {
-                NSString *reason = YTAFStringValue(playability[@"reason"]) ?: [NSString stringWithFormat:@"Video not playable (%@)", status];
-                NSError *err = [NSError errorWithDomain:YTAFURLExtractorErrorDomain
+                NSString *reason = YTAGStringValue(playability[@"reason"]) ?: [NSString stringWithFormat:@"Video not playable (%@)", status];
+                NSError *err = [NSError errorWithDomain:YTAGURLExtractorErrorDomain
                                                    code:-5
                                                userInfo:@{NSLocalizedDescriptionKey: reason}];
                 YTAGLog(@"extractor", @"playabilityStatus=%@ reason=%@", status, reason);
@@ -273,18 +273,18 @@ static NSString * _Nullable YTAFPickBestThumbnail(NSDictionary *videoDetails) {
             }
         }
 
-        YTAFExtractionResult *result = [[YTAFExtractionResult alloc] init];
+        YTAGExtractionResult *result = [[YTAGExtractionResult alloc] init];
         result.videoID = videoID;
 
         NSDictionary *videoDetails = json[@"videoDetails"];
         if ([videoDetails isKindOfClass:[NSDictionary class]]) {
-            result.title = YTAFStringValue(videoDetails[@"title"]);
-            result.author = YTAFStringValue(videoDetails[@"author"]);
-            result.duration = (NSTimeInterval)YTAFIntegerValue(videoDetails[@"lengthSeconds"]);
-            result.thumbnailURL = YTAFPickBestThumbnail(videoDetails);
+            result.title = YTAGStringValue(videoDetails[@"title"]);
+            result.author = YTAGStringValue(videoDetails[@"author"]);
+            result.duration = (NSTimeInterval)YTAGIntegerValue(videoDetails[@"lengthSeconds"]);
+            result.thumbnailURL = YTAGPickBestThumbnail(videoDetails);
         }
 
-        NSMutableArray<YTAFFormat *> *formats = [NSMutableArray array];
+        NSMutableArray<YTAGFormat *> *formats = [NSMutableArray array];
         NSDictionary *streamingData = json[@"streamingData"];
         if ([streamingData isKindOfClass:[NSDictionary class]]) {
             NSArray *adaptive = streamingData[@"adaptiveFormats"];
@@ -293,31 +293,31 @@ static NSString * _Nullable YTAFPickBestThumbnail(NSDictionary *videoDetails) {
                     if (![entry isKindOfClass:[NSDictionary class]]) continue;
                     NSDictionary *f = (NSDictionary *)entry;
 
-                    YTAFFormat *fmt = [[YTAFFormat alloc] init];
-                    fmt.itag = YTAFIntegerValue(f[@"itag"]);
-                    fmt.url = YTAFStringValue(f[@"url"]) ?: @"";
-                    fmt.mimeType = YTAFStringValue(f[@"mimeType"]) ?: @"";
+                    YTAGFormat *fmt = [[YTAGFormat alloc] init];
+                    fmt.itag = YTAGIntegerValue(f[@"itag"]);
+                    fmt.url = YTAGStringValue(f[@"url"]) ?: @"";
+                    fmt.mimeType = YTAGStringValue(f[@"mimeType"]) ?: @"";
 
                     NSString *container = nil;
                     NSString *codec = nil;
-                    YTAFParseMimeType(fmt.mimeType, &container, &codec);
+                    YTAGParseMimeType(fmt.mimeType, &container, &codec);
                     fmt.container = container;
                     fmt.codec = codec;
 
-                    fmt.width = YTAFIntegerValue(f[@"width"]);
-                    fmt.height = YTAFIntegerValue(f[@"height"]);
-                    fmt.fps = YTAFIntegerValue(f[@"fps"]);
-                    fmt.bitrate = YTAFIntegerValue(f[@"bitrate"]);
-                    fmt.contentLength = YTAFLongLongValue(f[@"contentLength"]);
+                    fmt.width = YTAGIntegerValue(f[@"width"]);
+                    fmt.height = YTAGIntegerValue(f[@"height"]);
+                    fmt.fps = YTAGIntegerValue(f[@"fps"]);
+                    fmt.bitrate = YTAGIntegerValue(f[@"bitrate"]);
+                    fmt.contentLength = YTAGLongLongValue(f[@"contentLength"]);
 
-                    NSInteger approxMs = YTAFIntegerValue(f[@"approxDurationMs"]);
+                    NSInteger approxMs = YTAGIntegerValue(f[@"approxDurationMs"]);
                     fmt.duration = approxMs > 0 ? (NSTimeInterval)approxMs / 1000.0 : 0;
 
-                    fmt.qualityLabel = YTAFStringValue(f[@"qualityLabel"]);
-                    fmt.audioQuality = YTAFStringValue(f[@"audioQuality"]);
+                    fmt.qualityLabel = YTAGStringValue(f[@"qualityLabel"]);
+                    fmt.audioQuality = YTAGStringValue(f[@"audioQuality"]);
 
-                    BOOL drcFromJSON = YTAFBoolValue(f[@"isDrc"]);
-                    BOOL drcFromURL = YTAFDetectDRCFromURL(fmt.url);
+                    BOOL drcFromJSON = YTAGBoolValue(f[@"isDrc"]);
+                    BOOL drcFromURL = YTAGDetectDRCFromURL(fmt.url);
                     fmt.isDRC = drcFromJSON || drcFromURL;
 
                     fmt.isVideoOnly = [fmt.mimeType hasPrefix:@"video/"];

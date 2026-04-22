@@ -1,7 +1,7 @@
-#import "YTAFDownloadProgressViewController.h"
+#import "YTAGDownloadProgressViewController.h"
 #import "../Utils/YTAGLog.h"
 
-@interface YTAFDownloadProgressViewController () <UIAdaptivePresentationControllerDelegate>
+@interface YTAGDownloadProgressViewController () <UIAdaptivePresentationControllerDelegate>
 
 @property (nonatomic, strong) UIImageView    *thumbnailView;
 @property (nonatomic, strong) NSLayoutConstraint *thumbnailHeightConstraint;
@@ -18,13 +18,13 @@
 
 @end
 
-@implementation YTAFDownloadProgressViewController
+@implementation YTAGDownloadProgressViewController
 
 #pragma mark - Lifecycle
 
 - (instancetype)init {
     if ((self = [super initWithNibName:nil bundle:nil])) {
-        _phase = YTAFDownloadPhaseDownloadingVideo;
+        _phase = YTAGDownloadPhaseDownloadingVideo;
         _progressFraction = 0.0;
         self.modalPresentationStyle = UIModalPresentationPageSheet;
     }
@@ -180,8 +180,8 @@
     [self dispatchMain:^{ [self refreshThumbnail]; }];
 }
 
-- (void)setPhase:(YTAFDownloadPhase)phase {
-    YTAFDownloadPhase previous = _phase;
+- (void)setPhase:(YTAGDownloadPhase)phase {
+    YTAGDownloadPhase previous = _phase;
     _phase = phase;
     if (previous != phase) {
         YTAGLog(@"dl-ui", @"phase %ld -> %ld", (long)previous, (long)phase);
@@ -237,9 +237,9 @@
 - (void)refreshProgress {
     if (!self.viewReady) return;
     // Progress bar only animates for determinate download phases (and Muxing when fraction > 0).
-    if (self.phase == YTAFDownloadPhaseDownloadingVideo ||
-        self.phase == YTAFDownloadPhaseDownloadingAudio ||
-        (self.phase == YTAFDownloadPhaseMuxing && self.progressFraction > 0.0)) {
+    if (self.phase == YTAGDownloadPhaseDownloadingVideo ||
+        self.phase == YTAGDownloadPhaseDownloadingAudio ||
+        (self.phase == YTAGDownloadPhaseMuxing && self.progressFraction > 0.0)) {
         [self.progressView setProgress:(float)self.progressFraction animated:YES];
     }
     [self refreshPhaseLabelText];
@@ -249,15 +249,15 @@
     if (!self.viewReady) return;
     NSInteger pct = (NSInteger)round(self.progressFraction * 100.0);
     switch (self.phase) {
-        case YTAFDownloadPhaseDownloadingVideo:
+        case YTAGDownloadPhaseDownloadingVideo:
             self.phaseLabel.text = [NSString stringWithFormat:@"Downloading video — %ld%%", (long)pct];
             self.phaseLabel.textColor = [UIColor labelColor];
             break;
-        case YTAFDownloadPhaseDownloadingAudio:
+        case YTAGDownloadPhaseDownloadingAudio:
             self.phaseLabel.text = [NSString stringWithFormat:@"Downloading audio — %ld%%", (long)pct];
             self.phaseLabel.textColor = [UIColor labelColor];
             break;
-        case YTAFDownloadPhaseMuxing:
+        case YTAGDownloadPhaseMuxing:
             if (self.progressFraction > 0.0) {
                 self.phaseLabel.text = [NSString stringWithFormat:@"Processing — %ld%%", (long)pct];
             } else {
@@ -265,15 +265,15 @@
             }
             self.phaseLabel.textColor = [UIColor labelColor];
             break;
-        case YTAFDownloadPhaseFinished:
+        case YTAGDownloadPhaseFinished:
             self.phaseLabel.text = @"Done";
             self.phaseLabel.textColor = [UIColor labelColor];
             break;
-        case YTAFDownloadPhaseError:
+        case YTAGDownloadPhaseError:
             self.phaseLabel.text = @"Error";
             self.phaseLabel.textColor = [UIColor systemRedColor];
             break;
-        case YTAFDownloadPhaseCancelled:
+        case YTAGDownloadPhaseCancelled:
             self.phaseLabel.text = @"Cancelled";
             self.phaseLabel.textColor = [UIColor labelColor];
             break;
@@ -290,12 +290,12 @@
     BOOL showCheckmark = NO;
 
     switch (self.phase) {
-        case YTAFDownloadPhaseDownloadingVideo:
-        case YTAFDownloadPhaseDownloadingAudio:
+        case YTAGDownloadPhaseDownloadingVideo:
+        case YTAGDownloadPhaseDownloadingAudio:
             showProgressBar = YES;
             [self.progressView setProgress:(float)self.progressFraction animated:NO];
             break;
-        case YTAFDownloadPhaseMuxing:
+        case YTAGDownloadPhaseMuxing:
             if (self.progressFraction > 0.0) {
                 showProgressBar = YES;
                 [self.progressView setProgress:(float)self.progressFraction animated:NO];
@@ -303,11 +303,11 @@
                 showSpinner = YES;
             }
             break;
-        case YTAFDownloadPhaseFinished:
+        case YTAGDownloadPhaseFinished:
             showCheckmark = YES;
             break;
-        case YTAFDownloadPhaseError:
-        case YTAFDownloadPhaseCancelled:
+        case YTAGDownloadPhaseError:
+        case YTAGDownloadPhaseCancelled:
         default:
             break;
     }
@@ -330,12 +330,12 @@
     }
 
     // Cancel button behaviour per phase
-    if (self.phase == YTAFDownloadPhaseError) {
+    if (self.phase == YTAGDownloadPhaseError) {
         [self.cancelButton setTitle:@"Close" forState:UIControlStateNormal];
         self.cancelButton.enabled = YES;
         self.cancelButton.hidden = NO;
-    } else if (self.phase == YTAFDownloadPhaseFinished ||
-               self.phase == YTAFDownloadPhaseCancelled) {
+    } else if (self.phase == YTAGDownloadPhaseFinished ||
+               self.phase == YTAGDownloadPhaseCancelled) {
         // Button irrelevant — hide it while we auto-dismiss.
         self.cancelButton.hidden = YES;
     } else {
@@ -350,7 +350,7 @@
     [self updateInteractiveDismissal];
 
     // Terminal transitions fire onReadyToDismiss.
-    if (self.phase == YTAFDownloadPhaseFinished) {
+    if (self.phase == YTAGDownloadPhaseFinished) {
         __weak typeof(self) weakSelf = self;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.75 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
@@ -358,7 +358,7 @@
             if (!strongSelf) return;
             if (strongSelf.onReadyToDismiss) strongSelf.onReadyToDismiss();
         });
-    } else if (self.phase == YTAFDownloadPhaseCancelled) {
+    } else if (self.phase == YTAGDownloadPhaseCancelled) {
         __weak typeof(self) weakSelf = self;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
@@ -373,12 +373,12 @@
 - (void)refreshCancelButtonVisibility {
     if (!self.viewReady) return;
     // Error phase always shows Close regardless of onCancel.
-    if (self.phase == YTAFDownloadPhaseError) {
+    if (self.phase == YTAGDownloadPhaseError) {
         self.cancelButton.hidden = NO;
         return;
     }
-    if (self.phase == YTAFDownloadPhaseFinished ||
-        self.phase == YTAFDownloadPhaseCancelled) {
+    if (self.phase == YTAGDownloadPhaseFinished ||
+        self.phase == YTAGDownloadPhaseCancelled) {
         self.cancelButton.hidden = YES;
         return;
     }
@@ -388,7 +388,7 @@
 #pragma mark - Cancel
 
 - (void)handleCancelTapped {
-    if (self.phase == YTAFDownloadPhaseError) {
+    if (self.phase == YTAGDownloadPhaseError) {
         // "Close" tap — just fire dismiss.
         YTAGLog(@"dl-ui", @"close tapped (error terminal)");
         if (self.onReadyToDismiss) self.onReadyToDismiss();
@@ -412,9 +412,9 @@
 #pragma mark - Interactive dismissal
 
 - (BOOL)isTerminalPhase {
-    return self.phase == YTAFDownloadPhaseFinished ||
-           self.phase == YTAFDownloadPhaseError ||
-           self.phase == YTAFDownloadPhaseCancelled;
+    return self.phase == YTAGDownloadPhaseFinished ||
+           self.phase == YTAGDownloadPhaseError ||
+           self.phase == YTAGDownloadPhaseCancelled;
 }
 
 - (void)updateInteractiveDismissal {

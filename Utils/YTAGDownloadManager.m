@@ -1,48 +1,48 @@
-#import "YTAFDownloadManager.h"
+#import "YTAGDownloadManager.h"
 
-#import "YTAFURLExtractor.h"
-#import "YTAFStreamDownloader.h"
-#import "YTAFFormatSelector.h"
+#import "YTAGURLExtractor.h"
+#import "YTAGStreamDownloader.h"
+#import "YTAGFormatSelector.h"
 #import "FFMpegHelper.h"
 #import "YTAGLog.h"
-#import "../UI/YTAFDownloadProgressViewController.h"
+#import "../UI/YTAGDownloadProgressViewController.h"
 
 #import <Photos/Photos.h>
 
-static NSString *const kYTAFDownloadManagerErrorDomain = @"YTAFDownloadManager";
+static NSString *const kYTAGDownloadManagerErrorDomain = @"YTAGDownloadManager";
 
-#pragma mark - YTAFDownloadRequest
+#pragma mark - YTAGDownloadRequest
 
-@implementation YTAFDownloadRequest
+@implementation YTAGDownloadRequest
 @end
 
 #pragma mark - Internal session state
 
-typedef NS_ENUM(NSInteger, YTAFDLState) {
-    YTAFDLStateIdle = 0,
-    YTAFDLStateExtracting,
-    YTAFDLStateDownloadingVideo,
-    YTAFDLStateDownloadingAudio,
-    YTAFDLStateMuxing,
-    YTAFDLStateDelivering,
-    YTAFDLStateFinished,
-    YTAFDLStateError,
-    YTAFDLStateCancelled,
+typedef NS_ENUM(NSInteger, YTAGDLState) {
+    YTAGDLStateIdle = 0,
+    YTAGDLStateExtracting,
+    YTAGDLStateDownloadingVideo,
+    YTAGDLStateDownloadingAudio,
+    YTAGDLStateMuxing,
+    YTAGDLStateDelivering,
+    YTAGDLStateFinished,
+    YTAGDLStateError,
+    YTAGDLStateCancelled,
 };
 
-@interface YTAFDLSession : NSObject
+@interface YTAGDLSession : NSObject
 @property (nonatomic, strong) NSObject *token;
-@property (nonatomic, strong) YTAFDownloadRequest *request;
+@property (nonatomic, strong) YTAGDownloadRequest *request;
 @property (nonatomic, weak)   UIViewController *presentingVC;
-@property (nonatomic, copy)   YTAFDownloadCompletion completion;
+@property (nonatomic, copy)   YTAGDownloadCompletion completion;
 
-@property (nonatomic, strong) YTAFDownloadProgressViewController *progressVC;
+@property (nonatomic, strong) YTAGDownloadProgressViewController *progressVC;
 
-@property (nonatomic, strong, nullable) YTAFExtractionResult *extractionResult;
-@property (nonatomic, strong, nullable) YTAFFormatPair *pair;
+@property (nonatomic, strong, nullable) YTAGExtractionResult *extractionResult;
+@property (nonatomic, strong, nullable) YTAGFormatPair *pair;
 
-@property (nonatomic, strong, nullable) YTAFStreamDownloader *videoDownloader;
-@property (nonatomic, strong, nullable) YTAFStreamDownloader *audioDownloader;
+@property (nonatomic, strong, nullable) YTAGStreamDownloader *videoDownloader;
+@property (nonatomic, strong, nullable) YTAGStreamDownloader *audioDownloader;
 
 @property (nonatomic, strong, nullable) NSURL *tmpDir;
 @property (nonatomic, strong, nullable) NSURL *videoLocalURL;
@@ -55,43 +55,43 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
 @property (nonatomic, assign) double videoFraction;
 @property (nonatomic, assign) double audioFraction;
 
-@property (nonatomic, assign) YTAFDLState state;
+@property (nonatomic, assign) YTAGDLState state;
 @property (nonatomic, assign) BOOL completionFired;
 @property (nonatomic, assign) BOOL cancelRequested;
 @end
 
-@implementation YTAFDLSession
+@implementation YTAGDLSession
 @end
 
-#pragma mark - YTAFDownloadManager
+#pragma mark - YTAGDownloadManager
 
-@interface YTAFDownloadManager ()
-@property (nonatomic, strong) YTAFDLSession *activeSession; // MVP: one at a time
+@interface YTAGDownloadManager ()
+@property (nonatomic, strong) YTAGDLSession *activeSession; // MVP: one at a time
 @end
 
-@implementation YTAFDownloadManager
+@implementation YTAGDownloadManager
 
 + (instancetype)sharedManager {
-    static YTAFDownloadManager *s_instance = nil;
+    static YTAGDownloadManager *s_instance = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        s_instance = [[YTAFDownloadManager alloc] init];
+        s_instance = [[YTAGDownloadManager alloc] init];
     });
     return s_instance;
 }
 
 #pragma mark - Public
 
-- (id<NSObject>)startDownload:(YTAFDownloadRequest *)request
+- (id<NSObject>)startDownload:(YTAGDownloadRequest *)request
               presentingFrom:(UIViewController *)presentingVC
-                   completion:(YTAFDownloadCompletion)completion {
+                   completion:(YTAGDownloadCompletion)completion {
     NSParameterAssert(request != nil);
     NSParameterAssert(request.videoID.length > 0);
     NSParameterAssert(presentingVC != nil);
 
     // MVP: reject concurrent downloads.
     if (self.activeSession != nil) {
-        NSError *err = [NSError errorWithDomain:kYTAFDownloadManagerErrorDomain
+        NSError *err = [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
                                            code:-1
                                        userInfo:@{NSLocalizedDescriptionKey: @"Another download is in progress"}];
         YTAGLog(@"dl-mgr", @"[%@] rejected: another download in progress", request.videoID);
@@ -101,12 +101,12 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
         return [NSObject new];
     }
 
-    YTAFDLSession *session = [[YTAFDLSession alloc] init];
+    YTAGDLSession *session = [[YTAGDLSession alloc] init];
     session.token = [NSObject new];
     session.request = request;
     session.presentingVC = presentingVC;
     session.completion = completion;
-    session.state = YTAFDLStateIdle;
+    session.state = YTAGDLStateIdle;
     self.activeSession = session;
 
     // Stage per-video temp directory: NSTemporaryDirectory()/<videoID>/
@@ -152,31 +152,31 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
 }
 
 - (void)cancelDownloadWithToken:(id<NSObject>)token {
-    YTAFDLSession *session = self.activeSession;
+    YTAGDLSession *session = self.activeSession;
     if (!session || session.token != token) return;
     [self userRequestedCancelForSession:session];
 }
 
 #pragma mark - UI presentation
 
-- (void)presentProgressForSession:(YTAFDLSession *)session {
-    YTAFDownloadProgressViewController *vc = [[YTAFDownloadProgressViewController alloc] init];
+- (void)presentProgressForSession:(YTAGDLSession *)session {
+    YTAGDownloadProgressViewController *vc = [[YTAGDownloadProgressViewController alloc] init];
     vc.modalPresentationStyle = UIModalPresentationFullScreen;
     vc.titleText = session.request.titleOverride.length > 0 ? session.request.titleOverride : @"Downloading…";
     vc.thumbnailImage = nil;
-    vc.phase = YTAFDownloadPhaseDownloadingVideo;
+    vc.phase = YTAGDownloadPhaseDownloadingVideo;
     vc.progressFraction = 0.0;
 
     __weak typeof(self) weakSelf = self;
-    __weak YTAFDLSession *weakSession = session;
+    __weak YTAGDLSession *weakSession = session;
     vc.onCancel = ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        YTAFDLSession *s = weakSession;
+        YTAGDLSession *s = weakSession;
         if (!strongSelf || !s) return;
         [strongSelf userRequestedCancelForSession:s];
     };
     vc.onReadyToDismiss = ^{
-        YTAFDLSession *s = weakSession;
+        YTAGDLSession *s = weakSession;
         if (!s) return;
         UIViewController *pvc = s.progressVC.presentingViewController ?: s.presentingVC;
         [pvc dismissViewControllerAnimated:YES completion:nil];
@@ -188,21 +188,21 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
 
 #pragma mark - Extraction
 
-- (void)extractForSession:(YTAFDLSession *)session {
-    session.state = YTAFDLStateExtracting;
+- (void)extractForSession:(YTAGDLSession *)session {
+    session.state = YTAGDLStateExtracting;
     YTAGLog(@"dl-mgr", @"[%@] state → extracting", session.request.videoID);
 
     __weak typeof(self) weakSelf = self;
-    [YTAFURLExtractor extractVideoID:session.request.videoID
-                            clientID:YTAFClientIDiOS
-                          completion:^(YTAFExtractionResult * _Nullable result, NSError * _Nullable error) {
+    [YTAGURLExtractor extractVideoID:session.request.videoID
+                            clientID:YTAGClientIDiOS
+                          completion:^(YTAGExtractionResult * _Nullable result, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         if (session.cancelRequested) return;
 
         if (error || !result) {
             YTAGLog(@"dl-mgr", @"[%@] extract failed: %@", session.request.videoID, error.localizedDescription);
-            [strongSelf failSession:session withError:error ?: [NSError errorWithDomain:kYTAFDownloadManagerErrorDomain
+            [strongSelf failSession:session withError:error ?: [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
                                                                                     code:-2
                                                                                 userInfo:@{NSLocalizedDescriptionKey: @"Extraction failed"}]];
             return;
@@ -236,15 +236,15 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
         }
 
         // Pick a pair if the caller didn't supply one.
-        YTAFFormatPair *pair = session.request.pair;
+        YTAGFormatPair *pair = session.request.pair;
         if (!pair || !pair.videoFormat || !pair.audioFormat) {
-            pair = [YTAFFormatSelector selectVideoPairFromResult:result
-                                                         quality:YTAFQualityPreferenceHighest
-                                                           codec:YTAFCodecPreferenceH264
-                                                    audioQuality:YTAFAudioQualityStandard];
+            pair = [YTAGFormatSelector selectVideoPairFromResult:result
+                                                         quality:YTAGQualityPreferenceHighest
+                                                           codec:YTAGCodecPreferenceH264
+                                                    audioQuality:YTAGAudioQualityStandard];
         }
         if (!pair || !pair.videoFormat || !pair.audioFormat) {
-            NSError *err = [NSError errorWithDomain:kYTAFDownloadManagerErrorDomain
+            NSError *err = [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
                                                code:-3
                                            userInfo:@{NSLocalizedDescriptionKey: @"No suitable video + audio formats found"}];
             YTAGLog(@"dl-mgr", @"[%@] no pair", session.request.videoID);
@@ -259,47 +259,47 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
 
 #pragma mark - Downloads
 
-- (void)beginDownloadsForSession:(YTAFDLSession *)session {
+- (void)beginDownloadsForSession:(YTAGDLSession *)session {
     if (session.cancelRequested) return;
 
-    YTAFFormatPair *pair = session.pair;
+    YTAGFormatPair *pair = session.pair;
     NSURL *vRemote = [NSURL URLWithString:pair.videoFormat.url];
     NSURL *aRemote = [NSURL URLWithString:pair.audioFormat.url];
     if (!vRemote || !aRemote) {
-        NSError *err = [NSError errorWithDomain:kYTAFDownloadManagerErrorDomain
+        NSError *err = [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
                                            code:-4
                                        userInfo:@{NSLocalizedDescriptionKey: @"Invalid stream URLs"}];
         [self failSession:session withError:err];
         return;
     }
 
-    session.state = YTAFDLStateDownloadingVideo;
-    session.progressVC.phase = YTAFDownloadPhaseDownloadingVideo;
+    session.state = YTAGDLStateDownloadingVideo;
+    session.progressVC.phase = YTAGDownloadPhaseDownloadingVideo;
     session.progressVC.progressFraction = 0.0;
     session.progressVC.subtitleText = nil;
 
-    session.videoDownloader = [[YTAFStreamDownloader alloc] initWithURL:vRemote];
+    session.videoDownloader = [[YTAGStreamDownloader alloc] initWithURL:vRemote];
     session.videoDownloader.destinationURL = session.videoLocalURL;
 
-    session.audioDownloader = [[YTAFStreamDownloader alloc] initWithURL:aRemote];
+    session.audioDownloader = [[YTAGStreamDownloader alloc] initWithURL:aRemote];
     session.audioDownloader.destinationURL = session.audioLocalURL;
 
     __weak typeof(self) weakSelf = self;
 
     // Video progress: only drive the UI while video is still the "current" stream.
-    YTAFStreamProgress videoProgress = ^(int64_t bytesWritten, int64_t totalBytesExpected, double fraction) {
-        YTAFDLSession *s = session;
+    YTAGStreamProgress videoProgress = ^(int64_t bytesWritten, int64_t totalBytesExpected, double fraction) {
+        YTAGDLSession *s = session;
         if (!s || s.cancelRequested || s.completionFired) return;
         s.videoFraction = fraction;
-        if (s.state == YTAFDLStateDownloadingVideo) {
+        if (s.state == YTAGDLStateDownloadingVideo) {
             s.progressVC.progressFraction = fraction;
         }
     };
 
-    YTAFStreamCompletion videoCompletion = ^(NSURL * _Nullable localFileURL, NSError * _Nullable error) {
+    YTAGStreamCompletion videoCompletion = ^(NSURL * _Nullable localFileURL, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
-        YTAFDLSession *s = session;
+        YTAGDLSession *s = session;
         if (!s || s.cancelRequested || s.completionFired) return;
         if (error) {
             YTAGLog(@"dl-mgr", @"[%@] video download failed: %@", s.request.videoID, error.localizedDescription);
@@ -316,19 +316,19 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
         [strongSelf maybeSwitchToAudioPhaseForSession:s];
     };
 
-    YTAFStreamProgress audioProgress = ^(int64_t bytesWritten, int64_t totalBytesExpected, double fraction) {
-        YTAFDLSession *s = session;
+    YTAGStreamProgress audioProgress = ^(int64_t bytesWritten, int64_t totalBytesExpected, double fraction) {
+        YTAGDLSession *s = session;
         if (!s || s.cancelRequested || s.completionFired) return;
         s.audioFraction = fraction;
-        if (s.state == YTAFDLStateDownloadingAudio) {
+        if (s.state == YTAGDLStateDownloadingAudio) {
             s.progressVC.progressFraction = fraction;
         }
     };
 
-    YTAFStreamCompletion audioCompletion = ^(NSURL * _Nullable localFileURL, NSError * _Nullable error) {
+    YTAGStreamCompletion audioCompletion = ^(NSURL * _Nullable localFileURL, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
-        YTAFDLSession *s = session;
+        YTAGDLSession *s = session;
         if (!s || s.cancelRequested || s.completionFired) return;
         if (error) {
             YTAGLog(@"dl-mgr", @"[%@] audio download failed: %@", s.request.videoID, error.localizedDescription);
@@ -342,7 +342,7 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
         }
         YTAGLog(@"dl-mgr", @"[%@] audio-dl done", s.request.videoID);
         // If we're already in audio phase (video finished first), advance to mux.
-        if (s.state == YTAFDLStateDownloadingAudio) {
+        if (s.state == YTAGDLStateDownloadingAudio) {
             [strongSelf beginMuxForSession:s];
         }
         // If video hasn't finished yet, we'll pick this up in maybeSwitchToAudioPhase.
@@ -352,10 +352,10 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
     [session.audioDownloader startWithProgress:audioProgress completion:audioCompletion];
 }
 
-- (void)maybeSwitchToAudioPhaseForSession:(YTAFDLSession *)session {
+- (void)maybeSwitchToAudioPhaseForSession:(YTAGDLSession *)session {
     if (session.cancelRequested || session.completionFired) return;
-    session.state = YTAFDLStateDownloadingAudio;
-    session.progressVC.phase = YTAFDownloadPhaseDownloadingAudio;
+    session.state = YTAGDLStateDownloadingAudio;
+    session.progressVC.phase = YTAGDownloadPhaseDownloadingAudio;
 
     if (session.audioDone) {
         // Audio finished during or before video finished. Show 100% and mux immediately.
@@ -371,10 +371,10 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
 
 #pragma mark - Mux
 
-- (void)beginMuxForSession:(YTAFDLSession *)session {
+- (void)beginMuxForSession:(YTAGDLSession *)session {
     if (session.cancelRequested || session.completionFired) return;
-    session.state = YTAFDLStateMuxing;
-    session.progressVC.phase = YTAFDownloadPhaseMuxing;
+    session.state = YTAGDLStateMuxing;
+    session.progressVC.phase = YTAGDownloadPhaseMuxing;
     session.progressVC.progressFraction = 0.0;
     session.progressVC.subtitleText = nil;
 
@@ -393,7 +393,7 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
                                 completion:^(NSURL * _Nullable outputURL, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
-        YTAFDLSession *s = session;
+        YTAGDLSession *s = session;
         if (!s || s.completionFired) return;
         // If user cancelled but mux still completed, honor the cancel path.
         if (s.cancelRequested) {
@@ -402,7 +402,7 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
         }
         if (error || !outputURL) {
             YTAGLog(@"dl-mgr", @"[%@] mux failed: %@", s.request.videoID, error.localizedDescription);
-            [strongSelf failSession:s withError:error ?: [NSError errorWithDomain:kYTAFDownloadManagerErrorDomain
+            [strongSelf failSession:s withError:error ?: [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
                                                                               code:-5
                                                                           userInfo:@{NSLocalizedDescriptionKey: @"Mux failed"}]];
             return;
@@ -433,8 +433,8 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
     return trimmed;
 }
 
-- (void)renameAndDeliverForSession:(YTAFDLSession *)session {
-    session.state = YTAFDLStateDelivering;
+- (void)renameAndDeliverForSession:(YTAGDLSession *)session {
+    session.state = YTAGDLStateDelivering;
 
     NSString *title = session.request.titleOverride.length > 0
         ? session.request.titleOverride
@@ -461,31 +461,31 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
     [self removeURLIfExists:session.audioLocalURL];
 
     // Flip the progress VC to Finished before dismissing.
-    session.progressVC.phase = YTAFDownloadPhaseFinished;
+    session.progressVC.phase = YTAGDownloadPhaseFinished;
     session.progressVC.progressFraction = 1.0;
 
     YTAGLog(@"dl-mgr", @"[%@] delivering (post=%ld) → %@", session.request.videoID, (long)session.request.postAction, finalURL.lastPathComponent);
 
     switch (session.request.postAction) {
-        case YTAFPostDownloadActionSaveToPhotos:
+        case YTAGPostDownloadActionSaveToPhotos:
             [self saveToPhotosForSession:session presentPromptAfter:NO];
             break;
-        case YTAFPostDownloadActionShare:
+        case YTAGPostDownloadActionShare:
             [self shareForSession:session];
             break;
-        case YTAFPostDownloadActionAsk:
+        case YTAGPostDownloadActionAsk:
         default:
             [self askPostActionForSession:session];
             break;
     }
 }
 
-- (void)askPostActionForSession:(YTAFDLSession *)session {
+- (void)askPostActionForSession:(YTAGDLSession *)session {
     __weak typeof(self) weakSelf = self;
-    __weak YTAFDLSession *weakSession = session;
+    __weak YTAGDLSession *weakSession = session;
     [self dismissProgressForSession:session then:^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        YTAFDLSession *s = weakSession;
+        YTAGDLSession *s = weakSession;
         if (!strongSelf || !s) return;
 
         UIViewController *host = s.presentingVC;
@@ -528,10 +528,10 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
     }];
 }
 
-- (void)saveToPhotosForSession:(YTAFDLSession *)session presentPromptAfter:(BOOL)unusedFlag {
+- (void)saveToPhotosForSession:(YTAGDLSession *)session presentPromptAfter:(BOOL)unusedFlag {
     NSURL *fileURL = session.finalOutputURL;
     __weak typeof(self) weakSelf = self;
-    __weak YTAFDLSession *weakSession = session;
+    __weak YTAGDLSession *weakSession = session;
 
     void (^doSave)(void) = ^{
         [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
@@ -539,11 +539,11 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
         } completionHandler:^(BOOL success, NSError * _Nullable err) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) strongSelf = weakSelf;
-                YTAFDLSession *s = weakSession;
+                YTAGDLSession *s = weakSession;
                 if (!strongSelf || !s) return;
                 if (!success) {
                     YTAGLog(@"dl-mgr", @"[%@] save-to-photos failed: %@", s.request.videoID, err.localizedDescription);
-                    [strongSelf failSession:s withError:err ?: [NSError errorWithDomain:kYTAFDownloadManagerErrorDomain
+                    [strongSelf failSession:s withError:err ?: [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
                                                                                     code:-6
                                                                                 userInfo:@{NSLocalizedDescriptionKey: @"Save to Photos failed"}]];
                     return;
@@ -574,14 +574,14 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
     }
 }
 
-- (void)shareForSession:(YTAFDLSession *)session {
+- (void)shareForSession:(YTAGDLSession *)session {
     NSURL *fileURL = session.finalOutputURL;
     __weak typeof(self) weakSelf = self;
-    __weak YTAFDLSession *weakSession = session;
+    __weak YTAGDLSession *weakSession = session;
 
     void (^presentShare)(UIViewController *) = ^(UIViewController *host) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        YTAFDLSession *s = weakSession;
+        YTAGDLSession *s = weakSession;
         if (!strongSelf || !s || !host) return;
 
         UIActivityViewController *av = [[UIActivityViewController alloc] initWithActivityItems:@[fileURL]
@@ -589,7 +589,7 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
         av.completionWithItemsHandler = ^(UIActivityType  _Nullable activityType, BOOL completed, NSArray * _Nullable returnedItems, NSError * _Nullable err) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) innerSelf = weakSelf;
-                YTAFDLSession *innerSession = weakSession;
+                YTAGDLSession *innerSession = weakSession;
                 if (!innerSelf || !innerSession) return;
                 [innerSelf finalizeSuccessForSession:innerSession];
             });
@@ -609,7 +609,7 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
     // If the progressVC is still up, dismiss first so the share sheet has a clean host.
     if (session.progressVC.presentingViewController != nil) {
         [self dismissProgressForSession:session then:^{
-            YTAFDLSession *s = weakSession;
+            YTAGDLSession *s = weakSession;
             if (!s) return;
             presentShare(s.presentingVC);
         }];
@@ -620,12 +620,12 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
 
 #pragma mark - Terminal states
 
-- (void)finalizeSuccessForSession:(YTAFDLSession *)session {
+- (void)finalizeSuccessForSession:(YTAGDLSession *)session {
     if (session.completionFired) return;
     session.completionFired = YES;
-    session.state = YTAFDLStateFinished;
+    session.state = YTAGDLStateFinished;
     NSURL *out = session.finalOutputURL;
-    YTAFDownloadCompletion cb = session.completion;
+    YTAGDownloadCompletion cb = session.completion;
 
     // After delivery, clean up the tmp dir entirely. The user's file either lives in the
     // Photos library (copied) or was shared/exported (UIActivityViewController typically
@@ -639,10 +639,10 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
     });
 }
 
-- (void)failSession:(YTAFDLSession *)session withError:(NSError *)error {
+- (void)failSession:(YTAGDLSession *)session withError:(NSError *)error {
     if (session.completionFired) return;
     session.completionFired = YES;
-    session.state = YTAFDLStateError;
+    session.state = YTAGDLStateError;
 
     YTAGLog(@"dl-mgr", @"[%@] state → error: %@", session.request.videoID, error.localizedDescription);
 
@@ -650,21 +650,21 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
     [session.videoDownloader cancel];
     [session.audioDownloader cancel];
 
-    session.progressVC.phase = YTAFDownloadPhaseError;
+    session.progressVC.phase = YTAGDownloadPhaseError;
     session.progressVC.subtitleText = error.localizedDescription;
 
     __weak typeof(self) weakSelf = self;
-    __weak YTAFDLSession *weakSession = session;
+    __weak YTAGDLSession *weakSession = session;
     session.progressVC.onCancel = ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        YTAFDLSession *s = weakSession;
+        YTAGDLSession *s = weakSession;
         if (!strongSelf || !s) return;
         [strongSelf dismissProgressForSession:s then:nil];
     };
 
     [self cleanupTempFilesForSession:session];
 
-    YTAFDownloadCompletion cb = session.completion;
+    YTAGDownloadCompletion cb = session.completion;
     if (self.activeSession == session) self.activeSession = nil;
 
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -672,7 +672,7 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
     });
 }
 
-- (void)userRequestedCancelForSession:(YTAFDLSession *)session {
+- (void)userRequestedCancelForSession:(YTAGDLSession *)session {
     if (session.cancelRequested || session.completionFired) return;
     session.cancelRequested = YES;
     YTAGLog(@"dl-mgr", @"[%@] cancel requested (state=%ld)", session.request.videoID, (long)session.state);
@@ -683,7 +683,7 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
 
     // 2. Mux cancellation: FFMpegHelper doesn't expose a cancel entry point; if mux is in
     //    flight we let it run (it's <1s for copy-mux), then finalize cancel in its completion.
-    if (session.state == YTAFDLStateMuxing) {
+    if (session.state == YTAGDLStateMuxing) {
         YTAGLog(@"dl-mgr", @"[%@] cancel while muxing — waiting for ffmpeg to finish", session.request.videoID);
         return; // finalizeCancelForSession runs from the mux completion.
     }
@@ -691,20 +691,20 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
     [self finalizeCancelForSession:session];
 }
 
-- (void)finalizeCancelForSession:(YTAFDLSession *)session {
+- (void)finalizeCancelForSession:(YTAGDLSession *)session {
     if (session.completionFired) return;
     session.completionFired = YES;
-    session.state = YTAFDLStateCancelled;
+    session.state = YTAGDLStateCancelled;
 
-    session.progressVC.phase = YTAFDownloadPhaseCancelled;
+    session.progressVC.phase = YTAGDownloadPhaseCancelled;
 
-    NSError *err = [NSError errorWithDomain:kYTAFDownloadManagerErrorDomain
+    NSError *err = [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
                                        code:-999
                                    userInfo:@{NSLocalizedDescriptionKey: @"Cancelled"}];
 
     [self cleanupTempFilesForSession:session];
 
-    YTAFDownloadCompletion cb = session.completion;
+    YTAGDownloadCompletion cb = session.completion;
     if (self.activeSession == session) self.activeSession = nil;
 
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -714,7 +714,7 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
 
 #pragma mark - Helpers
 
-- (void)dismissProgressForSession:(YTAFDLSession *)session then:(void (^ _Nullable)(void))then {
+- (void)dismissProgressForSession:(YTAGDLSession *)session then:(void (^ _Nullable)(void))then {
     UIViewController *pvc = session.progressVC.presentingViewController;
     if (!pvc) {
         if (then) then();
@@ -730,7 +730,7 @@ typedef NS_ENUM(NSInteger, YTAFDLState) {
     [[NSFileManager defaultManager] removeItemAtURL:url error:NULL];
 }
 
-- (void)cleanupTempFilesForSession:(YTAFDLSession *)session {
+- (void)cleanupTempFilesForSession:(YTAGDLSession *)session {
     [self removeURLIfExists:session.videoLocalURL];
     [self removeURLIfExists:session.audioLocalURL];
     [self removeURLIfExists:session.muxedOutputURL];

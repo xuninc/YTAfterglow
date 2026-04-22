@@ -1,17 +1,17 @@
-// YTAFDownload.x — download button integration into YouTube's player overlay.
+// YTAGDownload.x — download button integration into YouTube's player overlay.
 //
 // Captures the currently-playing videoID via a hook on YTIPlayerResponse, adds
 // a Download button to the player overlay, and on tap presents a quality picker
-// sheet followed by the modal progress UI driven by YTAFDownloadManager.
+// sheet followed by the modal progress UI driven by YTAGDownloadManager.
 //
 // MVP placement: one button in the top-right of the overlay controls row.
 // YTLite's custom "second row" layout is deferred to a follow-up pass.
 
 #import <UIKit/UIKit.h>
 #import "Utils/YTAGLog.h"
-#import "Utils/YTAFURLExtractor.h"
-#import "Utils/YTAFFormatSelector.h"
-#import "Utils/YTAFDownloadManager.h"
+#import "Utils/YTAGURLExtractor.h"
+#import "Utils/YTAGFormatSelector.h"
+#import "Utils/YTAGDownloadManager.h"
 
 // --- YT classes we touch, forward-declared so this file compiles without full headers ---
 
@@ -29,17 +29,17 @@
 @end
 
 // Responder-chain helper category added via %hook below.
-@interface UIView (YTAFResponderChain)
-- (UIViewController *)ytaf_closestViewController;
+@interface UIView (YTAGResponderChain)
+- (UIViewController *)ytag_closestViewController;
 @end
 
 // --- Trigger action class (standard ObjC, no Logos directives) ---
 
-@interface YTAFDownloadTrigger : NSObject
+@interface YTAGDownloadTrigger : NSObject
 + (void)handleButtonTap:(UIButton *)sender;
 + (void)presentQualityPickerForVideoID:(NSString *)videoID fromView:(UIView *)sourceView;
 + (void)startDownloadWithVideoID:(NSString *)videoID
-                            pair:(YTAFFormatPair *)pair
+                            pair:(YTAGFormatPair *)pair
                      resultTitle:(NSString *)title
                         fromView:(UIView *)sourceView;
 @end
@@ -48,11 +48,11 @@
 
 static NSString *gCurrentVideoID = nil;
 
-static NSString *YTAFCurrentVideoID(void) {
+static NSString *YTAGCurrentVideoID(void) {
     return gCurrentVideoID;
 }
 
-static const NSInteger kYTAFDownloadButtonTag = 998877;
+static const NSInteger kYTAGDownloadButtonTag = 998877;
 
 // --- Hooks ---
 
@@ -71,7 +71,7 @@ static const NSInteger kYTAFDownloadButtonTag = 998877;
 %hook UIView
 
 %new(@@:)
-- (UIViewController *)ytaf_closestViewController {
+- (UIViewController *)ytag_closestViewController {
     UIResponder *r = self.nextResponder;
     while (r) {
         if ([r isKindOfClass:[UIViewController class]]) return (UIViewController *)r;
@@ -88,11 +88,11 @@ static const NSInteger kYTAFDownloadButtonTag = 998877;
     %orig;
 
     // Install the download button once. Tag-check prevents re-add on each layout pass.
-    UIButton *existing = (UIButton *)[self viewWithTag:kYTAFDownloadButtonTag];
+    UIButton *existing = (UIButton *)[self viewWithTag:kYTAGDownloadButtonTag];
     if (existing) return;
 
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
-    btn.tag = kYTAFDownloadButtonTag;
+    btn.tag = kYTAGDownloadButtonTag;
     btn.translatesAutoresizingMaskIntoConstraints = NO;
     btn.tintColor = [UIColor whiteColor];
     btn.accessibilityLabel = @"Download";
@@ -103,7 +103,7 @@ static const NSInteger kYTAFDownloadButtonTag = 998877;
     } else {
         [btn setTitle:@"DL" forState:UIControlStateNormal];
     }
-    [btn addTarget:[YTAFDownloadTrigger class]
+    [btn addTarget:[YTAGDownloadTrigger class]
             action:@selector(handleButtonTap:)
   forControlEvents:UIControlEventTouchUpInside];
 
@@ -122,17 +122,17 @@ static const NSInteger kYTAFDownloadButtonTag = 998877;
 
 // --- Trigger logic (standard ObjC @implementation outside any %hook) ---
 
-@implementation YTAFDownloadTrigger
+@implementation YTAGDownloadTrigger
 
 + (void)handleButtonTap:(UIButton *)sender {
-    NSString *videoID = YTAFCurrentVideoID();
+    NSString *videoID = YTAGCurrentVideoID();
     if (videoID.length == 0) {
         UIAlertController *alert = [UIAlertController
             alertControllerWithTitle:@"No video"
                              message:@"Couldn't identify the current video. Try tapping the player first, then Download."
                       preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-        UIViewController *vc = [sender.superview ytaf_closestViewController];
+        UIViewController *vc = [sender.superview ytag_closestViewController];
         [vc presentViewController:alert animated:YES completion:nil];
         return;
     }
@@ -141,7 +141,7 @@ static const NSInteger kYTAFDownloadButtonTag = 998877;
 }
 
 + (void)presentQualityPickerForVideoID:(NSString *)videoID fromView:(UIView *)sourceView {
-    UIViewController *presentingVC = [sourceView ytaf_closestViewController];
+    UIViewController *presentingVC = [sourceView ytag_closestViewController];
     if (!presentingVC) {
         YTAGLog(@"dl-trigger", @"no presenting VC found");
         return;
@@ -154,9 +154,9 @@ static const NSInteger kYTAFDownloadButtonTag = 998877;
                   preferredStyle:UIAlertControllerStyleAlert];
     [presentingVC presentViewController:loading animated:YES completion:nil];
 
-    [YTAFURLExtractor extractVideoID:videoID
-                            clientID:YTAFClientIDiOS
-                          completion:^(YTAFExtractionResult *result, NSError *error) {
+    [YTAGURLExtractor extractVideoID:videoID
+                            clientID:YTAGClientIDiOS
+                          completion:^(YTAGExtractionResult *result, NSError *error) {
         [loading dismissViewControllerAnimated:YES completion:^{
             if (error || !result) {
                 UIAlertController *err = [UIAlertController
@@ -168,9 +168,9 @@ static const NSInteger kYTAFDownloadButtonTag = 998877;
                 return;
             }
 
-            NSArray<YTAFFormatPair *> *pairs = [YTAFFormatSelector
+            NSArray<YTAGFormatPair *> *pairs = [YTAGFormatSelector
                 allOfferablePairsFromResult:result
-                               audioQuality:YTAFAudioQualityStandard];
+                               audioQuality:YTAGAudioQualityStandard];
             if (pairs.count == 0) {
                 UIAlertController *empty = [UIAlertController
                     alertControllerWithTitle:@"No downloadable formats"
@@ -186,12 +186,12 @@ static const NSInteger kYTAFDownloadButtonTag = 998877;
                                  message:nil
                           preferredStyle:UIAlertControllerStyleActionSheet];
 
-            for (YTAFFormatPair *pair in pairs) {
+            for (YTAGFormatPair *pair in pairs) {
                 UIAlertAction *action = [UIAlertAction
                     actionWithTitle:pair.descriptorString
                               style:UIAlertActionStyleDefault
                             handler:^(UIAlertAction *_) {
-                    [YTAFDownloadTrigger startDownloadWithVideoID:videoID
+                    [YTAGDownloadTrigger startDownloadWithVideoID:videoID
                                                              pair:pair
                                                       resultTitle:result.title
                                                          fromView:sourceView];
@@ -210,20 +210,20 @@ static const NSInteger kYTAFDownloadButtonTag = 998877;
 }
 
 + (void)startDownloadWithVideoID:(NSString *)videoID
-                            pair:(YTAFFormatPair *)pair
+                            pair:(YTAGFormatPair *)pair
                      resultTitle:(NSString *)title
                         fromView:(UIView *)sourceView
 {
-    UIViewController *presentingVC = [sourceView ytaf_closestViewController];
+    UIViewController *presentingVC = [sourceView ytag_closestViewController];
     if (!presentingVC) return;
 
-    YTAFDownloadRequest *req = [YTAFDownloadRequest new];
+    YTAGDownloadRequest *req = [YTAGDownloadRequest new];
     req.videoID = videoID;
     req.titleOverride = title;
     req.pair = pair;
-    req.postAction = YTAFPostDownloadActionAsk;
+    req.postAction = YTAGPostDownloadActionAsk;
 
-    [[YTAFDownloadManager sharedManager]
+    [[YTAGDownloadManager sharedManager]
           startDownload:req
          presentingFrom:presentingVC
              completion:^(NSURL *outputFileURL, NSError *error) {
@@ -240,5 +240,5 @@ static const NSInteger kYTAFDownloadButtonTag = 998877;
 // --- Ctor (outside any %hook) ---
 
 %ctor {
-    YTAGLog(@"dl-trigger", @"YTAFDownload hook installed");
+    YTAGLog(@"dl-trigger", @"YTAGDownload hook installed");
 }

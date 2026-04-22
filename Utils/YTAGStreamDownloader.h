@@ -2,13 +2,13 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-typedef void (^YTAFStreamProgress)(int64_t bytesWritten, int64_t totalBytesExpected, double fraction);
-typedef void (^YTAFStreamCompletion)(NSURL * _Nullable localFileURL, NSError * _Nullable error);
+typedef void (^YTAGStreamProgress)(int64_t bytesWritten, int64_t totalBytesExpected, double fraction);
+typedef void (^YTAGStreamCompletion)(NSURL * _Nullable localFileURL, NSError * _Nullable error);
 
 /// Downloads a single URL (typically a googlevideo.com videoplayback URL) to a temp file.
 /// Progress and completion both fire on the main queue.
-/// Cancel via -cancel. Completion with error domain "YTAFStreamDownloader" code -999 on cancel.
-@interface YTAFStreamDownloader : NSObject
+/// Cancel via -cancel. Completion with error domain "YTAGStreamDownloader" code -999 on cancel.
+@interface YTAGStreamDownloader : NSObject
 
 /// Optional: destination file URL. If nil, writes to NSTemporaryDirectory() with an auto-generated name.
 @property (nonatomic, strong, nullable) NSURL *destinationURL;
@@ -23,8 +23,8 @@ typedef void (^YTAFStreamCompletion)(NSURL * _Nullable localFileURL, NSError * _
 - (instancetype)initWithURL:(NSURL *)remoteURL;
 
 /// Start the download. Callbacks fire on main queue.
-- (void)startWithProgress:(nullable YTAFStreamProgress)progress
-               completion:(YTAFStreamCompletion)completion;
+- (void)startWithProgress:(nullable YTAGStreamProgress)progress
+               completion:(YTAGStreamCompletion)completion;
 
 /// Cancel the running download (completes with cancel error).
 - (void)cancel;

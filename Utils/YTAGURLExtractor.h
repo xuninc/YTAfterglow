@@ -2,13 +2,13 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-typedef NS_ENUM(NSInteger, YTAFClientID) {
-    YTAFClientIDiOS = 0,                   // clientName "IOS"
-    YTAFClientIDMediaConnect = 1,          // clientName "MEDIA_CONNECT_FRONTEND" — exposes itag 141 (AAC 256k Premium)
+typedef NS_ENUM(NSInteger, YTAGClientID) {
+    YTAGClientIDiOS = 0,                   // clientName "IOS"
+    YTAGClientIDMediaConnect = 1,          // clientName "MEDIA_CONNECT_FRONTEND" — exposes itag 141 (AAC 256k Premium)
 };
 
 /// Represents a single adaptive format from YT's /player response.
-@interface YTAFFormat : NSObject
+@interface YTAGFormat : NSObject
 @property (nonatomic, assign) NSInteger itag;
 @property (nonatomic, copy)   NSString *url;
 @property (nonatomic, copy)   NSString *mimeType;       // e.g. "video/mp4; codecs=\"avc1.64002A\""
@@ -28,26 +28,26 @@ typedef NS_ENUM(NSInteger, YTAFClientID) {
 @end
 
 /// Result envelope.
-@interface YTAFExtractionResult : NSObject
+@interface YTAGExtractionResult : NSObject
 @property (nonatomic, copy) NSString *videoID;
 @property (nonatomic, copy, nullable) NSString *title;
 @property (nonatomic, copy, nullable) NSString *author;
 @property (nonatomic, copy, nullable) NSString *thumbnailURL; // highest-res thumbnail
 @property (nonatomic, assign) NSTimeInterval duration;
-@property (nonatomic, copy) NSArray<YTAFFormat *> *formats;   // all adaptive formats
+@property (nonatomic, copy) NSArray<YTAGFormat *> *formats;   // all adaptive formats
 // Convenience filtered arrays:
-@property (nonatomic, readonly) NSArray<YTAFFormat *> *videoFormats;
-@property (nonatomic, readonly) NSArray<YTAFFormat *> *audioFormats;
+@property (nonatomic, readonly) NSArray<YTAGFormat *> *videoFormats;
+@property (nonatomic, readonly) NSArray<YTAGFormat *> *audioFormats;
 @end
 
-typedef void (^YTAFExtractionCompletion)(YTAFExtractionResult * _Nullable result, NSError * _Nullable error);
+typedef void (^YTAGExtractionCompletion)(YTAGExtractionResult * _Nullable result, NSError * _Nullable error);
 
-@interface YTAFURLExtractor : NSObject
+@interface YTAGURLExtractor : NSObject
 
 /// Async POST to /youtubei/v1/player. Completion fires on the main queue.
 + (void)extractVideoID:(NSString *)videoID
-              clientID:(YTAFClientID)clientID
-            completion:(YTAFExtractionCompletion)completion;
+              clientID:(YTAGClientID)clientID
+            completion:(YTAGExtractionCompletion)completion;
 
 @end
 

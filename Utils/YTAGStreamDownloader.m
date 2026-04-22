@@ -1,16 +1,16 @@
-#import "YTAFStreamDownloader.h"
+#import "YTAGStreamDownloader.h"
 #import "YTAGLog.h"
 
-static NSString *const kYTAFStreamDownloaderErrorDomain = @"YTAFStreamDownloader";
+static NSString *const kYTAGStreamDownloaderErrorDomain = @"YTAGStreamDownloader";
 
-@interface YTAFStreamDownloader () <NSURLSessionDownloadDelegate>
+@interface YTAGStreamDownloader () <NSURLSessionDownloadDelegate>
 
 @property (nonatomic, strong) NSURL *remoteURL;
 @property (nonatomic, strong, nullable) NSURLSession *session;
 @property (nonatomic, strong, nullable) NSURLSessionDownloadTask *currentTask;
 
-@property (nonatomic, copy, nullable) YTAFStreamProgress progressBlock;
-@property (nonatomic, copy, nullable) YTAFStreamCompletion completionBlock;
+@property (nonatomic, copy, nullable) YTAGStreamProgress progressBlock;
+@property (nonatomic, copy, nullable) YTAGStreamCompletion completionBlock;
 
 @property (nonatomic, assign) int64_t expectedContentLength;
 @property (nonatomic, assign) BOOL isDownloading;
@@ -21,7 +21,7 @@ static NSString *const kYTAFStreamDownloaderErrorDomain = @"YTAFStreamDownloader
 
 @end
 
-@implementation YTAFStreamDownloader
+@implementation YTAGStreamDownloader
 
 - (instancetype)initWithURL:(NSURL *)remoteURL {
     if ((self = [super init])) {
@@ -42,10 +42,10 @@ static NSString *const kYTAFStreamDownloaderErrorDomain = @"YTAFStreamDownloader
 
 #pragma mark - Public
 
-- (void)startWithProgress:(nullable YTAFStreamProgress)progress
-               completion:(YTAFStreamCompletion)completion {
+- (void)startWithProgress:(nullable YTAGStreamProgress)progress
+               completion:(YTAGStreamCompletion)completion {
     if (!self.remoteURL) {
-        NSError *err = [NSError errorWithDomain:kYTAFStreamDownloaderErrorDomain
+        NSError *err = [NSError errorWithDomain:kYTAGStreamDownloaderErrorDomain
                                            code:-1
                                        userInfo:@{NSLocalizedDescriptionKey: @"No remote URL"}];
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -107,7 +107,7 @@ static NSString *const kYTAFStreamDownloaderErrorDomain = @"YTAFStreamDownloader
 #pragma mark - Helpers
 
 - (void)fireCompletionWithURL:(nullable NSURL *)url error:(nullable NSError *)error {
-    __block YTAFStreamCompletion block = nil;
+    __block YTAGStreamCompletion block = nil;
     dispatch_sync(self.stateQueue, ^{
         if (self.didFireCompletion) {
             return;
@@ -140,7 +140,7 @@ static NSString *const kYTAFStreamDownloaderErrorDomain = @"YTAFStreamDownloader
  totalBytesWritten:(int64_t)totalBytesWritten
 totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
 
-    __block YTAFStreamProgress block = nil;
+    __block YTAGStreamProgress block = nil;
     __block BOOL shouldFire = NO;
 
     double fraction = 0.0;
@@ -214,7 +214,7 @@ didCompleteWithError:(nullable NSError *)error {
 
     NSError *reportError = error;
     if ([error.domain isEqualToString:NSURLErrorDomain] && error.code == NSURLErrorCancelled) {
-        reportError = [NSError errorWithDomain:kYTAFStreamDownloaderErrorDomain
+        reportError = [NSError errorWithDomain:kYTAGStreamDownloaderErrorDomain
                                           code:-999
                                       userInfo:@{NSLocalizedDescriptionKey: @"Cancelled"}];
         YTAGLog(@"downloader", @"cancelled");
