@@ -54,3 +54,30 @@ $(FFMPEGKIT_XCFRAMEWORK)/Info.plist:
 .PHONY: ffmpegkit
 ffmpegkit:
 	@bash scripts/fetch-ffmpegkit.sh
+
+# Post-stage: rewrite the absolute /Library/Frameworks/CydiaSubstrate... load path
+# to @rpath/... so the built .dylib is sideload-ready without any post-cyan fix step.
+#
+# Why this is needed: Theos on Linux links against CydiaSubstrate using the jailbreak
+# absolute path, which dyld can't resolve inside a sideloaded app bundle. Cyan normally
+# rewrites this during injection, but anyone who grabs the .dylib out of the .deb and
+# hand-assembles an IPA (the exact mistake that took v11 two tries) skips that step.
+# Doing it in the Makefile guarantees every consumer of the .deb gets a correct dylib.
+#
+# Locates install_name_tool in Theos's bundled toolchain first (Linux/L1ghtmann),
+# then falls back to PATH (macOS CI). Silently skips if neither is available.
+INSTALL_NAME_TOOL := $(firstword $(wildcard $(THEOS)/toolchain/linux/iphone/bin/install_name_tool) $(shell command -v install_name_tool 2>/dev/null))
+
+after-stage::
+	@if [ -n "$(INSTALL_NAME_TOOL)" ]; then \
+	  DYLIB="$(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries/$(TWEAK_NAME).dylib"; \
+	  if [ -f "$$DYLIB" ]; then \
+	    echo "  Rewriting Substrate load path -> @rpath in $$DYLIB"; \
+	    $(INSTALL_NAME_TOOL) -change \
+	      /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate \
+	      @rpath/CydiaSubstrate.framework/CydiaSubstrate \
+	      "$$DYLIB" 2>/dev/null || true; \
+	  fi; \
+	else \
+	  echo "  install_name_tool not found — skipping Substrate path rewrite (will need post-cyan fix)"; \
+	fi
