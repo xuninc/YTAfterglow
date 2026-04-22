@@ -1,17 +1,18 @@
 // YTAGDownload.x — download button integration into YouTube's player overlay.
 //
 // Captures the currently-playing videoID via a hook on YTIPlayerResponse, adds
-// a Download button to the player overlay, and on tap presents a quality picker
-// sheet followed by the modal progress UI driven by YTAGDownloadManager.
-//
-// MVP placement: one button in the top-right of the overlay controls row.
-// YTLite's custom "second row" layout is deferred to a follow-up pass.
+// a Download button to the player overlay, and on tap presents a 2×3 tile grid
+// bottom sheet (YTAGDownloadActionSheetViewController). Tiles route to the
+// matching pipeline: DownloadVideo goes through the quality picker, DownloadAudio
+// goes directly (no picker), and the utility tiles (Captions / Thumbnail /
+// Copy Info / External Player) stub to "Coming soon" for now.
 
 #import <UIKit/UIKit.h>
 #import "Utils/YTAGLog.h"
 #import "Utils/YTAGURLExtractor.h"
 #import "Utils/YTAGFormatSelector.h"
 #import "Utils/YTAGDownloadManager.h"
+#import "UI/YTAGDownloadActionSheetViewController.h"
 
 // --- YT classes we touch, forward-declared so this file compiles without full headers ---
 
@@ -24,7 +25,6 @@
 @end
 
 // Player overlay view that contains the existing controls (pause / cast / cc / settings).
-// We attach a button subview here. Real declaration lives in YouTubeHeader.
 @interface YTMainAppControlsOverlayView : UIView
 @end
 
@@ -37,11 +37,6 @@
 
 @interface YTAGDownloadTrigger : NSObject
 + (void)handleButtonTap:(UIButton *)sender;
-+ (void)presentQualityPickerForVideoID:(NSString *)videoID fromView:(UIView *)sourceView;
-+ (void)startDownloadWithVideoID:(NSString *)videoID
-                            pair:(YTAGFormatPair *)pair
-                     resultTitle:(NSString *)title
-                        fromView:(UIView *)sourceView;
 @end
 
 // --- State: current videoID cache ---
@@ -53,6 +48,16 @@ static NSString *YTAGCurrentVideoID(void) {
 }
 
 static const NSInteger kYTAGDownloadButtonTag = 998877;
+
+// --- File-scope helper: format a byte count for the chip ("2.4 MB" / "780 KB") ---
+
+static NSString *YTAGFormatBytesShort(long long bytes) {
+    if (bytes <= 0) return nil;
+    double mb = (double)bytes / (1024.0 * 1024.0);
+    if (mb >= 1.0) return [NSString stringWithFormat:@"%.1f MB", mb];
+    double kb = (double)bytes / 1024.0;
+    return [NSString stringWithFormat:@"%.0f KB", kb];
+}
 
 // --- Hooks ---
 
@@ -122,35 +127,47 @@ static const NSInteger kYTAGDownloadButtonTag = 998877;
 
 // --- Trigger logic (standard ObjC @implementation outside any %hook) ---
 
+@interface YTAGDownloadTrigger ()
++ (void)presentActionSheetWithResult:(YTAGExtractionResult *)result
+                            videoID:(NSString *)videoID
+                      presentingVC:(UIViewController *)presentingVC
+                         fromView:(UIView *)sourceView;
++ (void)presentQualityPickerWithResult:(YTAGExtractionResult *)result
+                              videoID:(NSString *)videoID
+                         presentingVC:(UIViewController *)presentingVC
+                             fromView:(UIView *)sourceView;
++ (void)startDownloadWithVideoID:(NSString *)videoID
+                            pair:(YTAGFormatPair *)pair
+                     resultTitle:(NSString *)title
+                        fromView:(UIView *)sourceView;
++ (void)showComingSoon:(NSString *)feature on:(UIViewController *)presentingVC;
++ (void)showAlertWithTitle:(NSString *)title message:(NSString *)message on:(UIViewController *)vc;
+@end
+
 @implementation YTAGDownloadTrigger
 
 + (void)handleButtonTap:(UIButton *)sender {
     NSString *videoID = YTAGCurrentVideoID();
+    UIViewController *presentingVC = [sender.superview ytag_closestViewController];
     if (videoID.length == 0) {
-        UIAlertController *alert = [UIAlertController
-            alertControllerWithTitle:@"No video"
-                             message:@"Couldn't identify the current video. Try tapping the player first, then Download."
-                      preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-        UIViewController *vc = [sender.superview ytag_closestViewController];
-        [vc presentViewController:alert animated:YES completion:nil];
+        [self showAlertWithTitle:@"No video"
+                         message:@"Couldn't identify the current video. Try tapping the player first, then Download."
+                              on:presentingVC];
         return;
     }
-    YTAGLog(@"dl-trigger", @"button tap, videoID=%@", videoID);
-    [self presentQualityPickerForVideoID:videoID fromView:sender];
-}
-
-+ (void)presentQualityPickerForVideoID:(NSString *)videoID fromView:(UIView *)sourceView {
-    UIViewController *presentingVC = [sourceView ytag_closestViewController];
     if (!presentingVC) {
         YTAGLog(@"dl-trigger", @"no presenting VC found");
         return;
     }
 
-    // Show a transient "Loading formats…" alert while we fetch.
+    YTAGLog(@"dl-trigger", @"button tap, videoID=%@", videoID);
+
+    // Transient "Loading…" while we pre-fetch the extraction so the sheet can
+    // show the real audio size chip and we don't need a second fetch for
+    // Download Video / Download Audio actions.
     UIAlertController *loading = [UIAlertController
         alertControllerWithTitle:nil
-                         message:@"Loading formats…"
+                         message:@"Loading…"
                   preferredStyle:UIAlertControllerStyleAlert];
     [presentingVC presentViewController:loading animated:YES completion:nil];
 
@@ -159,54 +176,127 @@ static const NSInteger kYTAGDownloadButtonTag = 998877;
                           completion:^(YTAGExtractionResult *result, NSError *error) {
         [loading dismissViewControllerAnimated:YES completion:^{
             if (error || !result) {
-                UIAlertController *err = [UIAlertController
-                    alertControllerWithTitle:@"Couldn't load formats"
-                                     message:error.localizedDescription ?: @"Unknown error"
-                              preferredStyle:UIAlertControllerStyleAlert];
-                [err addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-                [presentingVC presentViewController:err animated:YES completion:nil];
+                [self showAlertWithTitle:@"Couldn't load video"
+                                 message:error.localizedDescription ?: @"Unknown error"
+                                      on:presentingVC];
                 return;
             }
+            [self presentActionSheetWithResult:result
+                                       videoID:videoID
+                                  presentingVC:presentingVC
+                                      fromView:sender];
+        }];
+    }];
+}
 
-            NSArray<YTAGFormatPair *> *pairs = [YTAGFormatSelector
-                allOfferablePairsFromResult:result
-                               audioQuality:YTAGAudioQualityStandard];
-            if (pairs.count == 0) {
-                UIAlertController *empty = [UIAlertController
-                    alertControllerWithTitle:@"No downloadable formats"
-                                     message:@"This video has no streams we can download."
-                              preferredStyle:UIAlertControllerStyleAlert];
-                [empty addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-                [presentingVC presentViewController:empty animated:YES completion:nil];
-                return;
-            }
++ (void)presentActionSheetWithResult:(YTAGExtractionResult *)result
+                             videoID:(NSString *)videoID
+                        presentingVC:(UIViewController *)presentingVC
+                            fromView:(UIView *)sourceView
+{
+    YTAGDownloadActionSheetViewController *sheet = [YTAGDownloadActionSheetViewController new];
+    sheet.channelName = result.author;
+    sheet.videoTitle = result.title;
 
-            UIAlertController *sheet = [UIAlertController
-                alertControllerWithTitle:result.title
-                                 message:nil
-                          preferredStyle:UIAlertControllerStyleActionSheet];
+    // Audio size chip: compute from the preferred audio format.
+    YTAGFormatPair *audioPair = [YTAGFormatSelector
+        selectAudioPairFromResult:result
+                     audioQuality:YTAGAudioQualityStandard];
+    sheet.audioSizeChip = audioPair ? YTAGFormatBytesShort(audioPair.audioFormat.contentLength) : nil;
 
-            for (YTAGFormatPair *pair in pairs) {
-                UIAlertAction *action = [UIAlertAction
-                    actionWithTitle:pair.descriptorString
-                              style:UIAlertActionStyleDefault
-                            handler:^(UIAlertAction *_) {
+    __weak UIViewController *weakPresenting = presentingVC;
+    sheet.onAction = ^(YTAGDownloadAction action) {
+        UIViewController *p = weakPresenting;
+        if (!p) return;
+
+        switch (action) {
+            case YTAGDownloadActionDownloadVideo:
+                [YTAGDownloadTrigger presentQualityPickerWithResult:result
+                                                            videoID:videoID
+                                                       presentingVC:p
+                                                           fromView:sourceView];
+                break;
+
+            case YTAGDownloadActionDownloadAudio:
+                if (audioPair) {
+                    YTAGFormatPair *pair = [YTAGFormatPair new];
+                    pair.audioFormat = audioPair.audioFormat;   // videoFormat nil = audio-only
                     [YTAGDownloadTrigger startDownloadWithVideoID:videoID
                                                              pair:pair
                                                       resultTitle:result.title
                                                          fromView:sourceView];
-                }];
-                [sheet addAction:action];
-            }
-            [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+                } else {
+                    [YTAGDownloadTrigger showAlertWithTitle:@"No audio available"
+                                                    message:@"This video doesn't expose a downloadable audio track."
+                                                         on:p];
+                }
+                break;
 
-            // iPad popover anchor
-            sheet.popoverPresentationController.sourceView = sourceView;
-            sheet.popoverPresentationController.sourceRect = sourceView.bounds;
+            case YTAGDownloadActionDownloadCaptions:
+                [YTAGDownloadTrigger showComingSoon:@"Download Captions" on:p];
+                break;
 
-            [presentingVC presentViewController:sheet animated:YES completion:nil];
-        }];
-    }];
+            case YTAGDownloadActionSaveImage:
+                [YTAGDownloadTrigger showComingSoon:@"Save Thumbnail" on:p];
+                break;
+
+            case YTAGDownloadActionCopyInformation:
+                [YTAGDownloadTrigger showComingSoon:@"Copy Info" on:p];
+                break;
+
+            case YTAGDownloadActionPlayInExternalPlayer:
+                [YTAGDownloadTrigger showComingSoon:@"External Player" on:p];
+                break;
+        }
+    };
+
+    [presentingVC presentViewController:sheet animated:YES completion:nil];
+}
+
++ (void)presentQualityPickerWithResult:(YTAGExtractionResult *)result
+                               videoID:(NSString *)videoID
+                          presentingVC:(UIViewController *)presentingVC
+                              fromView:(UIView *)sourceView
+{
+    NSArray<YTAGFormatPair *> *pairs = [YTAGFormatSelector
+        allOfferablePairsFromResult:result
+                       audioQuality:YTAGAudioQualityStandard];
+
+    // Filter to video entries only (the "all offerable" includes an audio-only
+    // trailer). We already have a dedicated Audio tile for that case.
+    NSMutableArray<YTAGFormatPair *> *videoPairs = [NSMutableArray array];
+    for (YTAGFormatPair *p in pairs) {
+        if (p.videoFormat != nil) [videoPairs addObject:p];
+    }
+
+    if (videoPairs.count == 0) {
+        [self showAlertWithTitle:@"No downloadable formats"
+                         message:@"This video has no streams we can download."
+                              on:presentingVC];
+        return;
+    }
+
+    UIAlertController *picker = [UIAlertController
+        alertControllerWithTitle:result.title
+                         message:nil
+                  preferredStyle:UIAlertControllerStyleActionSheet];
+
+    for (YTAGFormatPair *pair in videoPairs) {
+        [picker addAction:[UIAlertAction
+            actionWithTitle:pair.descriptorString
+                      style:UIAlertActionStyleDefault
+                    handler:^(UIAlertAction *_) {
+            [YTAGDownloadTrigger startDownloadWithVideoID:videoID
+                                                     pair:pair
+                                              resultTitle:result.title
+                                                 fromView:sourceView];
+        }]];
+    }
+    [picker addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    picker.popoverPresentationController.sourceView = sourceView;
+    picker.popoverPresentationController.sourceRect = sourceView.bounds;
+
+    [presentingVC presentViewController:picker animated:YES completion:nil];
 }
 
 + (void)startDownloadWithVideoID:(NSString *)videoID
@@ -233,6 +323,21 @@ static const NSInteger kYTAGDownloadButtonTag = 998877;
             YTAGLog(@"dl-trigger", @"download ok: %@", outputFileURL.lastPathComponent);
         }
     }];
+}
+
++ (void)showComingSoon:(NSString *)feature on:(UIViewController *)presentingVC {
+    [self showAlertWithTitle:feature
+                     message:@"Coming soon."
+                          on:presentingVC];
+}
+
++ (void)showAlertWithTitle:(NSString *)title message:(NSString *)message on:(UIViewController *)vc {
+    if (!vc) return;
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:title
+                                                               message:message
+                                                        preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    [vc presentViewController:a animated:YES completion:nil];
 }
 
 @end
