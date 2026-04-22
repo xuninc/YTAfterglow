@@ -2,3 +2,6 @@
 packages/
 .DS_Store
 *-this-session-is-being-continued-from-a-previous-c.txt
+
+# Internal docs — not for public repo
+docs/
