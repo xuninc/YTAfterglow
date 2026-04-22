@@ -38,3 +38,19 @@ $(TWEAK_NAME)_EMBED_FRAMEWORKS += Frameworks/ffmpegkit.xcframework
 endif
 
 include $(THEOS_MAKE_PATH)/tweak.mk
+
+# Auto-fetch ffmpeg-kit before compilation. Idempotent — exits immediately if
+# Frameworks/ffmpegkit.xcframework/Info.plist already exists. See
+# scripts/fetch-ffmpegkit.sh for the mirror + pin rationale.
+#
+# Theos exposes `before-all::` as a pre-build hook. We also register the marker
+# file as the target so make knows to re-run the fetch if the framework is
+# deleted out from under us.
+before-all:: $(FFMPEGKIT_XCFRAMEWORK)/Info.plist
+
+$(FFMPEGKIT_XCFRAMEWORK)/Info.plist:
+	@bash scripts/fetch-ffmpegkit.sh
+
+.PHONY: ffmpegkit
+ffmpegkit:
+	@bash scripts/fetch-ffmpegkit.sh
