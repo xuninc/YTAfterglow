@@ -562,15 +562,28 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
         }];
     };
 
-    if ([PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly] == PHAuthorizationStatusNotDetermined) {
-        [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly
-                                                   handler:^(PHAuthorizationStatus status) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                doSave();
-            });
-        }];
+    if (@available(iOS 14, *)) {
+        if ([PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly] == PHAuthorizationStatusNotDetermined) {
+            [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly
+                                                       handler:^(PHAuthorizationStatus status) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    doSave();
+                });
+            }];
+        } else {
+            doSave();
+        }
     } else {
-        doSave();
+        // iOS 13 fallback: older unscoped authorization request.
+        if ([PHPhotoLibrary authorizationStatus] == PHAuthorizationStatusNotDetermined) {
+            [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    doSave();
+                });
+            }];
+        } else {
+            doSave();
+        }
     }
 }
 
