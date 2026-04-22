@@ -41,9 +41,13 @@ if [[ "$ACTUAL_SIZE" != "$EXPECTED_SIZE_BYTES" ]]; then
     echo "Proceeding, but if the build fails at link time, verify the mirror content."
 fi
 
-unzip -q "$ZIP" -d "$TMPDIR"
+# `-x "__MACOSX/*"` skips macOS resource-fork metadata that otherwise creates a
+# sibling dir with empty placeholders. Without this guard, the find below can
+# pick up the fake tree first on macOS runners (alphabetical: "__MACOSX" sorts
+# before "ffmpeg-kit-ios-full") and the copy step installs empty xcframeworks.
+unzip -q "$ZIP" -x "__MACOSX/*" -d "$TMPDIR"
 
-SRC_DIR=$(find "$TMPDIR" -maxdepth 2 -type d -name "ffmpeg-kit-ios-full" | head -1)
+SRC_DIR=$(find "$TMPDIR" -maxdepth 2 -type d -name "ffmpeg-kit-ios-full" ! -path "*__MACOSX*" | head -1)
 if [[ -z "$SRC_DIR" ]]; then
     echo "ERROR: couldn't locate ffmpeg-kit-ios-full/ inside the zip."
     exit 1
