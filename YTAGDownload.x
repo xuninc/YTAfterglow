@@ -1012,16 +1012,11 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
                     //    <00:00:00.000>). YT auto-generated captions use these heavily.
                     // 4. Add 1-based cue indices before each cue.
                     static NSRegularExpression *kVTTTagStripper = nil;
-                    static NSRegularExpression *kVTTTimingValidator = nil;
                     static dispatch_once_t once;
                     dispatch_once(&once, ^{
                         kVTTTagStripper = [NSRegularExpression regularExpressionWithPattern:@"<[^>]+>"
                                                                                     options:0
                                                                                       error:nil];
-                        // SRT timing shape: HH:MM:SS,mmm
-                        kVTTTimingValidator = [NSRegularExpression regularExpressionWithPattern:@"^\\d{2}:\\d{2}:\\d{2}[,.]\\d{3}$"
-                                                                                        options:0
-                                                                                          error:nil];
                     });
 
                     NSString * (^normalizeTiming)(NSString *) = ^NSString *(NSString *ts) {
