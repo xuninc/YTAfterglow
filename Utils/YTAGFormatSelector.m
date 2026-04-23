@@ -261,7 +261,10 @@ static NSComparisonResult YTAGCompareVideoBest(YTAGFormat *a, YTAGFormat *b) {
 
     YTAGFormat *audio = YTAGSelectAudioFormat(result, audioQuality);
 
-    // Group video formats by qualityLabel; for each label, pick highest-bitrate video.
+    // Group video formats by (qualityLabel + codec family). Keying on qualityLabel
+    // alone collapses same-resolution rungs across codecs — e.g. "1080p H.264" and
+    // "1080p VP9" would share a key, dropping one from the picker. With codec-
+    // aware keys the user sees every available resolution × codec combination.
     NSMutableDictionary<NSString *, YTAGFormat *> *byLabel = [NSMutableDictionary dictionary];
     NSMutableArray<YTAGFormat *> *unlabeled = [NSMutableArray array];
     for (YTAGFormat *f in result.videoFormats) {
@@ -269,9 +272,14 @@ static NSComparisonResult YTAGCompareVideoBest(YTAGFormat *a, YTAGFormat *b) {
             [unlabeled addObject:f];
             continue;
         }
-        YTAGFormat *existing = byLabel[f.qualityLabel];
+        NSString *codecFamily = YTAGCodecMatchesH264(f.codec) ? @"h264"
+                              : YTAGCodecMatchesAV1(f.codec)  ? @"av1"
+                              : YTAGCodecMatchesVP9(f.codec)  ? @"vp9"
+                              : f.codec ?: @"?";
+        NSString *key = [NSString stringWithFormat:@"%@|%@", f.qualityLabel, codecFamily];
+        YTAGFormat *existing = byLabel[key];
         if (existing == nil || f.bitrate > existing.bitrate) {
-            byLabel[f.qualityLabel] = f;
+            byLabel[key] = f;
         }
     }
 
