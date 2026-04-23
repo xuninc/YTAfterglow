@@ -8,6 +8,11 @@ static NSString *const YTAGURLExtractorErrorDomain = @"YTAGURLExtractor";
 @implementation YTAGFormat
 @end
 
+#pragma mark - YTAGCaptionTrack
+
+@implementation YTAGCaptionTrack
+@end
+
 #pragma mark - YTAGExtractionResult
 
 @implementation YTAGExtractionResult
@@ -152,9 +157,203 @@ static NSString * _Nullable YTAGPickBestThumbnail(NSDictionary *videoDetails) {
     return bestURL;
 }
 
+#pragma mark - Live-read helpers
+
+// Wrapper around @try/valueForKey: that returns nil on any exception rather than
+// blowing up the whole extraction. YT's internal protobuf-backed classes are
+// mostly KVC-compliant but a few properties throw if not set.
+static id YTAGSafeValueForKey(id obj, NSString *key) {
+    if (!obj || !key) return nil;
+    @try { return [obj valueForKey:key]; }
+    @catch (id ex) { return nil; }
+}
+
+static NSString *YTAGSafeStringValueForKey(id obj, NSString *key) {
+    id v = YTAGSafeValueForKey(obj, key);
+    return [v isKindOfClass:[NSString class]] ? v : nil;
+}
+
+static NSInteger YTAGSafeIntegerForKey(id obj, NSString *key) {
+    id v = YTAGSafeValueForKey(obj, key);
+    if ([v respondsToSelector:@selector(integerValue)]) return [v integerValue];
+    return 0;
+}
+
+static long long YTAGSafeLongLongForKey(id obj, NSString *key) {
+    id v = YTAGSafeValueForKey(obj, key);
+    if ([v respondsToSelector:@selector(longLongValue)]) return [v longLongValue];
+    return 0;
+}
+
 #pragma mark - YTAGURLExtractor
 
 @implementation YTAGURLExtractor
+
++ (nullable YTAGExtractionResult *)extractFromPlayerVC:(id)playerVC {
+    if (!playerVC) return nil;
+
+    // Walk YTLite's documented path (decomp sub_361536, lines 361570-361573):
+    //   [playerVC playerResponse] -> YTPlayerResponse
+    //   .playerData                -> YTIPlayerResponse
+    //   .streamingData             -> YTIStreamingData
+    //   .adaptiveFormatsArray      -> NSArray<YTIFormatStream *>
+    //
+    // In YT 21.16.2 the `playerResponse` accessor has drifted — it returns nil
+    // even though contentVideoID works on the same instance. Try several
+    // plausible names in order before giving up.
+    id playerResponse = nil;
+    NSString *hitKey = nil;
+    // Order matters: `contentPlayerResponse` is the accessor YT 21.16.2 actually
+    // exposes (confirmed via OfflineProbe dump). The rest are historical aliases
+    // kept as fallbacks in case of version drift in either direction.
+    NSArray<NSString *> *responseKeys = @[
+        @"contentPlayerResponse",
+        @"playerResponse",
+        @"_playerResponse",
+        @"currentPlayerResponse",
+        @"loadedPlayerResponse",
+        @"activePlayerResponse",
+        @"_currentPlayerResponse",
+    ];
+    for (NSString *key in responseKeys) {
+        id v = YTAGSafeValueForKey(playerVC, key);
+        if (v) { playerResponse = v; hitKey = key; break; }
+    }
+    // Fallback: ask the active single-video controller if the player VC doesn't
+    // have it directly. YT's protobuf pipeline pushes player response into the
+    // video controller on load.
+    if (!playerResponse) {
+        id activeVideo = YTAGSafeValueForKey(playerVC, @"activeVideo");
+        for (NSString *key in responseKeys) {
+            id v = YTAGSafeValueForKey(activeVideo, key);
+            if (v) { playerResponse = v; hitKey = [@"activeVideo." stringByAppendingString:key]; break; }
+        }
+    }
+
+    id playerData     = YTAGSafeValueForKey(playerResponse, @"playerData");
+    id streamingData  = YTAGSafeValueForKey(playerData, @"streamingData");
+    id adaptiveArray  = YTAGSafeValueForKey(streamingData, @"adaptiveFormatsArray");
+    if (![adaptiveArray isKindOfClass:[NSArray class]]) {
+        // Try alternate name
+        adaptiveArray = YTAGSafeValueForKey(streamingData, @"adaptiveFormats");
+    }
+    if (![adaptiveArray isKindOfClass:[NSArray class]] || [(NSArray *)adaptiveArray count] == 0) {
+        YTAGLog(@"extractor", @"live-read: no adaptiveFormatsArray (hitKey=%@ playerResponse=%@ playerData=%@ streamingData=%@)",
+                hitKey ?: @"<nil>",
+                NSStringFromClass([playerResponse class]) ?: @"<nil>",
+                NSStringFromClass([playerData class]) ?: @"<nil>",
+                NSStringFromClass([streamingData class]) ?: @"<nil>");
+        return nil;
+    }
+    YTAGLog(@"extractor", @"live-read: found adaptive array via %@ (%lu formats)",
+            hitKey ?: @"<unknown>", (unsigned long)[(NSArray *)adaptiveArray count]);
+
+    YTAGExtractionResult *result = [[YTAGExtractionResult alloc] init];
+
+    // videoID lives on YTPlayerResponse directly.
+    NSString *vid = YTAGSafeStringValueForKey(playerResponse, @"videoID");
+    if (!vid) vid = YTAGSafeStringValueForKey(playerResponse, @"videoId");
+    if (!vid) {
+        // Fallback: contentVideoID on the player VC.
+        if ([playerVC respondsToSelector:@selector(contentVideoID)]) {
+            vid = [playerVC performSelector:@selector(contentVideoID)];
+        }
+    }
+    result.videoID = vid ?: @"";
+
+    // Metadata from playerData.videoDetails.
+    id videoDetails = YTAGSafeValueForKey(playerData, @"videoDetails");
+    result.title            = YTAGSafeStringValueForKey(videoDetails, @"title");
+    result.author           = YTAGSafeStringValueForKey(videoDetails, @"author");
+    result.shortDescription = YTAGSafeStringValueForKey(videoDetails, @"shortDescription");
+    result.duration = (NSTimeInterval)YTAGSafeIntegerForKey(videoDetails, @"lengthSeconds");
+
+    // Thumbnail URL from videoDetails.thumbnail.thumbnailsArray (protobuf-backed —
+    // ends in `Array` suffix in YT's generated accessors).
+    id thumbnail = YTAGSafeValueForKey(videoDetails, @"thumbnail");
+    id thumbArray = YTAGSafeValueForKey(thumbnail, @"thumbnailsArray");
+    if (![thumbArray isKindOfClass:[NSArray class]]) {
+        thumbArray = YTAGSafeValueForKey(thumbnail, @"thumbnails");
+    }
+    if ([thumbArray isKindOfClass:[NSArray class]]) {
+        NSString *bestURL = nil;
+        NSInteger bestArea = -1;
+        for (id t in thumbArray) {
+            NSString *u = YTAGSafeStringValueForKey(t, @"url");
+            NSInteger w = YTAGSafeIntegerForKey(t, @"width");
+            NSInteger h = YTAGSafeIntegerForKey(t, @"height");
+            NSInteger area = w * h;
+            if (u.length > 0 && area > bestArea) { bestArea = area; bestURL = u; }
+        }
+        if (!bestURL && [(NSArray *)thumbArray count] > 0) {
+            bestURL = YTAGSafeStringValueForKey([thumbArray lastObject], @"url");
+        }
+        result.thumbnailURL = bestURL;
+    }
+
+    // Adaptive formats. Property names on YTIFormatStream: itag, url, mimeType,
+    // width, height, fps, bitrate, contentLength, qualityLabel, approxDurationMs,
+    // audioQuality. Match what the network-fetched path populates.
+    NSMutableArray<YTAGFormat *> *formats = [NSMutableArray array];
+    for (id f in (NSArray *)adaptiveArray) {
+        YTAGFormat *fmt = [[YTAGFormat alloc] init];
+        fmt.itag = YTAGSafeIntegerForKey(f, @"itag");
+        fmt.url = YTAGSafeStringValueForKey(f, @"url") ?: @"";
+        fmt.mimeType = YTAGSafeStringValueForKey(f, @"mimeType") ?: @"";
+
+        NSString *container = nil;
+        NSString *codec = nil;
+        YTAGParseMimeType(fmt.mimeType, &container, &codec);
+        fmt.container = container;
+        fmt.codec = codec;
+
+        fmt.width  = YTAGSafeIntegerForKey(f, @"width");
+        fmt.height = YTAGSafeIntegerForKey(f, @"height");
+        fmt.fps    = YTAGSafeIntegerForKey(f, @"fps");
+        fmt.bitrate = YTAGSafeIntegerForKey(f, @"bitrate");
+        fmt.contentLength = YTAGSafeLongLongForKey(f, @"contentLength");
+
+        NSInteger approxMs = YTAGSafeIntegerForKey(f, @"approxDurationMs");
+        fmt.duration = approxMs > 0 ? (NSTimeInterval)approxMs / 1000.0 : 0;
+
+        fmt.qualityLabel = YTAGSafeStringValueForKey(f, @"qualityLabel");
+        fmt.audioQuality = YTAGSafeStringValueForKey(f, @"audioQuality");
+        fmt.isDRC = YTAGDetectDRCFromURL(fmt.url);
+        fmt.isVideoOnly = [fmt.mimeType hasPrefix:@"video/"];
+        fmt.isAudioOnly = [fmt.mimeType hasPrefix:@"audio/"];
+
+        if (fmt.url.length > 0) [formats addObject:fmt];
+    }
+    result.formats = [formats copy];
+
+    // Caption tracks from playerData.captions.playerCaptionsTracklistRenderer.captionTracksArray
+    NSMutableArray<YTAGCaptionTrack *> *captions = [NSMutableArray array];
+    id captionsContainer = YTAGSafeValueForKey(playerData, @"captions");
+    id tracklistRenderer = YTAGSafeValueForKey(captionsContainer, @"playerCaptionsTracklistRenderer");
+    id tracksArray = YTAGSafeValueForKey(tracklistRenderer, @"captionTracksArray");
+    if (![tracksArray isKindOfClass:[NSArray class]]) {
+        tracksArray = YTAGSafeValueForKey(tracklistRenderer, @"captionTracks");
+    }
+    if ([tracksArray isKindOfClass:[NSArray class]]) {
+        for (id t in (NSArray *)tracksArray) {
+            YTAGCaptionTrack *track = [[YTAGCaptionTrack alloc] init];
+            track.baseURL = YTAGSafeStringValueForKey(t, @"baseUrl") ?: @"";
+            track.languageCode = YTAGSafeStringValueForKey(t, @"languageCode") ?: @"";
+            // Display name may be under .name.simpleText or .name.runs[0].text.
+            id name = YTAGSafeValueForKey(t, @"name");
+            track.displayName = YTAGSafeStringValueForKey(name, @"simpleText");
+            NSString *kind = YTAGSafeStringValueForKey(t, @"kind");
+            track.isAutoGenerated = [kind isEqualToString:@"asr"];
+            if (track.baseURL.length > 0) [captions addObject:track];
+        }
+    }
+    result.captionTracks = [captions copy];
+
+    YTAGLog(@"extractor", @"live-read: videoID=%@ title=%@ formats=%lu captions=%lu",
+            result.videoID, result.title ?: @"<nil>",
+            (unsigned long)formats.count, (unsigned long)captions.count);
+    return result;
+}
 
 + (void)extractVideoID:(NSString *)videoID
               clientID:(YTAGClientID)clientID
@@ -174,18 +373,28 @@ static NSString * _Nullable YTAGPickBestThumbnail(NSDictionary *videoDetails) {
     NSString *clientVersion;
     NSString *deviceModel = nil;
 
+    NSString *osVersion = nil;
     switch (clientID) {
         case YTAGClientIDMediaConnect:
             innertubeKey = @"AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w";
             clientName = @"MEDIA_CONNECT_FRONTEND";
             clientVersion = @"0.1";
             break;
+        case YTAGClientIDTVEmbed:
+            innertubeKey = @"AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
+            clientName = @"TVHTML5_SIMPLY_EMBEDDED_PLAYER";
+            clientVersion = @"2.0";
+            break;
         case YTAGClientIDiOS:
         default:
             innertubeKey = @"AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc";
             clientName = @"IOS";
-            clientVersion = @"19.09.3";
-            deviceModel = @"iPhone14,3";
+            clientVersion = @"21.15.5";
+            deviceModel = @"iPhone17,3";
+            // YT gates higher-tier formats (1080p+, VP9/AV1) on osVersion being
+            // set. Current iOS release works; using the beta-safe 18.5 string
+            // matches what real iOS clients report.
+            osVersion = @"18.5.0.22F76";
             break;
     }
 
@@ -198,6 +407,7 @@ static NSString * _Nullable YTAGPickBestThumbnail(NSDictionary *videoDetails) {
     client[@"clientName"] = clientName;
     client[@"clientVersion"] = clientVersion;
     if (deviceModel) client[@"deviceModel"] = deviceModel;
+    if (osVersion)   client[@"osVersion"] = osVersion;
 
     NSDictionary *body = @{
         @"context": @{ @"client": client },
@@ -280,9 +490,34 @@ static NSString * _Nullable YTAGPickBestThumbnail(NSDictionary *videoDetails) {
         if ([videoDetails isKindOfClass:[NSDictionary class]]) {
             result.title = YTAGStringValue(videoDetails[@"title"]);
             result.author = YTAGStringValue(videoDetails[@"author"]);
+            result.shortDescription = YTAGStringValue(videoDetails[@"shortDescription"]);
             result.duration = (NSTimeInterval)YTAGIntegerValue(videoDetails[@"lengthSeconds"]);
             result.thumbnailURL = YTAGPickBestThumbnail(videoDetails);
         }
+
+        NSMutableArray<YTAGCaptionTrack *> *captionTracks = [NSMutableArray array];
+        NSDictionary *captions = json[@"captions"];
+        if ([captions isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *tracklist = captions[@"playerCaptionsTracklistRenderer"];
+            NSArray *tracks = [tracklist isKindOfClass:[NSDictionary class]] ? tracklist[@"captionTracks"] : nil;
+            if ([tracks isKindOfClass:[NSArray class]]) {
+                for (id entry in tracks) {
+                    if (![entry isKindOfClass:[NSDictionary class]]) continue;
+                    NSDictionary *t = (NSDictionary *)entry;
+                    YTAGCaptionTrack *track = [[YTAGCaptionTrack alloc] init];
+                    track.baseURL = YTAGStringValue(t[@"baseUrl"]) ?: @"";
+                    track.languageCode = YTAGStringValue(t[@"languageCode"]) ?: @"";
+                    NSDictionary *nameDict = t[@"name"];
+                    if ([nameDict isKindOfClass:[NSDictionary class]]) {
+                        track.displayName = YTAGStringValue(nameDict[@"simpleText"]);
+                    }
+                    NSString *kind = YTAGStringValue(t[@"kind"]);
+                    track.isAutoGenerated = [kind isEqualToString:@"asr"];
+                    if (track.baseURL.length > 0) [captionTracks addObject:track];
+                }
+            }
+        }
+        result.captionTracks = [captionTracks copy];
 
         NSMutableArray<YTAGFormat *> *formats = [NSMutableArray array];
         NSDictionary *streamingData = json[@"streamingData"];
@@ -329,7 +564,42 @@ static NSString * _Nullable YTAGPickBestThumbnail(NSDictionary *videoDetails) {
         }
         result.formats = [formats copy];
 
-        YTAGLog(@"extractor", @"parsed %lu formats (title=%@)", (unsigned long)formats.count, result.title ?: @"<nil>");
+        YTAGLog(@"extractor", @"parsed %lu formats (title=%@) client=%@",
+                (unsigned long)formats.count, result.title ?: @"<nil>", clientName);
+
+        // Summarize which resolutions + codecs came back so we can diagnose the
+        // "only 720p offered" case without a full network trace.
+        NSMutableArray<NSString *> *resSummary = [NSMutableArray array];
+        for (YTAGFormat *f in formats) {
+            if (f.isVideoOnly && f.qualityLabel.length > 0) {
+                [resSummary addObject:[NSString stringWithFormat:@"%@/%@",
+                                       f.qualityLabel,
+                                       f.codec ?: f.container ?: @"?"]];
+            }
+        }
+        if (resSummary.count > 0) {
+            YTAGLog(@"extractor", @"video rungs: %@",
+                    [resSummary componentsJoinedByString:@", "]);
+        }
+
+        // Fallback: IOS client returned no formats — retry with TV-embedded client.
+        // This is the same pattern yt-dlp uses. Only fallback from IOS, not recursively.
+        if (formats.count == 0 && clientID == YTAGClientIDiOS) {
+            // Log the raw response for diagnosis the first time this happens.
+            NSString *playabilityStatus = @"<no playabilityStatus>";
+            if ([playability isKindOfClass:[NSDictionary class]]) {
+                NSString *s = YTAGStringValue(playability[@"status"]);
+                NSString *r = YTAGStringValue(playability[@"reason"]);
+                playabilityStatus = [NSString stringWithFormat:@"status=%@ reason=%@", s ?: @"?", r ?: @"(none)"];
+            }
+            YTAGLog(@"extractor", @"0 formats on IOS — %@ ; retrying with TV-embed",
+                    playabilityStatus);
+            [YTAGURLExtractor extractVideoID:videoID
+                                    clientID:YTAGClientIDTVEmbed
+                                  completion:completion];
+            return;
+        }
+
         finish(result, nil);
     }];
     [task resume];

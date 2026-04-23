@@ -13,7 +13,7 @@ TARGET := iphone:clang:16.5:13.0
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = YTAfterglow
-$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation SystemConfiguration AVKit AVFoundation OSLog
+$(TWEAK_NAME)_FRAMEWORKS = UIKit Foundation SystemConfiguration AVKit AVFoundation OSLog Photos
 # ffmpeg-kit links against these iOS system frameworks/libs at runtime.
 $(TWEAK_NAME)_FRAMEWORKS += VideoToolbox AudioToolbox CoreMedia CoreVideo CoreAudio Security
 $(TWEAK_NAME)_LIBRARIES += z bz2 iconv

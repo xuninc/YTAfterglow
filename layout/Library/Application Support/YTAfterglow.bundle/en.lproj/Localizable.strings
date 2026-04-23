@@ -129,6 +129,8 @@
 "MuteButtonDesc" = "Displays a button to mute or unmute the volume on the overlay.";
 "LockButton" = "Lock button";
 "LockButtonDesc" = "Displays a button to quickly lock the overlay screen and switch to fullscreen mode.";
+"DownloadButton" = "Download button";
+"DownloadButtonDesc" = "Displays a button on the overlay to download the current video, audio, captions, or thumbnail.";
 "HideOverlayTitle" = "Hide video title";
 "HideOverlayTitleDesc" = "Hides the video title in fullscreen overlay.";
 "HideAutoplay" = "Hide Autoplay switch";

@@ -1419,7 +1419,9 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     }];
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"NoPlayerDownloadButton", @"PlayerShareButton", @"PlayerSaveButton", @"NoPlayerRemixButton", @"NoPlayerClipButton", @"RemoveDownloadMenu", @"RemoveShareMenu"] path:@[playerTitle, buttonsMenusTitle] aliasesByKey:nil];
     if (isAdvanced) {
-        [self ytag_addSearchEntries:entries forSettingKeys:@[@"PauseOnOverlay", @"HideSubs", @"NoHUDMsgs", @"HidePrevNext", @"ReplacePrevNext", @"NoDarkBg", @"NoFullscreenActions", @"StockVolumeHUD", @"NoWatermarks", @"VideoEndTime", @"24hrFormat"] path:@[playerTitle, overlayTitle] aliasesByKey:nil];
+        [self ytag_addSearchEntries:entries forSettingKeys:@[@"MuteButton", @"LockButton", @"DownloadButton", @"PauseOnOverlay", @"HideSubs", @"NoHUDMsgs", @"HidePrevNext", @"ReplacePrevNext", @"NoDarkBg", @"NoFullscreenActions", @"StockVolumeHUD", @"NoWatermarks", @"VideoEndTime", @"24hrFormat"] path:@[playerTitle, overlayTitle] aliasesByKey:@{
+            @"DownloadButton": @[@"overlay download", @"download overlay"]
+        }];
     }
 
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"ShortsOnlyMode", @"AutoSkipShorts", @"HideShorts", @"ShortsProgress", @"PinchToFullscreenShorts", @"ShortsToRegular", @"ResumeShorts"] path:@[shortsTitle] aliasesByKey:@{
@@ -1469,7 +1471,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSArray *interfaceKeys = [[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObjectsFromArray:[@[@"disableRTL"] arrayByAddingObjectsFromArray:legacyKeys]];
     NSArray *playerPlaybackKeys = @[@"backgroundPlayback", @"disableAutoCaptions", @"rememberCaptionState", @"rememberLoop", @"noContentWarning", @"classicQuality", @"hideEndScreenCards", @"noRelatedVids", @"noContinueWatching", @"noContinueWatchingPrompt", @"noRelatedWatchNexts", @"miniplayer", @"playlistOldMinibar", @"autoplayMode"];
     NSArray *playerControlKeys = @[@"portraitFullscreen", @"tapToSeek", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
-    NSArray *playerOverlayKeys = @[@"hideSubs", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"noFullscreenActions", @"pauseOnOverlay", @"stockVolumeHUD", @"noWatermarks", @"videoEndTime", @"24hrFormat"];
+    NSArray *playerOverlayKeys = @[@"muteButton", @"lockButton", @"downloadButton", @"hideSubs", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"noFullscreenActions", @"pauseOnOverlay", @"stockVolumeHUD", @"noWatermarks", @"videoEndTime", @"24hrFormat"];
     NSArray *playerActionBarKeys = @[@"noPlayerDownloadButton", @"noPlayerRemixButton", @"noPlayerClipButton"];
     NSArray *playerMenuKeys = @[@"removeDownloadMenu", @"removeShareMenu"];
     NSArray *playerKeys = [[[[playerPlaybackKeys arrayByAddingObjectsFromArray:playerControlKeys] arrayByAddingObjectsFromArray:playerOverlayKeys] arrayByAddingObjectsFromArray:playerActionBarKeys] arrayByAddingObjectsFromArray:playerMenuKeys];
@@ -2047,17 +2049,20 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     }
                     selectBlock:^BOOL (YTSettingsCell *overlayCell, NSUInteger overlayArg1) {
                         NSArray <YTSettingsSectionItem *> *overlayRows = @[
+                            [self switchWithTitle:@"MuteButton" key:@"muteButton"],
+                            [self switchWithTitle:@"LockButton" key:@"lockButton"],
+                            [self switchWithTitle:@"DownloadButton" key:@"downloadButton"],
                             [self switchWithTitle:@"HideSubs" key:@"hideSubs"],
-                                                        [self switchWithTitle:@"NoHUDMsgs" key:@"noHUDMsgs"],
+                            [self switchWithTitle:@"NoHUDMsgs" key:@"noHUDMsgs"],
                             [self switchWithTitle:@"HidePrevNext" key:@"hidePrevNext"],
                             [self switchWithTitle:@"ReplacePrevNext" key:@"replacePrevNext"],
                             [self switchWithTitle:@"NoDarkBg" key:@"noDarkBg"],
                             [self switchWithTitle:@"NoFullscreenActions" key:@"noFullscreenActions"],
-                                                        [self switchWithTitle:@"StockVolumeHUD" key:@"stockVolumeHUD"],
+                            [self switchWithTitle:@"StockVolumeHUD" key:@"stockVolumeHUD"],
                             [self switchWithTitle:@"NoWatermarks" key:@"noWatermarks"],
-                                                        [self switchWithTitle:@"VideoEndTime" key:@"videoEndTime"],
+                            [self switchWithTitle:@"VideoEndTime" key:@"videoEndTime"],
                             [self switchWithTitle:@"24hrFormat" key:@"24hrFormat"],
-                                                        [self switchWithTitle:@"PauseOnOverlay" key:@"pauseOnOverlay"]
+                            [self switchWithTitle:@"PauseOnOverlay" key:@"pauseOnOverlay"]
                         ];
 
                         YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Overlay") pickerSectionTitle:nil rows:overlayRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];

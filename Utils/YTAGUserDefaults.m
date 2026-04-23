@@ -153,6 +153,9 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         @"playerShareButtonMode": @0,
         @"playerSaveButtonMode": @0,
         @"commentsHeaderMode": @0,
+        @"muteButton": @YES,
+        @"lockButton": @YES,
+        @"downloadButton": @YES,
         @"debugLogEnabled": @NO,
         @"debugHUDEnabled": @NO
     }];
