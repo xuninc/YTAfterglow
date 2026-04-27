@@ -156,7 +156,15 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         @"muteButton": @YES,
         @"lockButton": @YES,
         @"downloadButton": @YES,
-        @"debugLogEnabled": @NO,
+        // v37: disabled again as safety net after v36's cold-launch-crash regression
+        // (which I attribute to masksToBounds=YES on the button layer, now removed).
+        // Leaving this OFF until we confirm the masksToBounds fix cleared cold launch
+        // on its own. User can turn it back on from Advanced → Player → Overlay.
+        @"controlsSheetButton": @NO,
+        // v33: debug log defaults ON so crashes leave a breadcrumb in
+        // YouTube.app/Documents/ytag-debug.log. Revert to @NO once the download +
+        // playback surfaces are stable (no new crashes for a few builds).
+        @"debugLogEnabled": @YES,
         @"debugHUDEnabled": @NO
     }];
 }

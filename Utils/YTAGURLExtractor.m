@@ -291,14 +291,28 @@ static long long YTAGSafeLongLongForKey(id obj, NSString *key) {
         result.thumbnailURL = bestURL;
     }
 
-    // Adaptive formats. Property names on YTIFormatStream: itag, url, mimeType,
-    // width, height, fps, bitrate, contentLength, qualityLabel, approxDurationMs,
-    // audioQuality. Match what the network-fetched path populates.
+    // Adaptive formats. Property names on YTIFormatStream (a GPBMessage): Apple's
+    // Protobuf ObjC generator capitalizes acronyms, so the `url` protobuf field
+    // becomes `URL` in Objective-C — NOT `url`. v33 used `@"url"` for KVC and
+    // every live-read format returned a nil URL, which our `length > 0` filter
+    // dropped — we saw "128 formats → 0 formats" in the log. Try `URL` first
+    // (matches 21.16.2 behavior per YouTube_decompiled/MLFormat.c:674, YT calls
+    // `-[YTIFormatStream URL]`), then `url` as a compatibility fallback for any
+    // version drift.
     NSMutableArray<YTAGFormat *> *formats = [NSMutableArray array];
     for (id f in (NSArray *)adaptiveArray) {
         YTAGFormat *fmt = [[YTAGFormat alloc] init];
         fmt.itag = YTAGSafeIntegerForKey(f, @"itag");
-        fmt.url = YTAGSafeStringValueForKey(f, @"url") ?: @"";
+        NSString *urlString = YTAGSafeStringValueForKey(f, @"URL");
+        if (urlString.length == 0) urlString = YTAGSafeStringValueForKey(f, @"url");
+        if (urlString.length == 0) {
+            // GPB stores the URL as an NSURL object for some fields. Try converting.
+            id urlObj = YTAGSafeValueForKey(f, @"URL") ?: YTAGSafeValueForKey(f, @"url");
+            if ([urlObj isKindOfClass:[NSURL class]]) {
+                urlString = [(NSURL *)urlObj absoluteString];
+            }
+        }
+        fmt.url = urlString ?: @"";
         fmt.mimeType = YTAGSafeStringValueForKey(f, @"mimeType") ?: @"";
 
         NSString *container = nil;
@@ -582,22 +596,30 @@ static long long YTAGSafeLongLongForKey(id obj, NSString *key) {
                     [resSummary componentsJoinedByString:@", "]);
         }
 
-        // Fallback: IOS client returned no formats — retry with TV-embedded client.
-        // This is the same pattern yt-dlp uses. Only fallback from IOS, not recursively.
-        if (formats.count == 0 && clientID == YTAGClientIDiOS) {
-            // Log the raw response for diagnosis the first time this happens.
+        // Client-rotation fallback, mirroring yt-dlp's strategy. Order: TV-embed
+        // (default, returns URLs without tight IP/UA binding) → IOS (higher-tier
+        // formats, tight-bound URLs that often 403 when replayed) → MediaConnect
+        // (transcoding pipeline client, also loose binding). First one to return
+        // >0 formats wins.
+        if (formats.count == 0) {
             NSString *playabilityStatus = @"<no playabilityStatus>";
             if ([playability isKindOfClass:[NSDictionary class]]) {
                 NSString *s = YTAGStringValue(playability[@"status"]);
                 NSString *r = YTAGStringValue(playability[@"reason"]);
                 playabilityStatus = [NSString stringWithFormat:@"status=%@ reason=%@", s ?: @"?", r ?: @"(none)"];
             }
-            YTAGLog(@"extractor", @"0 formats on IOS — %@ ; retrying with TV-embed",
-                    playabilityStatus);
-            [YTAGURLExtractor extractVideoID:videoID
-                                    clientID:YTAGClientIDTVEmbed
-                                  completion:completion];
-            return;
+            YTAGClientID nextClient = (YTAGClientID)-1;
+            if (clientID == YTAGClientIDTVEmbed)      nextClient = YTAGClientIDiOS;
+            else if (clientID == YTAGClientIDiOS)     nextClient = YTAGClientIDMediaConnect;
+            if ((int)nextClient >= 0) {
+                YTAGLog(@"extractor", @"0 formats on client=%d (%@) — rotating to client=%d",
+                        (int)clientID, playabilityStatus, (int)nextClient);
+                [YTAGURLExtractor extractVideoID:videoID
+                                        clientID:nextClient
+                                      completion:completion];
+                return;
+            }
+            YTAGLog(@"extractor", @"all clients exhausted with 0 formats — %@", playabilityStatus);
         }
 
         finish(result, nil);

@@ -82,9 +82,16 @@ extern UIColor *themeColor(NSString *key);
 + (void)handleDownloadTap:(UIButton *)sender;
 + (void)handleMuteTap:(UIButton *)sender;
 + (void)handleLockTap:(UIButton *)sender;
++ (void)handleControlsTap:(UIButton *)sender;
 // Entry point for OfflineProbe.x's native-Download-button hijack. Resolves
 // formats via live-read off playerVC and presents our action sheet.
 + (void)hijackFromPlayerVC:(id)playerVC fromView:(UIView *)sourceView;
+@end
+
+// Forward-declare the Premium-controls trigger (implemented in YTAGPremiumControls.m)
+// so we can route the new overlay button's tap to the bottom-sheet presenter.
+@interface YTAGPremiumControlsTrigger : NSObject
++ (void)handleControlsTap:(UIButton *)sender playerVC:(id)playerVC anchorDownloadButton:(UIView *)anchor;
 @end
 
 // --- State: current videoID cache ---
@@ -108,53 +115,38 @@ static NSString *YTAGFormatBytesShort(long long bytes) {
     return [NSString stringWithFormat:@"%.0f KB", kb];
 }
 
-// Factory: 36×36 YTQTMButton iconButton, white tint. No forced-circular touch
-// feedback — the {0,-6,0,-6} insets we used before expanded the feedback circle
-// beyond the button bounds and made each icon look 36pt wide instead of 24,
-// overlapping its neighbors. Matches the visual size of YT's own cast / CC /
-// settings buttons in the same row.
+// Factory: 36×36 plain UIButton with circular 70%-black backdrop and white icon.
 //
-// `iconType` (when > 0): populate YT's buttonRenderer so the button renders the
-// matching YTIIcon asset (e.g. 594 = native download icon). Falls back to the
-// supplied `fallbackImage` if the renderer path doesn't produce visible art.
-static YTQTMButton *YTAGMakeOverlayButton(NSString *accessibilityLabel,
-                                           NSInteger iconType,
-                                           UIImage *fallbackImage,
-                                           id target,
-                                           SEL selector) {
-    Class cls = NSClassFromString(@"YTQTMButton");
-    YTQTMButton *btn = cls ? [cls performSelector:@selector(iconButton)] : nil;
-    if (!btn) return nil;
-    btn.accessibilityLabel = accessibilityLabel;
-    // Honor the user's Afterglow theme. `theme_overlayButtons` is the key that
-    // covers the rest of the player overlay's top-row button tint — keeping ours
-    // on the same key means our buttons match cast/CC/settings under any preset.
-    // Falls back to white when the user hasn't picked a preset.
-    btn.tintColor = themeColor(@"theme_overlayButtons") ?: [UIColor whiteColor];
+// v38: abandoned YTQTMButton (YT's private button class) after v37 shipped with
+// circle + white tint and Corey reported "icons are still shit and cannot be seen
+// ... only premium controls is visible" — YTQTMButton has internal view hierarchy
+// that overrides our backgroundColor/tintColor at paint time. The native YT class
+// is designed to draw YT's configured theme, not our backdrop.
+// Plain UIButton lets us fully control layer.backgroundColor / cornerRadius /
+// tintColor without fighting YT's internals. We lose YT's internal haptic ripple
+// feedback but gain deterministic rendering across every theme + video scene.
+//
+// `iconType` argument retained for signature stability — no longer used (we
+// don't dispatch through YT's iconType renderer anymore; fallbackImage is
+// authoritative).
+static UIButton *YTAGMakeOverlayButton(NSString *accessibilityLabel,
+                                       NSInteger iconType,
+                                       UIImage *fallbackImage,
+                                       id target,
+                                       SEL selector) {
+    UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
     btn.translatesAutoresizingMaskIntoConstraints = NO;
+    btn.accessibilityLabel = accessibilityLabel;
 
-    // Preferred path: wire up a native YT icon via iconType. YT's button rendering
-    // machinery converts icon.iconType -> image at layout time.
-    BOOL wiredNativeIcon = NO;
-    if (iconType > 0) {
-        Class iconCls = NSClassFromString(@"YTIIcon");
-        Class rendererCls = NSClassFromString(@"YTIButtonRenderer");
-        if (iconCls && rendererCls) {
-            @try {
-                id icon = [[iconCls alloc] init];
-                [icon setValue:@(iconType) forKey:@"iconType"];
-                id renderer = [[rendererCls alloc] init];
-                [renderer setValue:icon forKey:@"icon"];
-                [btn setValue:renderer forKey:@"buttonRenderer"];
-                wiredNativeIcon = YES;
-            } @catch (id ex) {
-                YTAGLog(@"icon", @"renderer-set failed for iconType=%ld: %@", (long)iconType, ex);
-            }
-        }
-    }
+    // WHITE tint on arbitrary video + 70% black circular backdrop. CALayer's
+    // own backgroundColor honors cornerRadius without masksToBounds=YES (the
+    // latter caused v36 cold-launch crash via clipping YTQTMButton's feedback
+    // view; here we're a plain UIButton with no such subview, so masksToBounds
+    // would be safe, but we don't need it — layer background is enough).
+    btn.tintColor = [UIColor whiteColor];
+    btn.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.70];
+    btn.layer.cornerRadius = 18.0;
 
-    // Always install the fallback image — if the renderer path fails or YT doesn't
-    // render it at layout time (invisible), the SF Symbol shows instead.
     if (fallbackImage) {
         [btn setImage:[fallbackImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
              forState:UIControlStateNormal];
@@ -165,9 +157,7 @@ static YTQTMButton *YTAGMakeOverlayButton(NSString *accessibilityLabel,
         [btn.widthAnchor  constraintEqualToConstant:36.0],
         [btn.heightAnchor constraintEqualToConstant:36.0],
     ]];
-    if (wiredNativeIcon) {
-        YTAGLog(@"icon", @"wired iconType=%ld", (long)iconType);
-    }
+    (void)iconType;  // no longer used — see comment above
     return btn;
 }
 
@@ -220,7 +210,10 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
     BOOL showMute     = [prefs boolForKey:@"muteButton"];
     BOOL showLock     = [prefs boolForKey:@"lockButton"];
     BOOL showDownload = [prefs boolForKey:@"downloadButton"];
-    if (!showMute && !showLock && !showDownload) return;
+    // v35: controlsSheetButton re-enabled after v32/v33/v34 cold-launch bisect
+    // cleared it. Default ON via YTAGUserDefaults.
+    BOOL showControls = [prefs boolForKey:@"controlsSheetButton"];
+    if (!showMute && !showLock && !showDownload && !showControls) return;
 
     UIView *topContainer = nil;
     if ([self respondsToSelector:@selector(topControlsAccessibilityContainerView)]) {
@@ -275,7 +268,7 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
     } @catch (NSException *e) {}
 
     if (showMute) {
-        YTQTMButton *mute = YTAGMakeOverlayButton(
+        UIButton *mute = YTAGMakeOverlayButton(
             startMuted ? @"Unmute" : @"Mute",
             572,  // YT iconType 572 — native mute/volume icon
             YTAGSymbol(startMuted ? @"speaker.slash.fill" : @"speaker.wave.2.fill", 22.0),
@@ -284,7 +277,7 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
         if (mute) [stack addArrangedSubview:mute];
     }
     if (showLock) {
-        YTQTMButton *lock = YTAGMakeOverlayButton(
+        UIButton *lock = YTAGMakeOverlayButton(
             startLocked ? @"Unlock controls" : @"Lock controls",
             81,  // YT iconType 81 — native lock icon
             YTAGSymbol(startLocked ? @"lock.fill" : @"lock.open.fill", 22.0),
@@ -293,13 +286,25 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
         if (lock) [stack addArrangedSubview:lock];
     }
     if (showDownload) {
-        YTQTMButton *download = YTAGMakeOverlayButton(
+        UIButton *download = YTAGMakeOverlayButton(
             @"Download",
             594,  // YT iconType 594 — native download icon
             YTAGSymbol(@"arrow.down.to.line", 22.0),
             [YTAGDownloadTrigger class],
             @selector(handleDownloadTap:));
         if (download) [stack addArrangedSubview:download];
+    }
+    if (showControls) {
+        // 4th button — opens YTAfterglow's rebuild of YT Premium's controls sheet.
+        // iconType 0 falls through to the SF Symbol fallback (sliders.horizontal)
+        // because the engagement-overlay iconType isn't documented in our catalog.
+        UIButton *controls = YTAGMakeOverlayButton(
+            @"Controls",
+            0,
+            YTAGSymbol(@"slider.horizontal.3", 22.0),
+            [YTAGDownloadTrigger class],
+            @selector(handleControlsTap:));
+        if (controls) [stack addArrangedSubview:controls];
     }
 
     // Position the stack as a second row immediately below topContainer's own
@@ -459,9 +464,18 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
 }
 
 + (void)handleLockTap:(UIButton *)sender {
-    // Mirrors YTLite's sub_16C18 at line 343196-343228 verbatim.
-    // YTLite doesn't toggle — it only engages lock. YT's own lock-mode UI dismisses
-    // via gesture/timeout. We follow that behavior.
+    // True toggle — read current lock state, flip, update icon + a11y label.
+    //
+    // History: YTLite's sub_16C18 engages lock unconditionally (setLockModeActive:YES)
+    // and ALSO calls lockModeDidRequestShowFullscreen every time. That's fine when the
+    // button is tapped from a non-fullscreen context (forces fullscreen before engaging
+    // lock). But when YOU TAP IT WHILE ALREADY FULLSCREEN, YT's state machine double-
+    // transitions and strands the user — the indicator + unlock path both silently break
+    // (Corey's v34 report 2026-04-24: "can't get out of it after i press it").
+    //
+    // Toggle instead: read `lockModeActive` from the entity controller. If locked ->
+    // just call setLockModeActive:NO (no fullscreen re-request). If not locked ->
+    // call lockModeDidRequestShowFullscreen + setLockModeActive:YES like YTLite did.
     id overlayVC = YTAGOverlayVCFromSender(sender);
     if (!overlayVC) {
         YTAGLog(@"overlay-lock", @"no overlay VC from sender");
@@ -477,22 +491,80 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
         YTAGLog(@"overlay-lock", @"lockModeStateEntityController returned nil");
         return;
     }
-    // Exact YTLite sequence:
-    //   objc_msgSend(v2, "lockModeDidRequestShowFullscreen");
-    //   v6 = objc_msgSend(v2, "lockModeStateEntityController");
-    //   objc_msgSend(v6, "setLockModeActive:", 1);
-    if ([overlayVC respondsToSelector:@selector(lockModeDidRequestShowFullscreen)]) {
-        ((void (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeDidRequestShowFullscreen));
+
+    BOOL currentlyLocked = NO;
+    @try {
+        // The entity controller exposes the state through a protobuf-backed getter.
+        // Try both isLockModeActive (method form) and lockModeActive (KVC fallback).
+        if ([lockCtl respondsToSelector:@selector(isLockModeActive)]) {
+            currentlyLocked = ((BOOL (*)(id, SEL))objc_msgSend)(lockCtl, @selector(isLockModeActive));
+        } else {
+            NSNumber *v = [lockCtl valueForKey:@"lockModeActive"];
+            if ([v respondsToSelector:@selector(boolValue)]) currentlyLocked = [v boolValue];
+        }
+    } @catch (id ex) {
+        YTAGLog(@"overlay-lock", @"state read threw: %@", ex);
     }
-    // Re-fetch exactly like the decomp (could be a fresh instance after the fullscreen trigger).
-    lockCtl = ((id (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeStateEntityController));
-    if (lockCtl && [lockCtl respondsToSelector:@selector(setLockModeActive:)]) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(lockCtl, @selector(setLockModeActive:), YES);
+
+    if (currentlyLocked) {
+        // UNLOCK path: just flip the bit. Don't touch fullscreen — we're staying put.
+        if ([lockCtl respondsToSelector:@selector(setLockModeActive:)]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(lockCtl, @selector(setLockModeActive:), NO);
+        }
+        UIImage *icon = YTAGSymbol(@"lock.open.fill", 22.0);
+        if (icon) {
+            [sender setImage:[icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
+                    forState:UIControlStateNormal];
+        }
+        sender.accessibilityLabel = @"Lock controls";
+        YTAGLog(@"overlay-lock", @"unlocked (state was YES → NO)");
+    } else {
+        // LOCK path: YTLite's original sequence — fullscreen request, then engage.
+        if ([overlayVC respondsToSelector:@selector(lockModeDidRequestShowFullscreen)]) {
+            ((void (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeDidRequestShowFullscreen));
+        }
+        // Re-fetch the controller — lockModeDidRequestShowFullscreen may replace the instance.
+        lockCtl = ((id (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeStateEntityController));
+        if (lockCtl && [lockCtl respondsToSelector:@selector(setLockModeActive:)]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(lockCtl, @selector(setLockModeActive:), YES);
+        }
+        UIImage *icon = YTAGSymbol(@"lock.fill", 22.0);
+        if (icon) {
+            [sender setImage:[icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
+                    forState:UIControlStateNormal];
+        }
+        sender.accessibilityLabel = @"Unlock controls";
+        YTAGLog(@"overlay-lock", @"locked (state was NO → YES)");
     }
-    YTAGLog(@"overlay-lock", @"lock mode engaged (YT dismisses via gesture)");
+}
+
++ (void)handleControlsTap:(UIButton *)sender {
+    // Route to the rebuild of YT Premium's "Premium controls" bottom sheet.
+    // We hand the Premium-controls trigger both the player VC (for play/seek
+    // wiring) and the Download button view in our overlay (so Save-tile taps
+    // can re-enter the existing download flow with a real UIView anchor).
+    id pvc = YTAGPlayerVCFromSender(sender);
+    UIView *downloadAnchor = nil;
+    // Scan siblings in our stack for the Download button (accessibilityLabel match).
+    UIView *stack = sender.superview;
+    for (UIView *sibling in stack.subviews) {
+        if ([sibling.accessibilityLabel isEqualToString:@"Download"]) {
+            downloadAnchor = sibling;
+            break;
+        }
+    }
+    if (!downloadAnchor) downloadAnchor = sender;  // best-effort fallback
+    [YTAGPremiumControlsTrigger handleControlsTap:sender
+                                          playerVC:pvc
+                              anchorDownloadButton:downloadAnchor];
 }
 
 + (void)handleDownloadTap:(UIButton *)sender {
+    // v33-breadcrumb: enter — this is t=0 for the tap→crash window. Every step
+    // below should leave a breadcrumb so the last line in ytag-debug.log before
+    // a cutoff identifies the failing stage.
+    YTAGLog(@"dl-trigger", @"[bc] handleDownloadTap: ENTER");
+
     UIViewController *presentingVC = [sender.superview ytag_closestViewController];
     NSString *videoID = YTAGCurrentVideoID();
 
@@ -590,7 +662,7 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
     [presentingVC presentViewController:loading animated:YES completion:nil];
 
     [YTAGURLExtractor extractVideoID:videoID
-                            clientID:YTAGClientIDiOS
+                            clientID:YTAGClientIDTVEmbed
                           completion:^(YTAGExtractionResult *result, NSError *error) {
         [loading dismissViewControllerAnimated:YES completion:^{
             if (error || !result) {
@@ -612,11 +684,15 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
                         presentingVC:(UIViewController *)presentingVC
                             fromView:(UIView *)sourceView
 {
+    YTAGLog(@"dl-trigger", @"[bc] presentActionSheet: ENTER (vid=%@ formats=%lu captions=%lu)",
+            videoID, (unsigned long)result.formats.count, (unsigned long)result.captionTracks.count);
+
     YTAGDownloadActionSheetViewController *sheet = [YTAGDownloadActionSheetViewController new];
     sheet.channelName = result.author;
     sheet.videoTitle = result.title;
 
     // Audio size chip: compute from the preferred audio format.
+    YTAGLog(@"dl-trigger", @"[bc] presentActionSheet: computing audio sizeChip");
     YTAGFormatPair *audioPair = [YTAGFormatSelector
         selectAudioPairFromResult:result
                      audioQuality:YTAGAudioQualityStandard];
@@ -624,11 +700,16 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
 
     __weak UIViewController *weakPresenting = presentingVC;
     sheet.onAction = ^(YTAGDownloadAction action) {
+        YTAGLog(@"dl-trigger", @"[bc] action-sheet onAction fired: action=%ld", (long)action);
         UIViewController *p = weakPresenting;
-        if (!p) return;
+        if (!p) {
+            YTAGLog(@"dl-trigger", @"[bc] onAction: presenting VC gone — abort");
+            return;
+        }
 
         switch (action) {
             case YTAGDownloadActionDownloadVideo:
+                YTAGLog(@"dl-trigger", @"[bc] onAction → presentQualityPicker");
                 [YTAGDownloadTrigger presentQualityPickerWithResult:result
                                                             videoID:videoID
                                                        presentingVC:p
@@ -636,6 +717,7 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
                 break;
 
             case YTAGDownloadActionDownloadAudio:
+                YTAGLog(@"dl-trigger", @"[bc] onAction → audio (pair=%@)", audioPair ? @"yes" : @"no");
                 if (audioPair) {
                     YTAGFormatPair *pair = [YTAGFormatPair new];
                     pair.audioFormat = audioPair.audioFormat;   // videoFormat nil = audio-only
@@ -672,7 +754,11 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
         }
     };
 
-    [presentingVC presentViewController:sheet animated:YES completion:nil];
+    YTAGLog(@"dl-trigger", @"[bc] presentActionSheet: presenting sheet on %@",
+            NSStringFromClass([presentingVC class]));
+    [presentingVC presentViewController:sheet animated:YES completion:^{
+        YTAGLog(@"dl-trigger", @"[bc] action-sheet present completion fired");
+    }];
 }
 
 + (void)presentQualityPickerWithResult:(YTAGExtractionResult *)result
@@ -680,6 +766,8 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
                           presentingVC:(UIViewController *)presentingVC
                               fromView:(UIView *)sourceView
 {
+    YTAGLog(@"dl-trigger", @"[bc] presentQualityPicker: ENTER");
+
     NSArray<YTAGFormatPair *> *pairs = [YTAGFormatSelector
         allOfferablePairsFromResult:result
                        audioQuality:YTAGAudioQualityStandard];
@@ -690,6 +778,9 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
     for (YTAGFormatPair *p in pairs) {
         if (p.videoFormat != nil) [videoPairs addObject:p];
     }
+
+    YTAGLog(@"dl-trigger", @"[bc] presentQualityPicker: %lu video pairs",
+            (unsigned long)videoPairs.count);
 
     if (videoPairs.count == 0) {
         [self showAlertWithTitle:@"No downloadable formats"
@@ -708,6 +799,7 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
             actionWithTitle:pair.descriptorString
                       style:UIAlertActionStyleDefault
                     handler:^(UIAlertAction *_) {
+            YTAGLog(@"dl-trigger", @"[bc] quality row tapped: %@", pair.descriptorString);
             [YTAGDownloadTrigger startDownloadWithVideoID:videoID
                                                      pair:pair
                                               resultTitle:result.title
@@ -718,7 +810,10 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
     picker.popoverPresentationController.sourceView = sourceView;
     picker.popoverPresentationController.sourceRect = sourceView.bounds;
 
-    [presentingVC presentViewController:picker animated:YES completion:nil];
+    YTAGLog(@"dl-trigger", @"[bc] presentQualityPicker: presenting picker");
+    [presentingVC presentViewController:picker animated:YES completion:^{
+        YTAGLog(@"dl-trigger", @"[bc] quality-picker present completion fired");
+    }];
 }
 
 + (void)startDownloadWithVideoID:(NSString *)videoID
@@ -726,15 +821,30 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
                      resultTitle:(NSString *)title
                         fromView:(UIView *)sourceView
 {
+    YTAGLog(@"dl-trigger", @"[bc] startDownloadWithVideoID: ENTER vid=%@ pair=%@ title=%@",
+            videoID, pair.descriptorString ?: @"<nil>", title ?: @"<nil>");
+
     UIViewController *presentingVC = [sourceView ytag_closestViewController];
-    if (!presentingVC) return;
+    if (!presentingVC) {
+        YTAGLog(@"dl-trigger", @"[bc] startDownloadWithVideoID: no presentingVC from sourceView (%@) — ABORT",
+                NSStringFromClass([sourceView class]));
+        return;
+    }
 
     YTAGDownloadRequest *req = [YTAGDownloadRequest new];
     req.videoID = videoID;
     req.titleOverride = title;
     req.pair = pair;
-    req.postAction = YTAGPostDownloadActionAsk;
+    // v35: default to SaveToPhotos, not Ask. The v34 test surfaced that the
+    // post-download "Save / Share / Dismiss" alert was being presented on the
+    // YTMainAppVideoPlayerOverlayViewController, which is tied to the player
+    // chrome — when chrome auto-hid, the alert vanished with it and the session
+    // never finalized (blocking the next download with "another download in
+    // progress"). Matching YT's native Download behavior (auto-save to Photos)
+    // means there's no transient UI to lose and the session always finalizes.
+    req.postAction = YTAGPostDownloadActionSaveToPhotos;
 
+    YTAGLog(@"dl-trigger", @"[bc] startDownloadWithVideoID: handing off to YTAGDownloadManager");
     [[YTAGDownloadManager sharedManager]
           startDownload:req
          presentingFrom:presentingVC
@@ -786,7 +896,7 @@ static id YTAGPlayerVCFromSender(UIView *sender) {
                   preferredStyle:UIAlertControllerStyleAlert];
     [presentingVC presentViewController:loading animated:YES completion:nil];
     [YTAGURLExtractor extractVideoID:vid
-                            clientID:YTAGClientIDiOS
+                            clientID:YTAGClientIDTVEmbed
                           completion:^(YTAGExtractionResult *result, NSError *error) {
         [loading dismissViewControllerAnimated:YES completion:^{
             if (error || !result) {

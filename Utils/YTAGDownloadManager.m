@@ -85,6 +85,10 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 - (id<NSObject>)startDownload:(YTAGDownloadRequest *)request
               presentingFrom:(UIViewController *)presentingVC
                    completion:(YTAGDownloadCompletion)completion {
+    YTAGLog(@"dl-mgr", @"[bc] startDownload: ENTER vid=%@ presenter=%@ pairProvided=%d",
+            request.videoID ?: @"<nil>",
+            NSStringFromClass([presentingVC class]) ?: @"<nil>",
+            (request.pair != nil));
     NSParameterAssert(request != nil);
     NSParameterAssert(request.videoID.length > 0);
     NSParameterAssert(presentingVC != nil);
@@ -134,15 +138,19 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 
     [self presentProgressForSession:session];
 
-    // Decide whether extraction is needed.
-    BOOL pairLooksValid = (request.pair != nil
-                          && request.pair.videoFormat != nil
-                          && request.pair.audioFormat != nil
-                          && request.pair.videoFormat.url.length > 0
-                          && request.pair.audioFormat.url.length > 0);
+    // Decide whether extraction is needed. Audio-only pairs (videoFormat nil,
+    // audioFormat set) ARE valid — the Audio tile in the action sheet supplies
+    // that shape. Without this branch we fell through to the extractor with no
+    // reason to, and YT returned a playability error ("YouTube is no longer
+    // supported in this application or device") that we showed as a fatal
+    // Close-alert Corey couldn't dismiss (v35 regression).
+    BOOL hasAudio = (request.pair.audioFormat.url.length > 0);
+    BOOL hasVideo = (request.pair.videoFormat.url.length > 0);
+    BOOL pairLooksValid = (request.pair != nil && (hasVideo || hasAudio));
     if (pairLooksValid) {
         session.pair = request.pair;
-        YTAGLog(@"dl-mgr", @"[%@] skip extract, pair provided", request.videoID);
+        YTAGLog(@"dl-mgr", @"[%@] skip extract, pair provided (video=%d audio=%d)",
+                request.videoID, hasVideo, hasAudio);
         [self beginDownloadsForSession:session];
     } else {
         [self extractForSession:session];
@@ -160,6 +168,7 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 #pragma mark - UI presentation
 
 - (void)presentProgressForSession:(YTAGDLSession *)session {
+    YTAGLog(@"dl-mgr", @"[bc] presentProgressForSession: ENTER vid=%@", session.request.videoID);
     YTAGDownloadProgressViewController *vc = [[YTAGDownloadProgressViewController alloc] init];
     vc.modalPresentationStyle = UIModalPresentationFullScreen;
     vc.titleText = session.request.titleOverride.length > 0 ? session.request.titleOverride : @"Downloading…";
@@ -178,12 +187,25 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
     vc.onReadyToDismiss = ^{
         YTAGDLSession *s = weakSession;
         if (!s) return;
-        UIViewController *pvc = s.progressVC.presentingViewController ?: s.presentingVC;
-        [pvc dismissViewControllerAnimated:YES completion:nil];
+        YTAGDownloadProgressViewController *progressVC = s.progressVC;
+        // Dismiss through whichever ancestor is still alive. If the player chrome
+        // tore down the presentingViewController (as observed in v35 when YT's
+        // overlay was dismissed while the error VC was up), fall back to calling
+        // dismiss on the progressVC itself — UIKit routes it up the chain.
+        UIViewController *pvc = progressVC.presentingViewController ?: s.presentingVC;
+        if (pvc) {
+            [pvc dismissViewControllerAnimated:YES completion:nil];
+        } else if (progressVC) {
+            [progressVC dismissViewControllerAnimated:YES completion:nil];
+        }
     };
 
     session.progressVC = vc;
-    [session.presentingVC presentViewController:vc animated:YES completion:nil];
+    YTAGLog(@"dl-mgr", @"[bc] presentProgressForSession: presenting progressVC on %@",
+            NSStringFromClass([session.presentingVC class]));
+    [session.presentingVC presentViewController:vc animated:YES completion:^{
+        YTAGLog(@"dl-mgr", @"[bc] progressVC present completion fired");
+    }];
 }
 
 #pragma mark - Extraction
@@ -194,7 +216,7 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 
     __weak typeof(self) weakSelf = self;
     [YTAGURLExtractor extractVideoID:session.request.videoID
-                            clientID:YTAGClientIDiOS
+                            clientID:YTAGClientIDTVEmbed
                           completion:^(YTAGExtractionResult * _Nullable result, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
@@ -260,12 +282,20 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 #pragma mark - Downloads
 
 - (void)beginDownloadsForSession:(YTAGDLSession *)session {
-    if (session.cancelRequested) return;
+    YTAGLog(@"dl-mgr", @"[bc] beginDownloads: ENTER vid=%@", session.request.videoID);
+    if (session.cancelRequested) {
+        YTAGLog(@"dl-mgr", @"[bc] beginDownloads: cancelRequested — ABORT");
+        return;
+    }
 
     YTAGFormatPair *pair = session.pair;
-    NSURL *vRemote = [NSURL URLWithString:pair.videoFormat.url];
-    NSURL *aRemote = [NSURL URLWithString:pair.audioFormat.url];
-    if (!vRemote || !aRemote) {
+    NSURL *vRemote = pair.videoFormat.url.length > 0 ? [NSURL URLWithString:pair.videoFormat.url] : nil;
+    NSURL *aRemote = pair.audioFormat.url.length > 0 ? [NSURL URLWithString:pair.audioFormat.url] : nil;
+    BOOL audioOnly = (vRemote == nil && aRemote != nil);
+    YTAGLog(@"dl-mgr", @"[bc] beginDownloads: vRemote=%@ aRemote=%@ audioOnly=%d",
+            vRemote ? @"ok" : @"<nil>", aRemote ? @"ok" : @"<nil>", audioOnly);
+    // Must have at least one stream. Both-nil or video-only isn't valid for download.
+    if (!aRemote && !vRemote) {
         NSError *err = [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
                                            code:-4
                                        userInfo:@{NSLocalizedDescriptionKey: @"Invalid stream URLs"}];
@@ -273,6 +303,57 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
         return;
     }
 
+    // Audio-only: download just the m4a, skip mux, deliver the raw file.
+    // YT's adaptive audio is already a valid m4a container; no transcode needed.
+    if (audioOnly) {
+        session.state = YTAGDLStateDownloadingAudio;
+        session.progressVC.phase = YTAGDownloadPhaseDownloadingAudio;
+        session.progressVC.progressFraction = 0.0;
+        session.progressVC.subtitleText = nil;
+
+        session.audioDownloader = [[YTAGStreamDownloader alloc] initWithURL:aRemote];
+        session.audioDownloader.destinationURL = session.audioLocalURL;
+
+        __weak typeof(self) weakSelfAudio = self;
+        __block BOOL audioOnlyFirstProgress = YES;
+        YTAGStreamProgress audioOnlyProgress = ^(int64_t bytesWritten, int64_t totalBytesExpected, double fraction) {
+            YTAGDLSession *s = session;
+            if (!s || s.cancelRequested || s.completionFired) return;
+            if (audioOnlyFirstProgress) {
+                YTAGLog(@"dl-mgr", @"[bc] audio-only FIRST progress: %lld/%lld (%.1f%%)",
+                        bytesWritten, totalBytesExpected, fraction * 100.0);
+                audioOnlyFirstProgress = NO;
+            }
+            s.audioFraction = fraction;
+            s.progressVC.progressFraction = fraction;
+        };
+        YTAGStreamCompletion audioOnlyCompletion = ^(NSURL * _Nullable localFileURL, NSError * _Nullable error) {
+            __strong typeof(weakSelfAudio) strongSelfAudio = weakSelfAudio;
+            if (!strongSelfAudio) return;
+            YTAGDLSession *s = session;
+            if (!s || s.cancelRequested || s.completionFired) return;
+            if (error) {
+                YTAGLog(@"dl-mgr", @"[%@] audio-only download failed: %@", s.request.videoID, error.localizedDescription);
+                [strongSelfAudio failSession:s withError:error];
+                return;
+            }
+            if (localFileURL && ![localFileURL isEqual:s.audioLocalURL]) {
+                s.audioLocalURL = localFileURL;
+            }
+            YTAGLog(@"dl-mgr", @"[%@] audio-only download done — skipping mux, using raw m4a", s.request.videoID);
+            // Treat the downloaded m4a as the final output. renameAndDeliver will
+            // copy/move it to a friendly filename under tmpDir and hand it to the
+            // post-action (SaveToPhotos for v35+ default).
+            s.muxedOutputURL = s.audioLocalURL;
+            [strongSelfAudio renameAndDeliverForSession:s];
+        };
+        YTAGLog(@"dl-mgr", @"[bc] beginDownloads: starting audio-only NSURLSession task");
+        [session.audioDownloader startWithProgress:audioOnlyProgress completion:audioOnlyCompletion];
+        YTAGLog(@"dl-mgr", @"[bc] beginDownloads: audio task resumed");
+        return;
+    }
+
+    // Video + audio path (the normal case).
     session.state = YTAGDLStateDownloadingVideo;
     session.progressVC.phase = YTAGDownloadPhaseDownloadingVideo;
     session.progressVC.progressFraction = 0.0;
@@ -287,9 +368,15 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
     __weak typeof(self) weakSelf = self;
 
     // Video progress: only drive the UI while video is still the "current" stream.
+    __block BOOL videoFirstProgress = YES;
     YTAGStreamProgress videoProgress = ^(int64_t bytesWritten, int64_t totalBytesExpected, double fraction) {
         YTAGDLSession *s = session;
         if (!s || s.cancelRequested || s.completionFired) return;
+        if (videoFirstProgress) {
+            YTAGLog(@"dl-mgr", @"[bc] video-dl FIRST progress: %lld/%lld (%.1f%%)",
+                    bytesWritten, totalBytesExpected, fraction * 100.0);
+            videoFirstProgress = NO;
+        }
         s.videoFraction = fraction;
         if (s.state == YTAGDLStateDownloadingVideo) {
             s.progressVC.progressFraction = fraction;
@@ -316,9 +403,15 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
         [strongSelf maybeSwitchToAudioPhaseForSession:s];
     };
 
+    __block BOOL audioFirstProgress = YES;
     YTAGStreamProgress audioProgress = ^(int64_t bytesWritten, int64_t totalBytesExpected, double fraction) {
         YTAGDLSession *s = session;
         if (!s || s.cancelRequested || s.completionFired) return;
+        if (audioFirstProgress) {
+            YTAGLog(@"dl-mgr", @"[bc] audio-dl FIRST progress: %lld/%lld (%.1f%%)",
+                    bytesWritten, totalBytesExpected, fraction * 100.0);
+            audioFirstProgress = NO;
+        }
         s.audioFraction = fraction;
         if (s.state == YTAGDLStateDownloadingAudio) {
             s.progressVC.progressFraction = fraction;
@@ -348,8 +441,10 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
         // If video hasn't finished yet, we'll pick this up in maybeSwitchToAudioPhase.
     };
 
+    YTAGLog(@"dl-mgr", @"[bc] beginDownloads: starting video + audio NSURLSession tasks");
     [session.videoDownloader startWithProgress:videoProgress completion:videoCompletion];
     [session.audioDownloader startWithProgress:audioProgress completion:audioCompletion];
+    YTAGLog(@"dl-mgr", @"[bc] beginDownloads: both tasks resumed");
 }
 
 - (void)maybeSwitchToAudioPhaseForSession:(YTAGDLSession *)session {
@@ -441,8 +536,11 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
         : (session.extractionResult.title ?: session.request.videoID);
     NSString *sanitized = [self sanitizedFilenameFromTitle:title fallback:session.request.videoID];
 
-    // We only ship video+audio muxed mp4 in MVP (audio-only path is out of scope for this orchestrator).
-    NSString *finalName = [sanitized stringByAppendingPathExtension:@"mp4"];
+    // Audio-only outputs an .m4a (Photos can't ingest audio-only files, so the
+    // post-action also gets overridden below to Share). Video+audio mux outputs .mp4.
+    BOOL isAudioOnly = (session.pair.videoFormat == nil && session.pair.audioFormat != nil);
+    NSString *ext = isAudioOnly ? @"m4a" : @"mp4";
+    NSString *finalName = [sanitized stringByAppendingPathExtension:ext];
     NSURL *finalURL = [session.tmpDir URLByAppendingPathComponent:finalName];
 
     // If something with that name already exists, remove it.
@@ -451,14 +549,36 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
     NSError *mvErr = nil;
     if (![[NSFileManager defaultManager] moveItemAtURL:session.muxedOutputURL toURL:finalURL error:&mvErr]) {
         // Fall back to serving the un-renamed file rather than failing.
-        YTAGLog(@"dl-mgr", @"[%@] rename failed (%@), serving output.mp4", session.request.videoID, mvErr.localizedDescription);
+        YTAGLog(@"dl-mgr", @"[%@] rename failed (%@), serving source file", session.request.videoID, mvErr.localizedDescription);
         finalURL = session.muxedOutputURL;
     }
     session.finalOutputURL = finalURL;
 
+    // For audio-only, Photos can't import .m4a — force a Share sheet so the user
+    // can send to Files / Voice Memos / AirDrop / etc.
+    if (isAudioOnly && session.request.postAction == YTAGPostDownloadActionSaveToPhotos) {
+        YTAGLog(@"dl-mgr", @"[%@] audio-only detected → overriding SaveToPhotos → Share", session.request.videoID);
+        session.request.postAction = YTAGPostDownloadActionShare;
+    }
+
     // Clean up the intermediate stream files now; keep final + tmpDir until user acts.
-    [self removeURLIfExists:session.videoLocalURL];
-    [self removeURLIfExists:session.audioLocalURL];
+    // Skip cleanup of audioLocalURL if it IS the final (audio-only path moved it).
+    if (!isAudioOnly) {
+        [self removeURLIfExists:session.videoLocalURL];
+        [self removeURLIfExists:session.audioLocalURL];
+    } else {
+        [self removeURLIfExists:session.videoLocalURL];
+    }
+
+    // Do NOT flip progressVC to Finished here — that schedules a 0.75s auto-
+    // dismiss that races with the Photos permission prompt / Share sheet /
+    // post-action alert, yanking them off-screen before the user can tap.
+    // Corey hit this 2026-04-24: "the menu closed before i was able to do
+    // anything like authorize access to the photos app".
+    // The post-action handler (saveToPhotosForSession / shareForSession /
+    // askPostActionForSession) will set Finished + dismiss explicitly once
+    // its work is complete.
+    session.progressVC.progressFraction = 1.0;
 
     // Flip the progress VC to Finished before dismissing.
     session.progressVC.phase = YTAGDownloadPhaseFinished;
@@ -535,20 +655,47 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 
     void (^doSave)(void) = ^{
         [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-            [PHAssetCreationRequest creationRequestForAssetFromVideoAtFileURL:fileURL];
+            // YTLite's actual save call (raw .c:390204): creationRequestForAsset
+            // creates an empty asset, then addResourceWithType:fileURL: attaches
+            // the video file as a raw resource. This bypasses the codec
+            // compatibility check that creationRequestForAssetFromVideoAtFileURL:
+            // runs upfront — that check is what was throwing PHPhotosErrorDomain
+            // error 3302 on VP9/AV1 content that Apple's default pipeline rejects
+            // but the underlying asset store will happily accept as a raw file.
+            PHAssetCreationRequest *req = [PHAssetCreationRequest creationRequestForAsset];
+            [req addResourceWithType:PHAssetResourceTypeVideo
+                             fileURL:fileURL
+                             options:nil];
         } completionHandler:^(BOOL success, NSError * _Nullable err) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) strongSelf = weakSelf;
                 YTAGDLSession *s = weakSession;
                 if (!strongSelf || !s) return;
                 if (!success) {
-                    YTAGLog(@"dl-mgr", @"[%@] save-to-photos failed: %@", s.request.videoID, err.localizedDescription);
-                    [strongSelf failSession:s withError:err ?: [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
-                                                                                    code:-6
-                                                                                userInfo:@{NSLocalizedDescriptionKey: @"Save to Photos failed"}]];
+                    YTAGLog(@"dl-mgr", @"[%@] save-to-photos failed: %@ — falling back to Share sheet",
+                            s.request.videoID, err.localizedDescription);
+                    // Common failure mode: Photos refuses non-H.264 video (VP9 in
+                    // MP4 container gives PHPhotosErrorDomain error 3302). The
+                    // file itself is on disk and valid — just not importable into
+                    // Photos. Fall back to Share so the user can save it to Files
+                    // / AirDrop / Voice Memos / wherever they want it.
+                    if (s.progressVC.presentingViewController != nil) {
+                        [strongSelf dismissProgressForSession:s then:^{
+                            [strongSelf shareForSession:s];
+                        }];
+                    } else {
+                        [strongSelf shareForSession:s];
+                    }
                     return;
                 }
                 YTAGLog(@"dl-mgr", @"[%@] saved to photos", s.request.videoID);
+                // NOW flip to Finished — user can briefly see the checkmark.
+                // Explicit dismiss follows immediately so the 0.75s auto-dismiss
+                // timer (which still arms on phase=Finished) is racing against
+                // our synchronous dismissal. Either wins — the progressVC goes
+                // away and finalize fires via the dismiss completion.
+                s.progressVC.phase = YTAGDownloadPhaseFinished;
+                s.progressVC.progressFraction = 1.0;
                 // If we came from Ask, the progressVC is already dismissed. For the direct
                 // SaveToPhotos path it may still be up.
                 if (s.progressVC.presentingViewController != nil) {
@@ -592,10 +739,20 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
     __weak typeof(self) weakSelf = self;
     __weak YTAGDLSession *weakSession = session;
 
+    YTAGLog(@"dl-mgr", @"[bc] shareForSession: ENTER file=%@", fileURL.lastPathComponent);
+
     void (^presentShare)(UIViewController *) = ^(UIViewController *host) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         YTAGDLSession *s = weakSession;
-        if (!strongSelf || !s || !host) return;
+        if (!strongSelf || !s) {
+            YTAGLog(@"dl-mgr", @"[bc] shareForSession: strongSelf/session nil — ABORT");
+            return;
+        }
+        if (!host) {
+            YTAGLog(@"dl-mgr", @"[bc] shareForSession: host nil — finalizing anyway so session unlocks");
+            [strongSelf finalizeSuccessForSession:s];
+            return;
+        }
 
         UIActivityViewController *av = [[UIActivityViewController alloc] initWithActivityItems:@[fileURL]
                                                                          applicationActivities:nil];
@@ -604,6 +761,7 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
                 __strong typeof(weakSelf) innerSelf = weakSelf;
                 YTAGDLSession *innerSession = weakSession;
                 if (!innerSelf || !innerSession) return;
+                YTAGLog(@"dl-mgr", @"[bc] share completion: activity=%@ completed=%d", activityType, completed);
                 [innerSelf finalizeSuccessForSession:innerSession];
             });
         };
@@ -616,7 +774,29 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
                                         0, 0);
             pop.permittedArrowDirections = 0;
         }
-        [host presentViewController:av animated:YES completion:nil];
+        YTAGLog(@"dl-mgr", @"[bc] shareForSession: presenting on %@", NSStringFromClass([host class]));
+        [host presentViewController:av animated:YES completion:^{
+            YTAGLog(@"dl-mgr", @"[bc] shareForSession: present completion fired");
+        }];
+    };
+
+    // Find a stable host. session.presentingVC is the YTMainAppVideoPlayerOverlay
+    // VC, which is tied to player chrome and can disappear mid-flow. Walk up to
+    // the keyWindow's rootViewController's top-most presented VC, which is
+    // always alive and can host modals.
+    UIViewController *(^findStableHost)(void) = ^UIViewController *{
+        UIWindow *keyWindow = nil;
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+            if (scene.activationState != UISceneActivationStateForegroundActive) continue;
+            for (UIWindow *w in ((UIWindowScene *)scene).windows) {
+                if (w.isKeyWindow) { keyWindow = w; break; }
+            }
+            if (keyWindow) break;
+        }
+        UIViewController *top = keyWindow.rootViewController;
+        while (top.presentedViewController) top = top.presentedViewController;
+        return top ?: session.presentingVC;
     };
 
     // If the progressVC is still up, dismiss first so the share sheet has a clean host.
@@ -624,10 +804,10 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
         [self dismissProgressForSession:session then:^{
             YTAGDLSession *s = weakSession;
             if (!s) return;
-            presentShare(s.presentingVC);
+            presentShare(findStableHost());
         }];
     } else {
-        presentShare(session.presentingVC);
+        presentShare(findStableHost());
     }
 }
 

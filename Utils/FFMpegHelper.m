@@ -21,6 +21,9 @@
 
 #import "FFMpegHelper.h"
 #import "YTAGLog.h"
+#import <UIKit/UIKit.h>
+#import <objc/message.h>
+#import <objc/runtime.h>
 
 #pragma mark - ffmpeg-kit import / forward declarations
 
@@ -126,6 +129,9 @@ static NSString *FFLocalizedString(NSString *key) {
         duration:(NSInteger)durationSeconds
       completion:(FFMpegHelperCompletion)completion
 {
+    YTAGLog(@"ffmpeg", @"[bc] muxVideo: ENTER video=%@ audio=%@ caps=%@ dur=%lds",
+            videoURL.lastPathComponent, audioURL.lastPathComponent,
+            captionsURL.lastPathComponent ?: @"<none>", (long)durationSeconds);
     NSParameterAssert(videoURL);
     NSParameterAssert(audioURL);
     NSParameterAssert(completion);
@@ -225,10 +231,40 @@ static NSString *FFLocalizedString(NSString *key) {
     // (Draft: skip log-delegate routing; getLastCommandOutput below covers the failure-path
     // scraping.)
 
+    YTAGLog(@"ffmpeg", @"[bc] muxVideo: command=%@", command);
+
     // sub_551D4 — execute the mux on a global queue, then dispatch completion to main.
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+        YTAGLog(@"ffmpeg", @"[bc] muxVideo: calling FFmpegKit execute:");
         FFmpegSession *session = [FFmpegKit execute:command];
-        long rc = [session getReturnCode];
+        YTAGLog(@"ffmpeg", @"[bc] muxVideo: execute: returned session=%@", session);
+
+        // ffmpeg-kit's real -[FFmpegSession getReturnCode] returns a ReturnCode *
+        // object, not a primitive. Our forward-decl in the no-xcframework branch
+        // claims it returns `long`, so `long rc = [session getReturnCode]` silently
+        // cast the pointer to an integer — every rc we logged pre-v31 (5347512016
+        // etc.) was the ReturnCode's heap address, not an exit code. Dispatch the
+        // call dynamically and unwrap via -[ReturnCode getValue] so we get the
+        // real int regardless of which header variant was in scope at compile.
+        long rc = -1;
+        @try {
+            id rcObj = ((id (*)(id, SEL))objc_msgSend)(session, @selector(getReturnCode));
+            if (rcObj == nil) {
+                rc = -1;
+            } else if ([rcObj respondsToSelector:@selector(getValue)]) {
+                rc = (long)((int (*)(id, SEL))objc_msgSend)(rcObj, @selector(getValue));
+            } else if ([rcObj isKindOfClass:[NSNumber class]]) {
+                rc = [(NSNumber *)rcObj longValue];
+            } else {
+                // Unknown shape — treat as failure rather than crashing on downstream
+                // format specifiers. Log the class so we can see what we missed.
+                YTAGLog(@"ffmpeg", @"unexpected getReturnCode shape: %@", NSStringFromClass([rcObj class]));
+                rc = -1;
+            }
+        } @catch (id ex) {
+            YTAGLog(@"ffmpeg", @"getReturnCode threw: %@", ex);
+            rc = -1;
+        }
         YTAGLog(@"ffmpeg", @"mux rc=%ld", rc);
 
         // sub_55278 — completion handler on main.
@@ -245,7 +281,22 @@ static NSString *FFLocalizedString(NSString *key) {
             if (rc == kFFReturnCancelled) {
                 descKey = @"Cancelled";
             } else {
-                NSString *lastOut = [FFmpegKit getLastCommandOutput];
+                // ffmpeg-kit stores output PER-SESSION, not class-wide. YTLite's
+                // MobileFFmpeg had `+[FFmpegKit getLastCommandOutput]` at the class
+                // level — that selector does NOT exist on ffmpeg-kit's FFmpegKit
+                // class. Calling it through the v31 forward-decl stub crashed with
+                // an unrecognized-selector exception on every rc != 0 path. Pull
+                // the output off the session object we already have instead.
+                NSString *lastOut = nil;
+                @try {
+                    if ([session respondsToSelector:@selector(getAllLogsAsString)]) {
+                        lastOut = ((NSString *(*)(id, SEL))objc_msgSend)(session, @selector(getAllLogsAsString));
+                    } else if ([session respondsToSelector:@selector(getOutput)]) {
+                        lastOut = ((NSString *(*)(id, SEL))objc_msgSend)(session, @selector(getOutput));
+                    }
+                } @catch (id ex) {
+                    YTAGLog(@"ffmpeg", @"getAllLogsAsString threw: %@", ex);
+                }
                 [self getCleanLog:lastOut];
                 descKey = @"Error.Clipboard";
             }
@@ -258,8 +309,19 @@ static NSString *FFLocalizedString(NSString *key) {
     });
 }
 
-#pragma mark - Siblings (stubs — reconstruct in follow-up turns)
+#pragma mark - getCommandWithVideoURL: — 4-variant mux string (raw .c:382007)
 
+// Port of -[FFMpegHelper getCommandWithVideoURL:audioURL:captionsURL:thumbnailURL:duration:outputURL:]
+// from YTLite.dylib.c:382007-382119. Command shape depends on which of captions/thumbnail
+// exist on disk at build time. All four variants below match YTLite byte-for-byte, with
+// two deliberate deltas:
+//   1. Paths are quote-wrapped. ffmpeg-kit's tokenizer supports shell-like quoting; YTLite's
+//      MobileFFmpeg may have used a different tokenizer. Quoting makes us robust to any
+//      future tmp-dir layout that has spaces (sandboxed Documents paths can't have them today
+//      but defensive is cheap).
+//   2. We pass `.path` (NSString) rather than the NSURL itself. YTLite's code passes NSURL,
+//      which %@ formats as `file:///...`. ffmpeg handles `file://` URLs fine, but the plain
+//      path is what every other ffmpeg example in the world uses, so we lean there.
 - (NSString *)getCommandWithVideoURL:(NSURL *)videoURL
                             audioURL:(NSURL *)audioURL
                          captionsURL:(NSURL *)captionsURL
@@ -267,41 +329,130 @@ static NSString *FFLocalizedString(NSString *key) {
                             duration:(NSInteger)durationSeconds
                            outputURL:(NSURL *)outputURL
 {
-    // TODO: reconstruct from raw .c line 382007. Returns one of four command variants.
-    // Temporary minimal passthrough so mergeVideo compiles and runs the plain (no captions,
-    // no thumbnail) path end-to-end.
+    NSFileManager *fm = [NSFileManager defaultManager];
+    BOOL hasCaps  = captionsURL  ? [fm fileExistsAtPath:captionsURL.path]  : NO;
+    BOOL hasThumb = thumbnailURL ? [fm fileExistsAtPath:thumbnailURL.path] : NO;
+
+    // YTLite's codeForCaps: — dictionary lookup on the filename stem. Until we
+    // port the full lang-code dict (off_E0BCD0 in YTLite, constant at load time),
+    // fall back to the filename stem. Downstream effect: mp4 track metadata
+    // language tag will be "English" instead of "eng". Players still recognize
+    // the track; just cosmetically non-ISO.
+    NSString *langCode = hasCaps ? [self codeForCaps:captionsURL] : nil;
+
+    // Branch 1 (YTLite raw line 382055) — captions + thumbnail
+    if (hasCaps && hasThumb) {
+        return [NSString stringWithFormat:
+            @"-hide_banner -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" -i \"%@\" -to %ld "
+            @"-map 0 -map 1 -map 2 -map 3 "
+            @"-c:v copy -c:a copy -c:s mov_text "
+            @"-metadata:s:s:0 language=%@ "
+            @"-disposition:3 attached_pic \"%@\"",
+            videoURL.path, audioURL.path, captionsURL.path, thumbnailURL.path,
+            (long)durationSeconds, langCode, outputURL.path];
+    }
+
+    // Branch 2 (YTLite raw line 382074) — captions only
+    if (hasCaps && !hasThumb) {
+        return [NSString stringWithFormat:
+            @"-hide_banner -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" -to %ld "
+            @"-c:v copy -c:a copy -c:s mov_text "
+            @"-metadata:s:s:0 language=%@ \"%@\"",
+            videoURL.path, audioURL.path, captionsURL.path,
+            (long)durationSeconds, langCode, outputURL.path];
+    }
+
+    // Branch 4 (YTLite raw line 382101) — thumbnail only (no captions)
+    if (!hasCaps && hasThumb) {
+        return [NSString stringWithFormat:
+            @"-hide_banner -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" -to %ld "
+            @"-map 0 -map 1 -map 2 "
+            @"-c:v copy -c:a copy "
+            @"-disposition:2 attached_pic \"%@\"",
+            videoURL.path, audioURL.path, thumbnailURL.path,
+            (long)durationSeconds, outputURL.path];
+    }
+
+    // Branch 3 (YTLite raw line 382089) — minimal: video + audio only
     return [NSString stringWithFormat:
-        @"-hide_banner -loglevel error -i \"%@\" -i \"%@\" -to %ld -c:v copy -c:a copy \"%@\"",
-        videoURL.path, audioURL.path, (long)durationSeconds, outputURL.path];
+        @"-hide_banner -loglevel error -i \"%@\" -i \"%@\" -to %ld "
+        @"-c:v copy -c:a copy \"%@\"",
+        videoURL.path, audioURL.path,
+        (long)durationSeconds, outputURL.path];
 }
 
 - (void)cutAudio:(NSURL *)audioURL
         duration:(NSInteger)durationSeconds
       completion:(FFMpegHelperCompletion)completion
 {
-    // TODO: reconstruct from raw .c line 382128.
+    // TODO: reconstruct from raw .c line 382128. Not on the hot path for MP4 downloads —
+    // only invoked for audio-only extraction after the main mux.
     NSError *err = [NSError errorWithDomain:@"ErrDomain" code:-1
                                    userInfo:@{NSLocalizedDescriptionKey: @"cutAudio not yet reconstructed"}];
     dispatch_async(dispatch_get_main_queue(), ^{ completion(nil, err); });
 }
 
+#pragma mark - getCleanLog: — ffmpeg error-log distillation (raw .c:382410)
+
+// Port of -[FFMpegHelper getCleanLog:] from YTLite.dylib.c:382410-382514.
+// Takes ffmpeg's verbose stderr dump, dedupes consecutive duplicate lines,
+// trims leading/trailing whitespace, strips trailing "." characters, and
+// copies the result to the pasteboard. Used when a mux fails so the user
+// can paste the real error into a bug report.
 - (void)getCleanLog:(NSString *)lastOutput {
-    // TODO: reconstruct from raw .c line 382410. For now, forward to YTAGLog so the output
-    // isn't lost.
-    if (lastOutput.length) YTAGLog(@"ffmpeg", @"last output: %@", lastOutput);
+    if (lastOutput.length == 0) return;
+
+    NSArray<NSString *> *rawLines = [lastOutput
+        componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+    NSMutableArray<NSString *> *deduped = [NSMutableArray array];
+    NSString *lastLine = nil;
+    for (NSString *line in rawLines) {
+        if (line.length == 0) continue;
+        if (lastLine && [line isEqualToString:lastLine]) continue;
+        [deduped addObject:line];
+        lastLine = line;
+    }
+
+    NSString *joined = [deduped componentsJoinedByString:@"\n"];
+    NSCharacterSet *ws = [NSCharacterSet whitespaceAndNewlineCharacterSet];
+    NSString *trimmed = [joined stringByTrimmingCharactersInSet:ws];
+
+    // Strip trailing "." characters — ffmpeg sometimes tacks on ellipsis-style dots
+    // for progress/status lines that bleed into the error trail.
+    while ([trimmed hasSuffix:@"."]) {
+        trimmed = [trimmed substringToIndex:trimmed.length - 1];
+        trimmed = [trimmed stringByTrimmingCharactersInSet:ws];
+    }
+
+    if (trimmed.length == 0) return;
+
+    // Log via YTAGLog first so the output survives even if pasteboard write fails,
+    // then stash on the clipboard for the user's next paste.
+    YTAGLog(@"ffmpeg", @"clean log:\n%@", trimmed);
+    [[UIPasteboard generalPasteboard] setString:trimmed];
 }
 
 - (void)setActive {
-    // TODO: reconstruct from raw .c line 382520.
+    // TODO: port from raw .c line 382520. YTLite wired MobileFFmpegConfig's log +
+    // statistics delegates to self. ffmpeg-kit uses callback blocks instead
+    // (+[FFmpegKitConfig enableLogCallback:], enableStatisticsCallback:). The current
+    // mux pipeline works without these; wiring them up only adds progress-toast
+    // updates, not download correctness.
 }
 
 - (void)updateProgressDialog {
-    // TODO: reconstruct from raw .c line 382528. Uses self.statistics.
+    // TODO: port from raw .c line 382528. Depends on setActive wiring self.statistics
+    // via the ffmpeg-kit statistics callback. Cosmetic only — no effect on the mux.
 }
 
 - (NSString *)codeForCaps:(NSURL *)captionsURL {
-    // TODO: reconstruct from raw .c line 382569. Dictionary lookup with filename fallback.
-    return captionsURL ? [[captionsURL.path lastPathComponent] stringByDeletingPathExtension] : nil;
+    // YTLite raw .c:382569 reads a constant dict (off_E0BCD0 = NSConstantDictionary)
+    // keyed on filename stem ("English" → "eng"), falling back to the stem itself.
+    // We skip the dict for now — our caption filenames come from YTAGCaptionTrack
+    // display names, so stem is already human-language text. Downstream metadata is
+    // "language=English" instead of ISO "eng"; MP4 players still list the track.
+    if (!captionsURL) return nil;
+    return [[captionsURL.path lastPathComponent] stringByDeletingPathExtension];
 }
 
 @end

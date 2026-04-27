@@ -261,10 +261,14 @@ static NSComparisonResult YTAGCompareVideoBest(YTAGFormat *a, YTAGFormat *b) {
 
     YTAGFormat *audio = YTAGSelectAudioFormat(result, audioQuality);
 
-    // Group video formats by (qualityLabel + codec family). Keying on qualityLabel
-    // alone collapses same-resolution rungs across codecs — e.g. "1080p H.264" and
-    // "1080p VP9" would share a key, dropping one from the picker. With codec-
-    // aware keys the user sees every available resolution × codec combination.
+    // v40: reverted the H.264-only filter. That was based on a wrong premise —
+    // I thought Photos refused VP9/AV1 due to codec policy. Actual fix is in
+    // YTAGDownloadManager's save path (swap to YTLite's creationRequestForAsset
+    // + addResourceWithType: pattern which bypasses the codec check). So we
+    // can safely offer every resolution × codec combo here again.
+    //
+    // Group by (qualityLabel + codec family). Same-resolution H.264 / VP9 / AV1
+    // show up as separate rows so user can pick bitrate/codec tradeoffs freely.
     NSMutableDictionary<NSString *, YTAGFormat *> *byLabel = [NSMutableDictionary dictionary];
     NSMutableArray<YTAGFormat *> *unlabeled = [NSMutableArray array];
     for (YTAGFormat *f in result.videoFormats) {
@@ -282,7 +286,6 @@ static NSComparisonResult YTAGCompareVideoBest(YTAGFormat *a, YTAGFormat *b) {
             byLabel[key] = f;
         }
     }
-
     NSArray<YTAGFormat *> *distinctVideos = byLabel.allValues;
 
     // Sort: height desc, Premium before non-Premium, H.264 before AV1 before VP9, then bitrate desc.

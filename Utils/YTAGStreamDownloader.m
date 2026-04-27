@@ -84,6 +84,18 @@ static NSString *const kYTAGStreamDownloaderErrorDomain = @"YTAGStreamDownloader
         NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
         cfg.HTTPMaximumConnectionsPerHost = 4;
         cfg.timeoutIntervalForRequest = 60;
+        // Googlevideo.com signs stream URLs against (IP, UA, session-context).
+        // The v33 test showed NSURLSession's default UA inside YouTube.app doesn't
+        // match what the iOS-client InnerTube request used to mint the URLs, so
+        // the CDN returned text/plain errors that we saved as .mp4. Set the iOS
+        // YouTube UA explicitly so the signature binding sees a consistent client.
+        // Format matches the real iOS YouTube client's network requests and lines
+        // up with our InnerTube spoof (clientName=IOS, clientVersion=21.16.2).
+        cfg.HTTPAdditionalHeaders = @{
+            @"User-Agent": @"com.google.ios.youtube/21.16.2 (iPhone17,3; U; CPU iOS 18_5 like Mac OS X)",
+            @"X-YouTube-Client-Name": @"5",
+            @"X-YouTube-Client-Version": @"21.16.2",
+        };
         self.session = [NSURLSession sessionWithConfiguration:cfg delegate:self delegateQueue:nil];
 
         self.currentTask = [self.session downloadTaskWithURL:self.remoteURL];
@@ -170,6 +182,46 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
       downloadTask:(NSURLSessionDownloadTask *)downloadTask
 didFinishDownloadingToURL:(NSURL *)location {
 
+    // `didFinishDownloadingToURL:` fires on ANY HTTP completion — success or error.
+    // NSURLSession happily writes a 403 body to disk and calls this method. Without
+    // an explicit status check, we'd hand a tiny error-body file downstream (the
+    // v33 symptom: mux saw 200-byte "files" and returned rc=1 instantly). Validate
+    // the status before claiming success.
+    NSHTTPURLResponse *http = nil;
+    if ([downloadTask.response isKindOfClass:[NSHTTPURLResponse class]]) {
+        http = (NSHTTPURLResponse *)downloadTask.response;
+    }
+    NSInteger status = http.statusCode;
+
+    // Measure the response body we just wrote. Useful for diagnosing tiny
+    // error responses even when the status code alone doesn't scream "error".
+    unsigned long long bodyBytes = 0;
+    NSError *attrErr = nil;
+    NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:location.path error:&attrErr];
+    if (attrs) bodyBytes = [attrs fileSize];
+
+    YTAGLog(@"downloader", @"response: status=%ld bytes=%llu ctype=%@",
+            (long)status, bodyBytes,
+            [http.allHeaderFields objectForKey:@"Content-Type"] ?: @"<none>");
+
+    if (http && (status < 200 || status >= 300)) {
+        // Read a preview of the error body so the user can see what the server said.
+        NSData *preview = [NSData dataWithContentsOfURL:location options:NSDataReadingMappedIfSafe error:NULL];
+        NSString *bodyStr = nil;
+        if (preview.length > 0) {
+            NSData *slice = preview.length > 512 ? [preview subdataWithRange:NSMakeRange(0, 512)] : preview;
+            bodyStr = [[NSString alloc] initWithData:slice encoding:NSUTF8StringEncoding];
+        }
+        YTAGLog(@"downloader", @"HTTP error body preview: %@", bodyStr ?: @"<binary/empty>");
+
+        NSError *err = [NSError errorWithDomain:kYTAGStreamDownloaderErrorDomain
+                                            code:status
+                                        userInfo:@{NSLocalizedDescriptionKey:
+                                                    [NSString stringWithFormat:@"HTTP %ld from stream server", (long)status]}];
+        [self fireCompletionWithURL:nil error:err];
+        return;
+    }
+
     NSURL *destination = self.destinationURL;
     NSError *moveError = nil;
 
@@ -192,7 +244,7 @@ didFinishDownloadingToURL:(NSURL *)location {
         return;
     }
 
-    YTAGLog(@"downloader", @"finished -> %@", destination.path);
+    YTAGLog(@"downloader", @"finished -> %@ (%llu bytes)", destination.path, bodyBytes);
     [self fireCompletionWithURL:destination error:nil];
 }
 

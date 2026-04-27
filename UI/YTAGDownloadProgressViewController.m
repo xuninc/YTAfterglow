@@ -389,9 +389,17 @@
 
 - (void)handleCancelTapped {
     if (self.phase == YTAGDownloadPhaseError) {
-        // "Close" tap — just fire dismiss.
+        // "Close" tap — fire dismiss. The onReadyToDismiss block captures weak
+        // refs to the session; if failSession cleared the manager's activeSession
+        // (releasing the session object) before the user tapped Close, those
+        // weak refs nil out and the block early-returns without dismissing —
+        // that's what left Corey stuck on the error screen 2026-04-24.
+        // Self-dismiss ALWAYS works because `self` isn't weak-captured anywhere.
         YTAGLog(@"dl-ui", @"close tapped (error terminal)");
         if (self.onReadyToDismiss) self.onReadyToDismiss();
+        if (self.presentingViewController != nil) {
+            [self dismissViewControllerAnimated:YES completion:nil];
+        }
         return;
     }
 
