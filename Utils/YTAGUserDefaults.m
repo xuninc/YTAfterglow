@@ -10,7 +10,7 @@ static NSString *const kThemeMigrationVersionKey = @"themePresetMigrationVersion
 static NSString *const kSettingsMigrationVersionKey = @"settingsMigrationVersion";
 static const NSUInteger kMinimumActiveTabsCount = 2;
 static const NSUInteger kMaximumActiveTabsCount = 6;
-static const NSInteger kCurrentThemeMigrationVersion = 1;
+static const NSInteger kCurrentThemeMigrationVersion = 2;
 static const NSInteger kCurrentSettingsMigrationVersion = 1;
 
 static NSData *YTAGArchiveColor(UIColor *color) {
@@ -49,6 +49,41 @@ static void YTAGApplyUpdatedAfterglowPreset(NSUserDefaults *defaults) {
     [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:0.94 green:0.44 blue:0.18 alpha:1.0]) forKey:@"theme_accent"];
     [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:0.16 green:0.15 blue:0.17 alpha:1.0]) forKey:@"theme_gradientStart"];
     [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:0.34 green:0.19 blue:0.11 alpha:1.0]) forKey:@"theme_gradientEnd"];
+    [defaults setBool:YES forKey:@"theme_glowEnabled"];
+}
+
+static NSArray<NSString *> *YTAGThemePresetKeys(void) {
+    return @[
+        @"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar",
+        @"theme_seekBarLive", @"theme_seekBarScrubber", @"theme_seekBarScrubberLive",
+        @"theme_background", @"theme_textPrimary", @"theme_textSecondary",
+        @"theme_navBar", @"theme_accent",
+        @"theme_gradientStart", @"theme_gradientEnd", @"theme_glowEnabled"
+    ];
+}
+
+static BOOL YTAGHasStoredThemePreset(NSUserDefaults *defaults) {
+    for (NSString *key in YTAGThemePresetKeys()) {
+        if ([defaults objectForKey:key] != nil) return YES;
+    }
+    return NO;
+}
+
+static void YTAGApplyAfterglow2ThemePreset(NSUserDefaults *defaults) {
+    NSData *seekBar = YTAGArchiveColor([UIColor colorWithRed:1.00 green:0.48 blue:0.66 alpha:1.0]);
+    [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:1.00 green:0.82 blue:0.71 alpha:1.0]) forKey:@"theme_overlayButtons"];
+    [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:1.00 green:0.55 blue:0.42 alpha:1.0]) forKey:@"theme_tabBarIcons"];
+    [defaults setObject:seekBar forKey:@"theme_seekBar"];
+    [defaults setObject:seekBar forKey:@"theme_seekBarLive"];
+    [defaults setObject:seekBar forKey:@"theme_seekBarScrubber"];
+    [defaults setObject:seekBar forKey:@"theme_seekBarScrubberLive"];
+    [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:0.11 green:0.05 blue:0.13 alpha:1.0]) forKey:@"theme_background"];
+    [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:1.00 green:0.94 blue:0.90 alpha:1.0]) forKey:@"theme_textPrimary"];
+    [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:0.79 green:0.67 blue:0.72 alpha:1.0]) forKey:@"theme_textSecondary"];
+    [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:0.17 green:0.08 blue:0.19 alpha:1.0]) forKey:@"theme_navBar"];
+    [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:0.41 green:0.89 blue:1.00 alpha:1.0]) forKey:@"theme_accent"];
+    [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:0.24 green:0.06 blue:0.24 alpha:1.0]) forKey:@"theme_gradientStart"];
+    [defaults setObject:YTAGArchiveColor([UIColor colorWithRed:1.00 green:0.46 blue:0.28 alpha:1.0]) forKey:@"theme_gradientEnd"];
     [defaults setBool:YES forKey:@"theme_glowEnabled"];
 }
 
@@ -163,11 +198,9 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         @"downloadRefreshMetadata": @YES,
         @"downloadIncludeAutoCaptions": @YES,
         @"downloadOfferTranslatedCaptions": @YES,
-        // v37: disabled again as safety net after v36's cold-launch-crash regression
-        // (which I attribute to masksToBounds=YES on the button layer, now removed).
-        // Leaving this OFF until we confirm the masksToBounds fix cleared cold launch
-        // on its own. User can turn it back on from Advanced → Player → Overlay.
-        @"controlsSheetButton": @NO,
+        @"downloadPickerFontScaleMode": @0,
+        @"downloadPickerFontFaceMode": @1,
+        @"controlsSheetButton": @YES,
         // v33: debug log defaults ON so crashes leave a breadcrumb in
         // YouTube.app/Documents/ytag-debug.log. Revert to @NO once the download +
         // playback surfaces are stable (no new crashes for a few builds).
@@ -180,8 +213,12 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
     NSInteger recordedVersion = [self integerForKey:kThemeMigrationVersionKey];
     if (recordedVersion >= kCurrentThemeMigrationVersion) return;
 
-    if (YTAGThemeMatchesLegacyAfterglowPreset(self)) {
+    if (recordedVersion < 1 && YTAGThemeMatchesLegacyAfterglowPreset(self)) {
         YTAGApplyUpdatedAfterglowPreset(self);
+    }
+
+    if (recordedVersion < 2 && !YTAGHasStoredThemePreset(self)) {
+        YTAGApplyAfterglow2ThemePreset(self);
     }
 
     [self setInteger:kCurrentThemeMigrationVersion forKey:kThemeMigrationVersionKey];

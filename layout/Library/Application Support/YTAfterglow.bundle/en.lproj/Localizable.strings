@@ -48,6 +48,16 @@
 "DownloadIncludeAutoCaptionsDesc" = "Show auto-generated caption tracks in the captions picker.";
 "DownloadOfferTranslatedCaptions" = "Offer translated captions";
 "DownloadOfferTranslatedCaptionsDesc" = "Show YouTube-translated caption tracks when the video exposes translation languages.";
+"DownloadPickerTextSize" = "Picker text size";
+"DownloadPickerTextSizeDesc" = "Controls the text size used by the video quality and audio track lists.";
+"DownloadPickerFont" = "Picker font";
+"DownloadPickerFontDesc" = "Controls the font face used by the video quality and audio track lists.";
+"Compact" = "Compact";
+"Large" = "Large";
+"SystemFont" = "System";
+"RoundedFont" = "Rounded";
+"SerifFont" = "Serif";
+"MonoFont" = "Mono";
 "SaveToPhotos" = "Save to photos";
 "Share" = "Share";
 "Copy" = "Copy";

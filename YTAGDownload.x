@@ -49,6 +49,8 @@ extern UIColor *themeColor(NSString *key);
 @interface YTMainAppControlsOverlayView : UIView
 - (UIView *)topControlsAccessibilityContainerView;
 @end
+@interface YTReelWatchPlaybackOverlayView : UIView
+@end
 @class YTPlayerViewController;
 @interface YTSingleVideoController : NSObject
 - (BOOL)isMuted;
@@ -104,6 +106,8 @@ static NSString *YTAGCurrentVideoID(void) {
 
 static const NSInteger kYTAGButtonStackTag = 998877;  // stack view tag
 static void *kYTAGStackKey = &kYTAGStackKey;           // assoc object key
+static const NSInteger kYTAGShortsButtonStackTag = 998878;
+static void *kYTAGShortsStackKey = &kYTAGShortsStackKey;
 
 // --- File-scope helper: format a byte count for the chip ("2.4 MB" / "780 KB") ---
 
@@ -129,6 +133,14 @@ static BOOL YTAGDownloadPreferStableAudio(void) {
 
 static BOOL YTAGDownloadShouldRefreshMetadata(void) {
     return [[YTAGUserDefaults standardUserDefaults] boolForKey:@"downloadRefreshMetadata"];
+}
+
+static NSInteger YTAGDownloadPickerFontScaleMode(void) {
+    return YTAGDownloadIntegerForKey(@"downloadPickerFontScaleMode");
+}
+
+static NSInteger YTAGDownloadPickerFontFaceMode(void) {
+    return YTAGDownloadIntegerForKey(@"downloadPickerFontFaceMode");
 }
 
 static YTAGPostDownloadAction YTAGDownloadPostActionFromSettings(void) {
@@ -162,6 +174,21 @@ static void YTAGDownloadMergeMetadata(YTAGExtractionResult *primary, YTAGExtract
     if (primary.duration <= 0 && fallback.duration > 0) primary.duration = fallback.duration;
     if (primary.captionTracks.count == 0 && fallback.captionTracks.count > 0) primary.captionTracks = fallback.captionTracks;
     if (primary.formats.count == 0 && fallback.formats.count > 0) primary.formats = fallback.formats;
+}
+
+static BOOL YTAGDownloadNeedsMetadataRefresh(YTAGExtractionResult *result) {
+    if (!result) return YES;
+    return result.captionTracks.count == 0 ||
+           result.thumbnailURL.length == 0 ||
+           result.title.length == 0 ||
+           result.author.length == 0 ||
+           result.duration <= 0;
+}
+
+static NSString *YTAGDownloadThumbnailURLString(YTAGExtractionResult *result) {
+    if (result.thumbnailURL.length > 0) return result.thumbnailURL;
+    if (result.videoID.length == 0) return nil;
+    return [NSString stringWithFormat:@"https://i.ytimg.com/vi/%@/hqdefault.jpg", result.videoID];
 }
 
 // Factory: 36×36 plain UIButton with circular 70%-black backdrop and white icon.
@@ -389,6 +416,59 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
 
 %end
 
+%hook YTReelWatchPlaybackOverlayView
+
+- (void)layoutSubviews {
+    %orig;
+
+    if ([self viewWithTag:kYTAGShortsButtonStackTag]) return;
+
+    YTAGUserDefaults *prefs = [YTAGUserDefaults standardUserDefaults];
+    BOOL showDownload = [prefs boolForKey:@"downloadButton"];
+    BOOL showControls = [prefs boolForKey:@"controlsSheetButton"];
+    if (!showDownload && !showControls) return;
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.distribution = UIStackViewDistributionFillEqually;
+    stack.alignment = UIStackViewAlignmentCenter;
+    stack.spacing = 10.0;
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.tag = kYTAGShortsButtonStackTag;
+    [self addSubview:stack];
+
+    if (showDownload) {
+        UIButton *download = YTAGMakeOverlayButton(
+            @"Download",
+            594,
+            YTAGSymbol(@"arrow.down.to.line", 21.0),
+            [YTAGDownloadTrigger class],
+            @selector(handleDownloadTap:));
+        if (download) [stack addArrangedSubview:download];
+    }
+
+    if (showControls) {
+        UIButton *controls = YTAGMakeOverlayButton(
+            @"Controls",
+            0,
+            YTAGSymbol(@"slider.horizontal.3", 21.0),
+            [YTAGDownloadTrigger class],
+            @selector(handleControlsTap:));
+        if (controls) [stack addArrangedSubview:controls];
+    }
+
+    UILayoutGuide *guide = self.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.trailingAnchor constraintEqualToAnchor:guide.trailingAnchor constant:-14.0],
+        [stack.topAnchor constraintEqualToAnchor:guide.topAnchor constant:84.0],
+    ]];
+
+    objc_setAssociatedObject(self, kYTAGShortsStackKey, stack, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    YTAGLog(@"overlay", @"installed Shorts stack w=%@", @(stack.arrangedSubviews.count));
+}
+
+%end
+
 // --- Fallback videoID capture ---
 // The YTIPlayerResponse hook above is our primary path, but on some builds the
 // setter name has drifted. Second capture path: hook YTPlayerViewController's
@@ -479,16 +559,85 @@ static id YTAGOverlayVCFromSender(UIView *sender) {
     return vc;
 }
 
+static id YTAGPlayerVCFromViewControllerChain(UIViewController *vc) {
+    UIViewController *walk = vc;
+    while (walk) {
+        if ([walk isKindOfClass:NSClassFromString(@"YTPlayerViewController")]) {
+            return walk;
+        }
+        if ([walk respondsToSelector:@selector(player)]) {
+            id player = nil;
+            @try { player = ((id (*)(id, SEL))objc_msgSend)(walk, @selector(player)); } @catch (id ex) {}
+            if (player) return player;
+        }
+        walk = walk.parentViewController;
+    }
+    return nil;
+}
+
 // Resolve YTPlayerViewController — `parentViewController` on the overlay VC.
 static id YTAGPlayerVCFromSender(UIView *sender) {
     id overlayVC = YTAGOverlayVCFromSender(sender);
-    if (!overlayVC) return nil;
     id pvc = nil;
-    if ([overlayVC respondsToSelector:@selector(parentViewController)]) {
+    if (overlayVC && [overlayVC respondsToSelector:@selector(parentViewController)]) {
         pvc = [overlayVC performSelector:@selector(parentViewController)];
+    }
+    if (![pvc isKindOfClass:NSClassFromString(@"YTPlayerViewController")] && [pvc respondsToSelector:@selector(player)]) {
+        @try { pvc = ((id (*)(id, SEL))objc_msgSend)(pvc, @selector(player)); } @catch (id ex) {}
+    }
+    if (!pvc) {
+        pvc = YTAGPlayerVCFromViewControllerChain([sender ytag_closestViewController]);
     }
     YTAGLog(@"vc-resolve", @"player VC = %@", NSStringFromClass([pvc class]) ?: @"<nil>");
     return pvc;
+}
+
+static NSString *YTAGVideoIDFromObject(id obj) {
+    if (!obj) return nil;
+    for (NSString *selectorName in @[@"contentVideoID", @"videoId", @"videoID"]) {
+        SEL sel = NSSelectorFromString(selectorName);
+        if (![obj respondsToSelector:sel]) continue;
+        @try {
+            id value = ((id (*)(id, SEL))objc_msgSend)(obj, sel);
+            if ([value isKindOfClass:[NSString class]] && [(NSString *)value length] > 0) {
+                return value;
+            }
+        } @catch (id ex) {}
+    }
+    return nil;
+}
+
+static NSString *YTAGVideoIDFromSenderContext(UIView *sender) {
+    NSString *videoID = YTAGVideoIDFromObject(YTAGPlayerVCFromSender(sender));
+    if (videoID.length > 0) return videoID;
+
+    UIResponder *r = sender;
+    while (r) {
+        videoID = YTAGVideoIDFromObject((id)r);
+        if (videoID.length > 0) return videoID;
+        if ([r respondsToSelector:@selector(player)]) {
+            id player = nil;
+            @try { player = ((id (*)(id, SEL))objc_msgSend)((id)r, @selector(player)); } @catch (id ex) {}
+            videoID = YTAGVideoIDFromObject(player);
+            if (videoID.length > 0) return videoID;
+        }
+        r = r.nextResponder;
+    }
+
+    UIViewController *vc = [sender ytag_closestViewController];
+    while (vc) {
+        videoID = YTAGVideoIDFromObject(vc);
+        if (videoID.length > 0) return videoID;
+        if ([vc respondsToSelector:@selector(player)]) {
+            id player = nil;
+            @try { player = ((id (*)(id, SEL))objc_msgSend)(vc, @selector(player)); } @catch (id ex) {}
+            videoID = YTAGVideoIDFromObject(player);
+            if (videoID.length > 0) return videoID;
+        }
+        vc = vc.parentViewController;
+    }
+
+    return nil;
 }
 
 static UIViewController *YTAGTopViewControllerFromRoot(UIViewController *root) {
@@ -680,18 +829,11 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
     // Primary live-read path: reach YTPlayerViewController and read contentVideoID.
     // Doesn't require any prior hook to have fired.
     if (videoID.length == 0) {
-        id pvc = YTAGPlayerVCFromSender(sender);
-        if (pvc && [pvc respondsToSelector:@selector(contentVideoID)]) {
-            NSString *vid = [pvc performSelector:@selector(contentVideoID)];
-            YTAGLog(@"dl-trigger", @"contentVideoID live-read = %@", vid ?: @"<nil>");
-            if (vid.length > 0) {
-                videoID = vid;
-                gCurrentVideoID = [vid copy];
-            }
-        } else {
-            YTAGLog(@"dl-trigger", @"pvc=%@ responds_contentVideoID=%d",
-                    NSStringFromClass([pvc class]) ?: @"<nil>",
-                    [pvc respondsToSelector:@selector(contentVideoID)]);
+        NSString *vid = YTAGVideoIDFromSenderContext(sender);
+        YTAGLog(@"dl-trigger", @"sender-context videoID = %@", vid ?: @"<nil>");
+        if (vid.length > 0) {
+            videoID = vid;
+            gCurrentVideoID = [vid copy];
         }
     }
 
@@ -733,10 +875,10 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
     if (liveResult && liveResult.formats.count > 0) {
         YTAGLog(@"dl-trigger", @"using live-read result (%lu formats)",
                 (unsigned long)liveResult.formats.count);
-        if (YTAGDownloadShouldRefreshMetadata() && liveResult.captionTracks.count == 0) {
+        if (YTAGDownloadShouldRefreshMetadata() && YTAGDownloadNeedsMetadataRefresh(liveResult)) {
             UIAlertController *loading = [UIAlertController
                 alertControllerWithTitle:nil
-                                 message:@"Checking captions…"
+                                 message:@"Checking metadata..."
                           preferredStyle:UIAlertControllerStyleAlert];
             [presentingVC presentViewController:loading animated:YES completion:nil];
             [YTAGURLExtractor extractVideoID:videoID
@@ -831,7 +973,7 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
     sheet.videoAvailable = hasVideoPair;
     sheet.audioAvailable = (audioPair != nil);
     sheet.captionsAvailable = YTAGDownloadFilteredCaptions(result.captionTracks).count > 0;
-    sheet.thumbnailAvailable = result.thumbnailURL.length > 0;
+    sheet.thumbnailAvailable = YTAGDownloadThumbnailURLString(result).length > 0;
     sheet.externalPlaybackAvailable = result.formats.count > 0;
 
     __weak UIViewController *weakPresenting = presentingVC;
@@ -935,27 +1077,38 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
         return;
     }
 
-    UIAlertController *picker = [UIAlertController
-        alertControllerWithTitle:result.title
-                         message:nil
-                  preferredStyle:UIAlertControllerStyleActionSheet];
-
+    NSMutableArray<YTAGDownloadPickerEntry *> *entries = [NSMutableArray array];
     for (YTAGFormatPair *pair in videoPairs) {
-        [picker addAction:[UIAlertAction
-            actionWithTitle:pair.descriptorString
-                      style:UIAlertActionStyleDefault
-                    handler:^(UIAlertAction *_) {
-            YTAGLog(@"dl-trigger", @"[bc] quality row tapped: %@", pair.descriptorString);
-            [YTAGDownloadTrigger startVideoDownloadWithVideoID:videoID
-                                                          pair:pair
-                                                        result:result
-                                                  presentingVC:presentingVC
-                                                      fromView:sourceView];
-        }]];
+        NSString *codec = pair.videoFormat.codec.length > 0 ? pair.videoFormat.codec : (pair.videoFormat.container ?: @"video");
+        NSString *subtitle = [NSString stringWithFormat:@"itag %ld · %@ · %@",
+                              (long)pair.videoFormat.itag,
+                              codec,
+                              pair.videoFormat.container ?: @"stream"];
+        NSString *symbol = [pair.videoFormat.qualityLabel rangeOfString:@"Premium" options:NSCaseInsensitiveSearch].location != NSNotFound
+            ? @"sparkles"
+            : @"film";
+        [entries addObject:[YTAGDownloadPickerEntry entryWithTitle:pair.descriptorString
+                                                          subtitle:subtitle
+                                                        symbolName:symbol
+                                                  representedObject:pair]];
     }
-    [picker addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    picker.popoverPresentationController.sourceView = sourceView;
-    picker.popoverPresentationController.sourceRect = sourceView.bounds;
+
+    YTAGDownloadListPickerViewController *picker = [YTAGDownloadListPickerViewController new];
+    picker.titleText = result.title.length > 0 ? result.title : @"Video quality";
+    picker.entries = entries;
+    picker.sourceView = sourceView;
+    picker.fontScaleMode = YTAGDownloadPickerFontScaleMode();
+    picker.fontFaceMode = YTAGDownloadPickerFontFaceMode();
+    picker.onSelectEntry = ^(YTAGDownloadPickerEntry *entry) {
+        YTAGFormatPair *pair = entry.representedObject;
+        if (![pair isKindOfClass:[YTAGFormatPair class]]) return;
+        YTAGLog(@"dl-trigger", @"[bc] quality row tapped: %@", pair.descriptorString);
+        [YTAGDownloadTrigger startVideoDownloadWithVideoID:videoID
+                                                      pair:pair
+                                                    result:result
+                                              presentingVC:presentingVC
+                                                  fromView:sourceView];
+    };
 
     YTAGLog(@"dl-trigger", @"[bc] presentQualityPicker: presenting picker");
     [presentingVC presentViewController:picker animated:YES completion:^{
@@ -975,10 +1128,7 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
         return;
     }
 
-    UIAlertController *picker = [UIAlertController
-        alertControllerWithTitle:title ?: @"Audio track"
-                         message:nil
-                  preferredStyle:UIAlertControllerStyleActionSheet];
+    NSMutableArray<YTAGDownloadPickerEntry *> *entries = [NSMutableArray array];
     for (YTAGFormatPair *audioPair in audioPairs) {
         NSString *label = audioPair.descriptorString;
         if (audioPair.audioFormat.audioIsDefault) {
@@ -987,15 +1137,27 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
         if (audioPair.audioFormat.audioIsDubbed) {
             label = [label stringByAppendingString:@" · Dubbed"];
         }
-        [picker addAction:[UIAlertAction actionWithTitle:label
-                                                   style:UIAlertActionStyleDefault
-                                                 handler:^(UIAlertAction *_) {
-            if (completion) completion(audioPair);
-        }]];
+        NSMutableArray<NSString *> *bits = [NSMutableArray array];
+        if (audioPair.audioFormat.audioLanguageCode.length > 0) [bits addObject:[audioPair.audioFormat.audioLanguageCode uppercaseString]];
+        if (audioPair.audioFormat.itag > 0) [bits addObject:[NSString stringWithFormat:@"itag %ld", (long)audioPair.audioFormat.itag]];
+        if (audioPair.audioFormat.isDRC) [bits addObject:@"Stable volume"];
+        NSString *subtitle = bits.count > 0 ? [bits componentsJoinedByString:@" · "] : @"Audio stream";
+        [entries addObject:[YTAGDownloadPickerEntry entryWithTitle:label
+                                                          subtitle:subtitle
+                                                        symbolName:@"speaker.wave.2"
+                                                  representedObject:audioPair]];
     }
-    [picker addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-    picker.popoverPresentationController.sourceView = sourceView;
-    picker.popoverPresentationController.sourceRect = sourceView.bounds;
+
+    YTAGDownloadListPickerViewController *picker = [YTAGDownloadListPickerViewController new];
+    picker.titleText = title ?: @"Audio track";
+    picker.entries = entries;
+    picker.sourceView = sourceView;
+    picker.fontScaleMode = YTAGDownloadPickerFontScaleMode();
+    picker.fontFaceMode = YTAGDownloadPickerFontFaceMode();
+    picker.onSelectEntry = ^(YTAGDownloadPickerEntry *entry) {
+        YTAGFormatPair *audioPair = entry.representedObject;
+        if (completion && [audioPair isKindOfClass:[YTAGFormatPair class]]) completion(audioPair);
+    };
     [presentingVC presentViewController:picker animated:YES completion:nil];
 }
 
@@ -1175,7 +1337,7 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
 }
 
 + (void)saveThumbnailForResult:(YTAGExtractionResult *)result on:(UIViewController *)presentingVC {
-    NSString *urlStr = result.thumbnailURL;
+    NSString *urlStr = YTAGDownloadThumbnailURLString(result);
     if (urlStr.length == 0) {
         [self showAlertWithTitle:@"No thumbnail" message:@"This video doesn't expose a thumbnail." on:presentingVC];
         return;
@@ -1192,8 +1354,11 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
                   preferredStyle:UIAlertControllerStyleAlert];
     [presentingVC presentViewController:loading animated:YES completion:nil];
 
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
-                                                             completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setValue:@"com.google.ios.youtube/21.16.2 (iPhone17,3; U; CPU iOS 18_5 like Mac OS X)" forHTTPHeaderField:@"User-Agent"];
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
+                                                                 completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [loading dismissViewControllerAnimated:YES completion:^{
                 if (error || data.length == 0) {
@@ -1206,30 +1371,77 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
                 if (!image) {
                     [self showAlertWithTitle:@"Couldn't decode thumbnail"
                                      message:@"The thumbnail data wasn't an image."
-                                          on:presentingVC];
+                        on:presentingVC];
                     return;
                 }
-                [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-                    [PHAssetChangeRequest creationRequestForAssetFromImage:image];
-                } completionHandler:^(BOOL success, NSError * _Nullable saveError) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        if (success) {
-                            UIAlertController *hud = [UIAlertController
-                                alertControllerWithTitle:nil
-                                                 message:@"Thumbnail saved to Photos"
-                                          preferredStyle:UIAlertControllerStyleAlert];
-                            [presentingVC presentViewController:hud animated:YES completion:^{
-                                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                                    [hud dismissViewControllerAnimated:YES completion:nil];
-                                });
-                            }];
-                        } else {
-                            [self showAlertWithTitle:@"Couldn't save thumbnail"
-                                             message:saveError.localizedDescription ?: @"Photos refused the image."
-                                                  on:presentingVC];
-                        }
-                    });
-                }];
+
+                void (^saveImage)(void) = ^{
+                    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+                        [PHAssetChangeRequest creationRequestForAssetFromImage:image];
+                    } completionHandler:^(BOOL success, NSError * _Nullable saveError) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            if (success) {
+                                UIAlertController *hud = [UIAlertController
+                                    alertControllerWithTitle:nil
+                                                     message:@"Thumbnail saved to Photos"
+                                              preferredStyle:UIAlertControllerStyleAlert];
+                                [presentingVC presentViewController:hud animated:YES completion:^{
+                                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                                        [hud dismissViewControllerAnimated:YES completion:nil];
+                                    });
+                                }];
+                            } else {
+                                [self showAlertWithTitle:@"Couldn't save thumbnail"
+                                                 message:saveError.localizedDescription ?: @"Photos refused the image."
+                                                      on:presentingVC];
+                            }
+                        });
+                    }];
+                };
+
+                void (^fallbackDenied)(void) = ^{
+                    [self showAlertWithTitle:@"Photos access needed"
+                                     message:@"Allow Add Photos access for YouTube so Afterglow can save thumbnails."
+                                          on:presentingVC];
+                };
+
+                BOOL (^canSaveWithStatus)(PHAuthorizationStatus) = ^BOOL(PHAuthorizationStatus status) {
+                    if (status == PHAuthorizationStatusAuthorized) return YES;
+                    if (@available(iOS 14, *)) {
+                        if (status == PHAuthorizationStatusLimited) return YES;
+                    }
+                    return NO;
+                };
+
+                if (@available(iOS 14, *)) {
+                    PHAuthorizationStatus status = [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly];
+                    if (status == PHAuthorizationStatusNotDetermined) {
+                        [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly handler:^(PHAuthorizationStatus newStatus) {
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                if (canSaveWithStatus(newStatus)) saveImage();
+                                else fallbackDenied();
+                            });
+                        }];
+                    } else if (canSaveWithStatus(status)) {
+                        saveImage();
+                    } else {
+                        fallbackDenied();
+                    }
+                } else {
+                    PHAuthorizationStatus status = [PHPhotoLibrary authorizationStatus];
+                    if (status == PHAuthorizationStatusNotDetermined) {
+                        [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus newStatus) {
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                if (canSaveWithStatus(newStatus)) saveImage();
+                                else fallbackDenied();
+                            });
+                        }];
+                    } else if (canSaveWithStatus(status)) {
+                        saveImage();
+                    } else {
+                        fallbackDenied();
+                    }
+                }
             }];
         });
     }];

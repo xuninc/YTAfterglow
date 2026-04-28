@@ -1461,14 +1461,16 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         [self ytag_addSearchEntries:entries forSettingKeys:@[@"HideShortsLogo", @"HideShortsSearch", @"HideShortsCamera", @"HideShortsMore", @"HideShortsSubscriptions", @"HideShortsLike", @"HideShortsDislike", @"HideShortsComments", @"HideShortsRemix", @"HideShortsShare", @"HideShortsAvatars", @"HideShortsThanks", @"HideShortsSource", @"HideShortsChannelName", @"HideShortsDescription", @"HideShortsAudioTrack", @"HideShortsPromoCards"] path:@[shortsTitle, layoutButtonsTitle] aliasesByKey:nil];
     }
 
-    [self ytag_addSearchEntries:entries forSettingKeys:@[@"DownloadPostAction", @"DownloadRefreshMetadata", @"DownloadAudioTrack", @"DownloadAudioQuality", @"DownloadPreferStableAudio", @"DownloadIncludeAutoCaptions", @"DownloadOfferTranslatedCaptions"] path:@[downloadsTitle] aliasesByKey:@{
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"DownloadPostAction", @"DownloadRefreshMetadata", @"DownloadAudioTrack", @"DownloadAudioQuality", @"DownloadPreferStableAudio", @"DownloadIncludeAutoCaptions", @"DownloadOfferTranslatedCaptions", @"DownloadPickerTextSize", @"DownloadPickerFont"] path:@[downloadsTitle] aliasesByKey:@{
         @"DownloadPostAction": @[@"save to photos", @"share sheet", @"camera roll"],
         @"DownloadRefreshMetadata": @[@"captions fallback", @"metadata"],
         @"DownloadAudioTrack": @[@"audio language", @"dubbed audio", @"language tracks"],
         @"DownloadAudioQuality": @[@"high audio", @"premium audio"],
         @"DownloadPreferStableAudio": @[@"drc", @"stable volume"],
         @"DownloadIncludeAutoCaptions": @[@"auto captions", @"generated captions"],
-        @"DownloadOfferTranslatedCaptions": @[@"translated subtitles", @"caption translation"]
+        @"DownloadOfferTranslatedCaptions": @[@"translated subtitles", @"caption translation"],
+        @"DownloadPickerTextSize": @[@"download font size", @"quality picker text"],
+        @"DownloadPickerFont": @[@"download font face", @"quality picker font"]
     }];
 
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"RemovePlayNext", @"RemoveWatchLaterMenu", @"RemoveSaveToPlaylistMenu", @"RemoveNotInterestedMenu", @"RemoveDontRecommendMenu", @"RemoveReportMenu"] path:@[feedTitle] aliasesByKey:@{
@@ -1516,7 +1518,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSArray *playerKeys = [[[[playerPlaybackKeys arrayByAddingObjectsFromArray:playerControlKeys] arrayByAddingObjectsFromArray:playerOverlayKeys] arrayByAddingObjectsFromArray:playerActionBarKeys] arrayByAddingObjectsFromArray:playerMenuKeys];
     NSArray *shortsBehaviorKeys = @[@"shortsOnlyMode", @"autoSkipShorts", @"hideShorts", @"shortsProgress", @"pinchToFullscreenShorts", @"shortsToRegular", @"resumeShorts"];
     NSArray *shortsUIKeys = @[@"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"];
-    NSArray *downloadKeys = @[@"downloadRefreshMetadata", @"downloadPreferStableAudio", @"downloadIncludeAutoCaptions", @"downloadOfferTranslatedCaptions"];
+    NSArray *downloadKeys = @[@"downloadRefreshMetadata", @"downloadPreferStableAudio", @"downloadIncludeAutoCaptions", @"downloadOfferTranslatedCaptions", @"downloadPickerFontScaleMode", @"downloadPickerFontFaceMode"];
     NSArray *feedKeys = @[@"removePlayNext", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu"];
     NSArray *toolKeys = @[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare", @"copyWithTimestamp"];
 
@@ -1915,7 +1917,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                 selectBlock:^BOOL(YTSettingsCell *resetCell, NSUInteger resetArg1) {
                     UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"ResetAllColors") message:@"This removes every preset, custom color, and gradient value in Themes. Restart YouTube to fully return to the default look." preferredStyle:UIAlertControllerStyleAlert];
                     [alert addAction:[UIAlertAction actionWithTitle:LOC(@"ResetAndRestart") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
-                        NSArray *keys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar", @"theme_background", @"theme_textPrimary", @"theme_textSecondary", @"theme_navBar", @"theme_accent", @"theme_gradientStart", @"theme_gradientEnd", @"theme_glowEnabled"];
+                        NSArray *keys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar", @"theme_seekBarLive", @"theme_seekBarScrubber", @"theme_seekBarScrubberLive", @"theme_background", @"theme_textPrimary", @"theme_textSecondary", @"theme_navBar", @"theme_accent", @"theme_gradientStart", @"theme_gradientEnd", @"theme_glowEnabled"];
                         for (NSString *key in keys) {
                             [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:key];
                         }
@@ -2207,6 +2209,18 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             [rows addObject:[self themeSectionHeaderWithTitle:@"Captions" description:@"Control which caption tracks are shown in the download sheet."]];
             [rows addObject:[self switchWithTitle:@"DownloadIncludeAutoCaptions" key:@"downloadIncludeAutoCaptions"]];
             [rows addObject:[self switchWithTitle:@"DownloadOfferTranslatedCaptions" key:@"downloadOfferTranslatedCaptions"]];
+            [rows addObject:space];
+            [rows addObject:[self themeSectionHeaderWithTitle:@"Picker" description:@"Tune the compact quality/audio list shown before downloads start."]];
+            [rows addObject:[self ytagPickerItemWithTitle:LOC(@"DownloadPickerTextSize")
+                                               description:LOC(@"DownloadPickerTextSizeDesc")
+                                                       key:@"downloadPickerFontScaleMode"
+                                                    labels:@[LOC(@"Compact"), LOC(@"Standard"), LOC(@"Large")]
+                                                settingsVC:settingsViewController]];
+            [rows addObject:[self ytagPickerItemWithTitle:LOC(@"DownloadPickerFont")
+                                               description:LOC(@"DownloadPickerFontDesc")
+                                                       key:@"downloadPickerFontFaceMode"
+                                                    labels:@[LOC(@"SystemFont"), LOC(@"RoundedFont"), LOC(@"SerifFont"), LOC(@"MonoFont")]
+                                                settingsVC:settingsViewController]];
 
             YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Downloads") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];

@@ -180,6 +180,27 @@ static id YTAGPCOverlayVCFromAnchor(UIView *anchor) {
     return nil;
 }
 
+static UIViewController *YTAGPCTopPresenter(void) {
+    UIWindow *keyWindow = nil;
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+        if (scene.activationState != UISceneActivationStateForegroundActive) continue;
+        for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+            if (window.isKeyWindow) {
+                keyWindow = window;
+                break;
+            }
+        }
+        if (keyWindow) break;
+    }
+
+    UIViewController *top = keyWindow.rootViewController;
+    while (top.presentedViewController && !top.presentedViewController.isBeingDismissed) {
+        top = top.presentedViewController;
+    }
+    return top;
+}
+
 // --- Implementation ---
 
 @implementation YTAGPremiumControlsSheet
@@ -662,6 +683,7 @@ static id YTAGPCOverlayVCFromAnchor(UIView *anchor) {
     while (presenter.presentingViewController == nil && presenter.parentViewController) {
         presenter = presenter.parentViewController;
     }
+    if (!presenter) presenter = YTAGPCTopPresenter();
     if (!presenter) {
         YTAGLog(@"premium-ctrl", @"no presenting VC from sender");
         return;

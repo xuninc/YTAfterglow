@@ -119,6 +119,178 @@
 
 @end
 
+#pragma mark - Compact list picker
+
+@implementation YTAGDownloadPickerEntry
+
++ (instancetype)entryWithTitle:(NSString *)title
+                      subtitle:(NSString *)subtitle
+                    symbolName:(NSString *)symbolName
+              representedObject:(id)representedObject
+{
+    YTAGDownloadPickerEntry *entry = [YTAGDownloadPickerEntry new];
+    entry.title = title ?: @"";
+    entry.subtitle = subtitle;
+    entry.symbolName = symbolName.length > 0 ? symbolName : @"doc";
+    entry.representedObject = representedObject;
+    return entry;
+}
+
+@end
+
+@interface YTAGDownloadListPickerViewController () <UITableViewDataSource, UITableViewDelegate>
+@property (nonatomic, strong) UIVisualEffectView *blurView;
+@property (nonatomic, strong) UITableView *tableView;
+@end
+
+static UIImage *YTAGPickerImageNamed(NSString *symbolName, NSString *fallbackName, UIImageSymbolConfiguration *configuration) {
+    UIImage *image = [UIImage systemImageNamed:symbolName];
+    if (!image && fallbackName.length > 0) image = [UIImage systemImageNamed:fallbackName];
+    if (!image) image = [UIImage systemImageNamed:@"doc"];
+    UIImage *configured = [image imageByApplyingSymbolConfiguration:configuration];
+    return configured ?: image;
+}
+
+@implementation YTAGDownloadListPickerViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.entries = self.entries ?: @[];
+    NSUInteger cappedCount = MIN(MAX(self.entries.count, 1), 7);
+    self.preferredContentSize = CGSizeMake(390.0, 96.0 + cappedCount * 58.0);
+    [self configureSheetPresentation];
+    [self buildListLayout];
+}
+
+- (void)configureSheetPresentation {
+    self.modalPresentationStyle = UIModalPresentationPageSheet;
+    if (@available(iOS 15.0, *)) {
+        UISheetPresentationController *sheet = self.sheetPresentationController;
+        sheet.detents = @[UISheetPresentationControllerDetent.mediumDetent, UISheetPresentationControllerDetent.largeDetent];
+        sheet.prefersGrabberVisible = YES;
+        sheet.preferredCornerRadius = 20;
+        sheet.prefersScrollingExpandsWhenScrolledToEdge = NO;
+        sheet.largestUndimmedDetentIdentifier = UISheetPresentationControllerDetentIdentifierMedium;
+    }
+    self.view.backgroundColor = [UIColor clearColor];
+}
+
+- (CGFloat)fontScale {
+    switch (self.fontScaleMode) {
+        case 2: return 1.10;
+        case 1: return 1.00;
+        case 0:
+        default:
+            return 0.88;
+    }
+}
+
+- (UIFont *)fontWithSize:(CGFloat)size weight:(UIFontWeight)weight {
+    CGFloat scaledSize = size * [self fontScale];
+    if (@available(iOS 13.0, *)) {
+        UIFontDescriptorSystemDesign design = UIFontDescriptorSystemDesignDefault;
+        switch (self.fontFaceMode) {
+            case 1: design = UIFontDescriptorSystemDesignRounded; break;
+            case 2: design = UIFontDescriptorSystemDesignSerif; break;
+            case 3: design = UIFontDescriptorSystemDesignMonospaced; break;
+            case 0:
+            default:
+                design = UIFontDescriptorSystemDesignDefault;
+                break;
+        }
+        UIFont *base = [UIFont systemFontOfSize:scaledSize weight:weight];
+        UIFontDescriptor *descriptor = [base.fontDescriptor fontDescriptorWithDesign:design];
+        if (descriptor) return [UIFont fontWithDescriptor:descriptor size:scaledSize];
+    }
+    return [UIFont systemFontOfSize:scaledSize weight:weight];
+}
+
+- (void)buildListLayout {
+    self.blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+    self.blurView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.blurView];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.blurView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.blurView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.blurView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.blurView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+    ]];
+
+    UIView *content = self.blurView.contentView;
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = self.titleText ?: @"Choose";
+    title.textColor = [UIColor labelColor];
+    title.font = [self fontWithSize:18.0 weight:UIFontWeightSemibold];
+    title.numberOfLines = 2;
+    [content addSubview:title];
+
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
+    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.dataSource = self;
+    self.tableView.delegate = self;
+    self.tableView.rowHeight = 58.0;
+    self.tableView.separatorInset = UIEdgeInsetsMake(0, 58.0, 0, 16.0);
+    [content addSubview:self.tableView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [title.topAnchor constraintEqualToAnchor:content.safeAreaLayoutGuide.topAnchor constant:14],
+        [title.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
+        [title.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],
+
+        [self.tableView.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:8],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
+    ]];
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return (NSInteger)self.entries.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *cellID = @"YTAGDownloadPickerCell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellID];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cellID];
+        cell.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.06];
+        cell.selectedBackgroundView = [UIView new];
+        cell.selectedBackgroundView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.12];
+    }
+
+    YTAGDownloadPickerEntry *entry = self.entries[(NSUInteger)indexPath.row];
+    cell.textLabel.text = entry.title;
+    cell.textLabel.font = [self fontWithSize:15.0 weight:UIFontWeightSemibold];
+    cell.textLabel.textColor = [UIColor labelColor];
+    cell.detailTextLabel.text = entry.subtitle;
+    cell.detailTextLabel.font = [self fontWithSize:12.0 weight:UIFontWeightRegular];
+    cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+    cell.detailTextLabel.numberOfLines = 1;
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIImageSymbolWeightMedium];
+        UIImage *img = YTAGPickerImageNamed(entry.symbolName, @"play.rectangle", cfg);
+        cell.imageView.image = [img imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+        cell.imageView.tintColor = [UIColor labelColor];
+    }
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    YTAGDownloadPickerEntry *entry = self.entries[(NSUInteger)indexPath.row];
+    void (^cb)(YTAGDownloadPickerEntry *) = self.onSelectEntry;
+    [self dismissViewControllerAnimated:YES completion:^{
+        if (cb) cb(entry);
+    }];
+}
+
+@end
+
 #pragma mark - View controller
 
 @interface YTAGDownloadActionSheetViewController ()
