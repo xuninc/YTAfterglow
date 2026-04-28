@@ -116,6 +116,7 @@ jobs:
               dpkg-deb -x "$f" tmp_deb
               find tmp_deb -type f -name "*.dylib" -exec cp -R {} ytp_tf/ \;
               find tmp_deb -type d -name "*.bundle" -exec cp -R {} ytp_tf/ \;
+              find tmp_deb -type d -name "*.framework" -exec cp -R {} ytp_tf/ \;
               rm -rf tmp_deb
             fi
           done

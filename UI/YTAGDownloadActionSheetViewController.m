@@ -94,7 +94,16 @@
     return self;
 }
 
+- (void)setEnabled:(BOOL)enabled {
+    [super setEnabled:enabled];
+    self.alpha = enabled ? 1.0 : 0.38;
+    self.iconView.tintColor = enabled ? [UIColor labelColor] : [UIColor tertiaryLabelColor];
+    self.titleLabel.textColor = enabled ? [UIColor labelColor] : [UIColor tertiaryLabelColor];
+    self.chipLabel.textColor = enabled ? [UIColor secondaryLabelColor] : [UIColor tertiaryLabelColor];
+}
+
 - (void)highlightOn {
+    if (!self.enabled) return;
     [UIView animateWithDuration:0.1 animations:^{
         self.alpha = 0.6;
         self.transform = CGAffineTransformMakeScale(0.97, 0.97);
@@ -103,7 +112,7 @@
 
 - (void)highlightOff {
     [UIView animateWithDuration:0.15 animations:^{
-        self.alpha = 1.0;
+        self.alpha = self.enabled ? 1.0 : 0.38;
         self.transform = CGAffineTransformIdentity;
     }];
 }
@@ -123,6 +132,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.preferredContentSize = CGSizeMake(390.0, 380.0);
     [self configureSheetPresentation];
     [self buildLayout];
 }
@@ -134,6 +144,7 @@
         sheet.detents = @[UISheetPresentationControllerDetent.mediumDetent, UISheetPresentationControllerDetent.largeDetent];
         sheet.prefersGrabberVisible = YES;
         sheet.preferredCornerRadius = 20;
+        sheet.prefersScrollingExpandsWhenScrolledToEdge = NO;
         // Keep video fully visible above the sheet at medium — no background dim.
         // At large (user drags up) the dim returns naturally.
         sheet.largestUndimmedDetentIdentifier = UISheetPresentationControllerDetentIdentifierMedium;
@@ -190,13 +201,18 @@
                                                      symbolName:@"photo"
                                                            chip:nil];
     YTAGActionTile *t5 = [[YTAGActionTile alloc] initWithAction:YTAGDownloadActionCopyInformation
-                                                          title:@"Copy Info"
+                                                          title:@"Details"
                                                      symbolName:@"doc.on.doc"
                                                            chip:nil];
     YTAGActionTile *t6 = [[YTAGActionTile alloc] initWithAction:YTAGDownloadActionPlayInExternalPlayer
-                                                          title:@"Ext. Player"
+                                                          title:@"Open In…"
                                                      symbolName:@"arrow.up.forward.app"
                                                            chip:nil];
+    t1.enabled = self.videoAvailable;
+    t2.enabled = self.audioAvailable;
+    t3.enabled = self.captionsAvailable;
+    t4.enabled = self.thumbnailAvailable;
+    t6.enabled = self.externalPlaybackAvailable;
 
     self.tiles = @[t1, t2, t3, t4, t5, t6];
     for (YTAGActionTile *tile in self.tiles) {
@@ -234,10 +250,12 @@
         [grid.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:20],
         [grid.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
         [grid.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
+        [grid.bottomAnchor constraintLessThanOrEqualToAnchor:content.safeAreaLayoutGuide.bottomAnchor constant:-16],
     ]];
 }
 
 - (void)tileTapped:(YTAGActionTile *)sender {
+    if (!sender.enabled) return;
     YTAGLog(@"action-sheet", @"tile action=%ld", (long)sender.action);
     void (^cb)(YTAGDownloadAction) = self.onAction;
     YTAGDownloadAction action = sender.action;

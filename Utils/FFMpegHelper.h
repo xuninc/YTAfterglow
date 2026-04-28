@@ -36,7 +36,8 @@ typedef void (^FFMpegHelperCompletion)(NSURL * _Nullable outputURL, NSError * _N
 /// transcoded to `thumbnail.jpg` via ffmpeg before the main mux, then embedded as cover art.
 /// Old `thumbnail.jpg` and `output.mp4` in that directory are deleted first.
 ///
-/// `durationSeconds` is passed as `-to` to ffmpeg so output stops at the expected end.
+/// Positive `durationSeconds` is passed as `-to` to ffmpeg so output stops at the expected end.
+/// Zero/unknown duration is omitted instead of producing a zero-second mux.
 ///
 /// If another mux is already running, a "WaitsForConversion" toast is shown and the request
 /// is serialized behind the current one (the internal queue is serial).

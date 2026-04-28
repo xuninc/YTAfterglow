@@ -28,6 +28,26 @@
 
 "PostDownloadAction" = "Post-download action";
 "PostDownloadDesc" = "The selected action will be performed upon successful completion of the video download.";
+"DownloadPostAction" = "After download";
+"DownloadPostActionDesc" = "Choose whether completed videos save to Photos, open the share sheet, or ask every time.";
+"AskEveryTime" = "Ask every time";
+"ShareSheet" = "Share sheet";
+"DownloadRefreshMetadata" = "Refresh missing metadata";
+"DownloadRefreshMetadataDesc" = "If the live player data has no captions or extras, Afterglow checks YouTube again before showing the download sheet.";
+"DownloadAudioTrack" = "Audio track";
+"DownloadAudioTrackDesc" = "Choose the default audio track automatically, or ask when multiple language/dubbed tracks are available.";
+"DefaultAudioTrack" = "Default track";
+"AskForAudioTrack" = "Ask when multiple";
+"DownloadAudioQuality" = "Audio quality";
+"DownloadAudioQualityDesc" = "Use standard audio, or prefer higher-bitrate Premium audio when YouTube exposes it.";
+"StandardAudioQuality" = "Standard";
+"HighAudioQuality" = "High when available";
+"DownloadPreferStableAudio" = "Prefer stable volume";
+"DownloadPreferStableAudioDesc" = "Prefer YouTube's dynamic-range-compressed audio stream when both stable and original variants are available.";
+"DownloadIncludeAutoCaptions" = "Include auto captions";
+"DownloadIncludeAutoCaptionsDesc" = "Show auto-generated caption tracks in the captions picker.";
+"DownloadOfferTranslatedCaptions" = "Offer translated captions";
+"DownloadOfferTranslatedCaptionsDesc" = "Show YouTube-translated caption tracks when the video exposes translation languages.";
 "SaveToPhotos" = "Save to photos";
 "Share" = "Share";
 "Copy" = "Copy";

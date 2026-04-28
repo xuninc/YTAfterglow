@@ -118,10 +118,10 @@ jobs:
           # (and other resigners) strip them at install time — dyld then fails
           # with "Library not loaded: @rpath/ffmpegkit.framework/ffmpegkit".
           for fw in ffmpegkit libavcodec libavformat libavutil libavdevice libavfilter libswresample libswscale; do
-            BIN="$APP_DIR/Frameworks/${fw}.framework/${fw}"
-            if [ -f "$BIN" ]; then
-              codesign --sign - --force --timestamp=none "$BIN"
-              echo "signed: ${fw}"
+            FW_DIR="$APP_DIR/Frameworks/${fw}.framework"
+            if [ -d "$FW_DIR" ]; then
+              codesign --sign - --force --timestamp=none "$FW_DIR"
+              echo "signed: ${fw}.framework"
             fi
           done
 

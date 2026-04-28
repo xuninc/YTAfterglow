@@ -31,8 +31,14 @@ typedef NS_ENUM(NSInteger, YTAGDownloadAction) {
 /// Caller computes this from the already-extracted audio format's contentLength.
 @property (nonatomic, copy, nullable) NSString *audioSizeChip;   // e.g. "2.4 MB"
 
-/// Tapped-row callback. Fires on main queue before the sheet dismisses.
-/// The sheet dismisses itself after invoking; the caller doesn't need to dismiss manually.
+@property (nonatomic, assign) BOOL videoAvailable;
+@property (nonatomic, assign) BOOL audioAvailable;
+@property (nonatomic, assign) BOOL captionsAvailable;
+@property (nonatomic, assign) BOOL thumbnailAvailable;
+@property (nonatomic, assign) BOOL externalPlaybackAvailable;
+
+/// Tapped-row callback. Fires on main queue after the sheet dismisses.
+/// The sheet dismisses itself before invoking; the caller doesn't need to dismiss manually.
 @property (nonatomic, copy, nullable) void (^onAction)(YTAGDownloadAction action);
 
 @end

@@ -55,6 +55,15 @@
 static const long kFFReturnOK = 0;
 static const long kFFReturnCancelled = 255;
 
+static BOOL FFMpegFileExistsAndHasBytes(NSURL *url, unsigned long long *outBytes) {
+    if (!url.path.length) return NO;
+    NSError *attrErr = nil;
+    NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:url.path error:&attrErr];
+    unsigned long long bytes = attrs ? [attrs fileSize] : 0;
+    if (outBytes) *outBytes = bytes;
+    return attrs != nil && bytes > 0;
+}
+
 #pragma mark - ToastView placeholder
 
 // The raw dispatches UI updates through a ToastView class. Not reconstructed yet —
@@ -86,6 +95,26 @@ static NSString *FFLocalizedString(NSString *key) {
         @"Error.Clipboard":    @"Conversion failed. Details copied to the clipboard.",
     };
     return fallback[key] ?: key;
+}
+
+static NSError *FFMpegNSError(NSString *message) {
+    return [NSError errorWithDomain:@"ErrDomain"
+                               code:0
+                           userInfo:@{NSLocalizedDescriptionKey: message ?: FFLocalizedString(@"Error.Clipboard")}];
+}
+
+static NSString *FFMpegSessionLogs(FFmpegSession *session) {
+    NSString *lastOut = nil;
+    @try {
+        if ([session respondsToSelector:@selector(getAllLogsAsString)]) {
+            lastOut = ((NSString *(*)(id, SEL))objc_msgSend)(session, @selector(getAllLogsAsString));
+        } else if ([session respondsToSelector:@selector(getOutput)]) {
+            lastOut = ((NSString *(*)(id, SEL))objc_msgSend)(session, @selector(getOutput));
+        }
+    } @catch (id ex) {
+        YTAGLog(@"ffmpeg", @"getAllLogsAsString threw: %@", ex);
+    }
+    return lastOut;
 }
 
 #pragma mark - FFMpegHelper
@@ -132,9 +161,31 @@ static NSString *FFLocalizedString(NSString *key) {
     YTAGLog(@"ffmpeg", @"[bc] muxVideo: ENTER video=%@ audio=%@ caps=%@ dur=%lds",
             videoURL.lastPathComponent, audioURL.lastPathComponent,
             captionsURL.lastPathComponent ?: @"<none>", (long)durationSeconds);
-    NSParameterAssert(videoURL);
-    NSParameterAssert(audioURL);
-    NSParameterAssert(completion);
+    if (!completion) return;
+    if (!videoURL || !audioURL) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(nil, FFMpegNSError(@"Mux could not start because a video or audio file was missing."));
+        });
+        return;
+    }
+
+    unsigned long long videoBytes = 0;
+    unsigned long long audioBytes = 0;
+    if (!FFMpegFileExistsAndHasBytes(videoURL, &videoBytes)) {
+        NSString *message = [NSString stringWithFormat:@"Mux could not start because the video stream file was empty or missing (%@).", videoURL.lastPathComponent ?: @"video"];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(nil, FFMpegNSError(message));
+        });
+        return;
+    }
+    if (!FFMpegFileExistsAndHasBytes(audioURL, &audioBytes)) {
+        NSString *message = [NSString stringWithFormat:@"Mux could not start because the audio stream file was empty or missing (%@).", audioURL.lastPathComponent ?: @"audio"];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(nil, FFMpegNSError(message));
+        });
+        return;
+    }
+    YTAGLog(@"ffmpeg", @"[bc] mux inputs: video=%llu bytes audio=%llu bytes", videoBytes, audioBytes);
 
     // Fresh toast for the in-progress state. In the raw, this is alloc/init'd unconditionally
     // here even though it may get replaced by the "Converting" progress toast inside the work
@@ -233,79 +284,72 @@ static NSString *FFLocalizedString(NSString *key) {
 
     YTAGLog(@"ffmpeg", @"[bc] muxVideo: command=%@", command);
 
-    // sub_551D4 — execute the mux on a global queue, then dispatch completion to main.
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
-        YTAGLog(@"ffmpeg", @"[bc] muxVideo: calling FFmpegKit execute:");
-        FFmpegSession *session = [FFmpegKit execute:command];
-        YTAGLog(@"ffmpeg", @"[bc] muxVideo: execute: returned session=%@", session);
+    // sub_551D4 — execute synchronously on our serial ffmpeg queue, then dispatch
+    // completion to main. The earlier global-queue hop made the "serial" queue
+    // return immediately, so multiple callers could overlap despite _isProcessing.
+    YTAGLog(@"ffmpeg", @"[bc] muxVideo: calling FFmpegKit execute:");
+    FFmpegSession *session = [FFmpegKit execute:command];
+    YTAGLog(@"ffmpeg", @"[bc] muxVideo: execute: returned session=%@", session);
 
-        // ffmpeg-kit's real -[FFmpegSession getReturnCode] returns a ReturnCode *
-        // object, not a primitive. Our forward-decl in the no-xcframework branch
-        // claims it returns `long`, so `long rc = [session getReturnCode]` silently
-        // cast the pointer to an integer — every rc we logged pre-v31 (5347512016
-        // etc.) was the ReturnCode's heap address, not an exit code. Dispatch the
-        // call dynamically and unwrap via -[ReturnCode getValue] so we get the
-        // real int regardless of which header variant was in scope at compile.
-        long rc = -1;
-        @try {
-            id rcObj = ((id (*)(id, SEL))objc_msgSend)(session, @selector(getReturnCode));
-            if (rcObj == nil) {
-                rc = -1;
-            } else if ([rcObj respondsToSelector:@selector(getValue)]) {
-                rc = (long)((int (*)(id, SEL))objc_msgSend)(rcObj, @selector(getValue));
-            } else if ([rcObj isKindOfClass:[NSNumber class]]) {
-                rc = [(NSNumber *)rcObj longValue];
-            } else {
-                // Unknown shape — treat as failure rather than crashing on downstream
-                // format specifiers. Log the class so we can see what we missed.
-                YTAGLog(@"ffmpeg", @"unexpected getReturnCode shape: %@", NSStringFromClass([rcObj class]));
-                rc = -1;
-            }
-        } @catch (id ex) {
-            YTAGLog(@"ffmpeg", @"getReturnCode threw: %@", ex);
+    // ffmpeg-kit's real -[FFmpegSession getReturnCode] returns a ReturnCode *
+    // object, not a primitive. Our forward-decl in the no-xcframework branch
+    // claims it returns `long`, so `long rc = [session getReturnCode]` silently
+    // cast the pointer to an integer. Dispatch dynamically and unwrap via
+    // -[ReturnCode getValue] so we get the real int regardless of header shape.
+    long rc = -1;
+    @try {
+        id rcObj = ((id (*)(id, SEL))objc_msgSend)(session, @selector(getReturnCode));
+        if (rcObj == nil) {
+            rc = -1;
+        } else if ([rcObj respondsToSelector:@selector(getValue)]) {
+            rc = (long)((int (*)(id, SEL))objc_msgSend)(rcObj, @selector(getValue));
+        } else if ([rcObj isKindOfClass:[NSNumber class]]) {
+            rc = [(NSNumber *)rcObj longValue];
+        } else {
+            // Unknown shape — treat as failure rather than crashing on downstream
+            // format specifiers. Log the class so we can see what we missed.
+            YTAGLog(@"ffmpeg", @"unexpected getReturnCode shape: %@", NSStringFromClass([rcObj class]));
             rc = -1;
         }
-        YTAGLog(@"ffmpeg", @"mux rc=%ld", rc);
+    } @catch (id ex) {
+        YTAGLog(@"ffmpeg", @"getReturnCode threw: %@", ex);
+        rc = -1;
+    }
+    YTAGLog(@"ffmpeg", @"mux rc=%ld", rc);
 
-        // sub_55278 — completion handler on main.
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self.progressToast hide];
-            self->_isProcessing = NO;
+    // sub_55278 — completion handler on main.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.progressToast hide];
+        self->_isProcessing = NO;
 
-            if (rc == kFFReturnOK) {
+        if (rc == kFFReturnOK) {
+            unsigned long long outBytes = 0;
+            if (FFMpegFileExistsAndHasBytes(outputURL, &outBytes)) {
+                YTAGLog(@"ffmpeg", @"mux output ok: %@ (%llu bytes)", outputURL.lastPathComponent, outBytes);
                 completion(outputURL, nil);
                 return;
             }
 
-            NSString *descKey;
-            if (rc == kFFReturnCancelled) {
-                descKey = @"Cancelled";
-            } else {
-                // ffmpeg-kit stores output PER-SESSION, not class-wide. YTLite's
-                // MobileFFmpeg had `+[FFmpegKit getLastCommandOutput]` at the class
-                // level — that selector does NOT exist on ffmpeg-kit's FFmpegKit
-                // class. Calling it through the v31 forward-decl stub crashed with
-                // an unrecognized-selector exception on every rc != 0 path. Pull
-                // the output off the session object we already have instead.
-                NSString *lastOut = nil;
-                @try {
-                    if ([session respondsToSelector:@selector(getAllLogsAsString)]) {
-                        lastOut = ((NSString *(*)(id, SEL))objc_msgSend)(session, @selector(getAllLogsAsString));
-                    } else if ([session respondsToSelector:@selector(getOutput)]) {
-                        lastOut = ((NSString *(*)(id, SEL))objc_msgSend)(session, @selector(getOutput));
-                    }
-                } @catch (id ex) {
-                    YTAGLog(@"ffmpeg", @"getAllLogsAsString threw: %@", ex);
-                }
-                [self getCleanLog:lastOut];
-                descKey = @"Error.Clipboard";
-            }
+            NSString *lastOut = FFMpegSessionLogs(session);
+            [self getCleanLog:lastOut];
+            completion(nil, FFMpegNSError(@"Mux finished but did not produce a usable output file."));
+            return;
+        }
 
-            NSError *err = [NSError errorWithDomain:@"ErrDomain"
-                                               code:0
-                                           userInfo:@{NSLocalizedDescriptionKey: FFLocalizedString(descKey)}];
-            completion(nil, err);
-        });
+        NSString *descKey;
+        if (rc == kFFReturnCancelled) {
+            descKey = @"Cancelled";
+        } else {
+            // ffmpeg-kit stores output PER-SESSION, not class-wide. YTLite's
+            // MobileFFmpeg had `+[FFmpegKit getLastCommandOutput]` at the class
+            // level — that selector does NOT exist on ffmpeg-kit's FFmpegKit
+            // class. Pull the output off the session object we already have.
+            NSString *lastOut = FFMpegSessionLogs(session);
+            [self getCleanLog:lastOut];
+            descKey = @"Error.Clipboard";
+        }
+
+        completion(nil, FFMpegNSError(FFLocalizedString(descKey)));
     });
 }
 
@@ -339,46 +383,54 @@ static NSString *FFLocalizedString(NSString *key) {
     // language tag will be "English" instead of "eng". Players still recognize
     // the track; just cosmetically non-ISO.
     NSString *langCode = hasCaps ? [self codeForCaps:captionsURL] : nil;
+    NSString *durationArg = durationSeconds > 0
+        ? [NSString stringWithFormat:@"-to %ld ", (long)durationSeconds]
+        : @"";
 
     // Branch 1 (YTLite raw line 382055) — captions + thumbnail
     if (hasCaps && hasThumb) {
         return [NSString stringWithFormat:
-            @"-hide_banner -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" -i \"%@\" -to %ld "
-            @"-map 0 -map 1 -map 2 -map 3 "
+            @"-hide_banner -y -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" -i \"%@\" %@"
+            @"-map 0:v:0 -map 1:a:0 -map 2:0 -map 3:v:0 "
             @"-c:v copy -c:a copy -c:s mov_text "
             @"-metadata:s:s:0 language=%@ "
+            @"-movflags +faststart "
             @"-disposition:3 attached_pic \"%@\"",
             videoURL.path, audioURL.path, captionsURL.path, thumbnailURL.path,
-            (long)durationSeconds, langCode, outputURL.path];
+            durationArg, langCode, outputURL.path];
     }
 
     // Branch 2 (YTLite raw line 382074) — captions only
     if (hasCaps && !hasThumb) {
         return [NSString stringWithFormat:
-            @"-hide_banner -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" -to %ld "
+            @"-hide_banner -y -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" %@"
+            @"-map 0:v:0 -map 1:a:0 -map 2:0 "
             @"-c:v copy -c:a copy -c:s mov_text "
+            @"-movflags +faststart "
             @"-metadata:s:s:0 language=%@ \"%@\"",
             videoURL.path, audioURL.path, captionsURL.path,
-            (long)durationSeconds, langCode, outputURL.path];
+            durationArg, langCode, outputURL.path];
     }
 
     // Branch 4 (YTLite raw line 382101) — thumbnail only (no captions)
     if (!hasCaps && hasThumb) {
         return [NSString stringWithFormat:
-            @"-hide_banner -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" -to %ld "
-            @"-map 0 -map 1 -map 2 "
+            @"-hide_banner -y -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" %@"
+            @"-map 0:v:0 -map 1:a:0 -map 2:v:0 "
             @"-c:v copy -c:a copy "
+            @"-movflags +faststart "
             @"-disposition:2 attached_pic \"%@\"",
             videoURL.path, audioURL.path, thumbnailURL.path,
-            (long)durationSeconds, outputURL.path];
+            durationArg, outputURL.path];
     }
 
     // Branch 3 (YTLite raw line 382089) — minimal: video + audio only
     return [NSString stringWithFormat:
-        @"-hide_banner -loglevel error -i \"%@\" -i \"%@\" -to %ld "
-        @"-c:v copy -c:a copy \"%@\"",
+        @"-hide_banner -y -loglevel error -i \"%@\" -i \"%@\" %@"
+        @"-map 0:v:0 -map 1:a:0 "
+        @"-c:v copy -c:a copy -movflags +faststart \"%@\"",
         videoURL.path, audioURL.path,
-        (long)durationSeconds, outputURL.path];
+        durationArg, outputURL.path];
 }
 
 - (void)cutAudio:(NSURL *)audioURL

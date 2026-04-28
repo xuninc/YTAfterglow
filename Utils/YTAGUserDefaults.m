@@ -156,6 +156,13 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         @"muteButton": @YES,
         @"lockButton": @YES,
         @"downloadButton": @YES,
+        @"downloadPostActionMode": @1,
+        @"downloadAudioTrackMode": @1,
+        @"downloadAudioQualityMode": @0,
+        @"downloadPreferStableAudio": @YES,
+        @"downloadRefreshMetadata": @YES,
+        @"downloadIncludeAutoCaptions": @YES,
+        @"downloadOfferTranslatedCaptions": @YES,
         // v37: disabled again as safety net after v36's cold-launch-crash regression
         // (which I attribute to masksToBounds=YES on the button layer, now removed).
         // Leaving this OFF until we confirm the masksToBounds fix cleared cold launch

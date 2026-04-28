@@ -9,6 +9,7 @@ typedef NS_ENUM(NSInteger, YTAGDownloadPhase) {
     YTAGDownloadPhaseFinished         = 3,
     YTAGDownloadPhaseError            = 4,
     YTAGDownloadPhaseCancelled        = 5,
+    YTAGDownloadPhaseFinalizing       = 6,
 };
 
 /// Modal progress view shown during a download. Visually:
