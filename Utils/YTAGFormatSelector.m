@@ -74,7 +74,7 @@ static NSString *YTAGAudioTrackKey(YTAGFormat *audio) {
     if (langPart.length > 0 || namePart.length > 0) {
         return [NSString stringWithFormat:@"%@|%@", langPart ?: @"", namePart ?: @""];
     }
-    return [NSString stringWithFormat:@"itag-%ld", (long)audio.itag];
+    return @"default-audio-track";
 }
 
 /// Pick the best audio format from a candidate set. Stable-volume variants are

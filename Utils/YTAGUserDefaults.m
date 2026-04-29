@@ -11,7 +11,7 @@ static NSString *const kSettingsMigrationVersionKey = @"settingsMigrationVersion
 static const NSUInteger kMinimumActiveTabsCount = 2;
 static const NSUInteger kMaximumActiveTabsCount = 6;
 static const NSInteger kCurrentThemeMigrationVersion = 2;
-static const NSInteger kCurrentSettingsMigrationVersion = 1;
+static const NSInteger kCurrentSettingsMigrationVersion = 2;
 
 static NSData *YTAGArchiveColor(UIColor *color) {
     return [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
@@ -87,8 +87,13 @@ static void YTAGApplyAfterglow2ThemePreset(NSUserDefaults *defaults) {
     [defaults setBool:YES forKey:@"theme_glowEnabled"];
 }
 
+static NSString *YTAGCanonicalTabId(NSString *tabId) {
+    if ([tabId isEqualToString:@"FEexplore"]) return @"FEtrending";
+    return tabId;
+}
+
 static NSArray<NSString *> *YTAGAllowedTabs(void) {
-    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEexplore", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
+    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEtrending", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
 }
 
 + (YTAGUserDefaults *)standardUserDefaults {
@@ -116,7 +121,7 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
     for (id item in (NSArray *)value) {
         if (![item isKindOfClass:[NSString class]]) continue;
 
-        NSString *tabId = (NSString *)item;
+        NSString *tabId = YTAGCanonicalTabId((NSString *)item);
         if (![allowedTabs containsObject:tabId] || [sanitizedTabs containsObject:tabId]) continue;
 
         [sanitizedTabs addObject:tabId];
@@ -201,10 +206,13 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         @"downloadPickerFontScaleMode": @0,
         @"downloadPickerFontFaceMode": @1,
         @"controlsSheetButton": @YES,
-        // v33: debug log defaults ON so crashes leave a breadcrumb in
-        // YouTube.app/Documents/ytag-debug.log. Revert to @NO once the download +
-        // playback surfaces are stable (no new crashes for a few builds).
-        @"debugLogEnabled": @YES,
+        @"debugLogEnabled": @NO,
+        @"debugLogFirehose": @NO,
+        @"debugLogDownloads": @YES,
+        @"debugLogPlayerUI": @YES,
+        @"debugLogPremiumControls": @YES,
+        @"debugLogPiP": @NO,
+        @"debugLogProbes": @NO,
         @"debugHUDEnabled": @NO
     }];
 }
@@ -268,6 +276,15 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         [self setBool:[self boolForKey:@"endScreenCards"] forKey:@"hideEndScreenCards"];
     }
     [self removeObjectForKey:@"endScreenCards"];
+
+    if (recordedVersion < 2) {
+        [self setActiveTabs:[self currentActiveTabs]];
+
+        NSString *startupTab = [self objectForKey:kStartupTabKey];
+        if ([startupTab isKindOfClass:[NSString class]] && [startupTab isEqualToString:@"FEexplore"]) {
+            [self setObject:@"FEtrending" forKey:kStartupTabKey];
+        }
+    }
 
     [self setInteger:kCurrentSettingsMigrationVersion forKey:kSettingsMigrationVersionKey];
 }

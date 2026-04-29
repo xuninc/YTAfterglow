@@ -9,8 +9,234 @@ static UIImage *YTImageNamed(NSString *imageName) {
 static NSString *const YTAGAdvancedModePromptChoiceKey = @"advancedModePromptChoiceMade";
 static NSString *const YTAGLegacyAdvancedModeReminderKey = @"advancedModeReminder";
 static const void *kYTAGPauseOnOverlayInternalChangeKey = &kYTAGPauseOnOverlayInternalChangeKey;
+static const void *kYTAGShortsOriginalHiddenKey = &kYTAGShortsOriginalHiddenKey;
+static const void *kYTAGShortsOriginalAlphaKey = &kYTAGShortsOriginalAlphaKey;
+static const void *kYTAGShortsOriginalInteractionKey = &kYTAGShortsOriginalInteractionKey;
 static BOOL ytagDidScheduleAdvancedModePrompt = NO;
 static id ytagAdvancedModePromptObserver = nil;
+
+static NSString *ytagNormalizedShortsString(NSString *string) {
+    if (string.length == 0) return @"";
+    NSMutableString *normalized = [NSMutableString stringWithCapacity:string.length];
+    NSCharacterSet *allowed = [NSCharacterSet alphanumericCharacterSet];
+    NSString *lower = string.lowercaseString;
+    for (NSUInteger i = 0; i < lower.length; i++) {
+        unichar ch = [lower characterAtIndex:i];
+        if ([allowed characterIsMember:ch]) [normalized appendFormat:@"%C", ch];
+    }
+    return normalized;
+}
+
+static NSInteger ytagShortsButtonIconType(UIView *view) {
+    if (![view respondsToSelector:@selector(buttonRenderer)]) return NSNotFound;
+    @try {
+        id renderer = ((id (*)(id, SEL))objc_msgSend)(view, @selector(buttonRenderer));
+        id icon = [renderer valueForKey:@"icon"];
+        id iconType = [icon valueForKey:@"iconType"];
+        return [iconType respondsToSelector:@selector(integerValue)] ? [iconType integerValue] : NSNotFound;
+    } @catch (__unused id ex) {
+        return NSNotFound;
+    }
+}
+
+static NSString *ytagShortsViewSignature(UIView *view) {
+    NSMutableArray<NSString *> *parts = [NSMutableArray arrayWithObject:NSStringFromClass(view.class)];
+    if (view.accessibilityIdentifier.length > 0) [parts addObject:view.accessibilityIdentifier];
+    if (view.accessibilityLabel.length > 0) [parts addObject:view.accessibilityLabel];
+    if (view.accessibilityValue.length > 0) [parts addObject:view.accessibilityValue];
+    if (view.accessibilityHint.length > 0) [parts addObject:view.accessibilityHint];
+
+    if ([view isKindOfClass:[UILabel class]]) {
+        NSString *text = ((UILabel *)view).text;
+        if (text.length > 0) [parts addObject:text];
+    }
+
+    if ([view respondsToSelector:@selector(titleLabel)]) {
+        @try {
+            UILabel *label = ((UILabel *(*)(id, SEL))objc_msgSend)(view, @selector(titleLabel));
+            if ([label isKindOfClass:[UILabel class]] && label.text.length > 0) [parts addObject:label.text];
+        } @catch (__unused id ex) {}
+    }
+
+    NSInteger iconType = ytagShortsButtonIconType(view);
+    if (iconType != NSNotFound) [parts addObject:[NSString stringWithFormat:@"icon%ld", (long)iconType]];
+    return ytagNormalizedShortsString([parts componentsJoinedByString:@" "]);
+}
+
+static BOOL ytagShortsContainsAny(NSString *signature, NSArray<NSString *> *markers) {
+    for (NSString *marker in markers) {
+        if ([signature containsString:ytagNormalizedShortsString(marker)]) return YES;
+    }
+    return NO;
+}
+
+static void ytagShortsSetHiddenByAfterglow(UIView *view, BOOL hidden, NSString *reason) {
+    if (!view) return;
+    NSNumber *storedHidden = objc_getAssociatedObject(view, kYTAGShortsOriginalHiddenKey);
+    NSNumber *storedAlpha = objc_getAssociatedObject(view, kYTAGShortsOriginalAlphaKey);
+    NSNumber *storedInteraction = objc_getAssociatedObject(view, kYTAGShortsOriginalInteractionKey);
+
+    if (hidden) {
+        if (!storedHidden) {
+            objc_setAssociatedObject(view, kYTAGShortsOriginalHiddenKey, @(view.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(view, kYTAGShortsOriginalAlphaKey, @(view.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(view, kYTAGShortsOriginalInteractionKey, @(view.userInteractionEnabled), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        if (!view.hidden || view.alpha > 0.0) {
+            YTAGLog(@"shorts-ui", @"hide %@ %@", reason ?: @"view", NSStringFromClass(view.class));
+        }
+        view.hidden = YES;
+        view.alpha = 0.0;
+        view.userInteractionEnabled = NO;
+    } else if (storedHidden || storedAlpha) {
+        view.hidden = storedHidden ? storedHidden.boolValue : NO;
+        view.alpha = storedAlpha ? storedAlpha.doubleValue : 1.0;
+        view.userInteractionEnabled = storedInteraction ? storedInteraction.boolValue : YES;
+        objc_setAssociatedObject(view, kYTAGShortsOriginalHiddenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, kYTAGShortsOriginalAlphaKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, kYTAGShortsOriginalInteractionKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
+static BOOL ytagShortsShouldHideActionSignature(NSString *signature, NSInteger iconType, NSString **reason) {
+    if (ytagBool(@"hideShortsSearch") && (iconType == 1045 || ytagShortsContainsAny(signature, @[@"search"]))) {
+        if (reason) *reason = @"search";
+        return YES;
+    }
+    if (ytagBool(@"hideShortsCamera") && (iconType == 1046 || ytagShortsContainsAny(signature, @[@"camera", @"create"]))) {
+        if (reason) *reason = @"camera";
+        return YES;
+    }
+    if (ytagBool(@"hideShortsMore") && (iconType == 1047 || ytagShortsContainsAny(signature, @[@"more", @"overflow", @"menu"]))) {
+        if (reason) *reason = @"more";
+        return YES;
+    }
+    if (ytagBool(@"hideShortsDislike") && ytagShortsContainsAny(signature, @[@"dislike", @"thumbsdown"])) {
+        if (reason) *reason = @"dislike";
+        return YES;
+    }
+    if (ytagBool(@"hideShortsLike") && !ytagShortsContainsAny(signature, @[@"dislike", @"thumbsdown"]) && ytagShortsContainsAny(signature, @[@"like", @"thumbsup"])) {
+        if (reason) *reason = @"like";
+        return YES;
+    }
+    if (ytagBool(@"hideShortsComments") && ytagShortsContainsAny(signature, @[@"comment", @"comments"])) {
+        if (reason) *reason = @"comments";
+        return YES;
+    }
+    if (ytagBool(@"hideShortsRemix") && ytagShortsContainsAny(signature, @[@"remix"])) {
+        if (reason) *reason = @"remix";
+        return YES;
+    }
+    if (ytagBool(@"hideShortsShare") && ytagShortsContainsAny(signature, @[@"share"])) {
+        if (reason) *reason = @"share";
+        return YES;
+    }
+    if (ytagBool(@"hideShortsAvatars") && ytagShortsContainsAny(signature, @[@"avatar", @"nativepivot", @"pivotbutton", @"channelavatar"])) {
+        if (reason) *reason = @"avatar";
+        return YES;
+    }
+    return NO;
+}
+
+static void ytagShortsApplyActionButtonVisibility(UIView *view) {
+    if (!view) return;
+    NSString *className = NSStringFromClass(view.class);
+    BOOL looksLikeButton = [view isKindOfClass:[UIControl class]] || [className rangeOfString:@"Button" options:NSCaseInsensitiveSearch].location != NSNotFound;
+    if (!looksLikeButton) return;
+
+    NSString *signature = ytagShortsViewSignature(view);
+    NSString *reason = nil;
+    BOOL shouldHide = ytagShortsShouldHideActionSignature(signature, ytagShortsButtonIconType(view), &reason);
+    ytagShortsSetHiddenByAfterglow(view, shouldHide, reason);
+}
+
+static void ytagShortsApplyActionVisibilityRecursively(UIView *root) {
+    for (UIView *subview in root.subviews) {
+        ytagShortsApplyActionButtonVisibility(subview);
+        if (!subview.hidden) ytagShortsApplyActionVisibilityRecursively(subview);
+    }
+}
+
+static void ytagShortsApplyNamedViewRules(id object, NSDictionary<NSString *, NSArray<NSString *> *> *rules) {
+    if (!object) return;
+    for (Class cls = object_getClass(object); cls && cls != [NSObject class]; cls = class_getSuperclass(cls)) {
+        unsigned int count = 0;
+        Ivar *ivars = class_copyIvarList(cls, &count);
+        for (unsigned int i = 0; i < count; i++) {
+            const char *type = ivar_getTypeEncoding(ivars[i]);
+            if (!type || type[0] != '@') continue;
+
+            id value = object_getIvar(object, ivars[i]);
+            if (![value isKindOfClass:[UIView class]]) continue;
+
+            NSString *name = ytagNormalizedShortsString([NSString stringWithUTF8String:ivar_getName(ivars[i])]);
+            UIView *view = (UIView *)value;
+            BOOL shouldHide = NO;
+            NSString *reason = nil;
+            for (NSString *key in rules) {
+                if (!ytagBool(key)) continue;
+                if (ytagShortsContainsAny(name, rules[key])) {
+                    shouldHide = YES;
+                    reason = key;
+                    break;
+                }
+            }
+            ytagShortsSetHiddenByAfterglow(view, shouldHide, reason);
+        }
+        free(ivars);
+    }
+}
+
+static void ytagShortsApplySignatureRulesRecursively(id root, NSDictionary<NSString *, NSArray<NSString *> *> *rules) {
+    if (![root isKindOfClass:[UIView class]]) return;
+
+    for (UIView *subview in [(UIView *)root subviews]) {
+        NSString *signature = ytagShortsViewSignature(subview);
+        BOOL shouldHide = NO;
+        NSString *reason = nil;
+
+        for (NSString *key in rules) {
+            if (!ytagBool(key)) continue;
+            if (ytagShortsContainsAny(signature, [rules objectForKey:key])) {
+                shouldHide = YES;
+                reason = key;
+                break;
+            }
+        }
+
+        if (shouldHide || objc_getAssociatedObject(subview, kYTAGShortsOriginalHiddenKey)) {
+            ytagShortsSetHiddenByAfterglow(subview, shouldHide, reason);
+        }
+        if (!shouldHide) ytagShortsApplySignatureRulesRecursively(subview, rules);
+    }
+}
+
+static void ytagShortsApplyOverlayVisibility(UIView *overlay) {
+    NSDictionary<NSString *, NSArray<NSString *> *> *rules = @{
+        @"hideShortsLike": @[@"reellike", @"likebutton"],
+        @"hideShortsDislike": @[@"dislike"],
+        @"hideShortsComments": @[@"comment"],
+        @"hideShortsRemix": @[@"remix"],
+        @"hideShortsShare": @[@"share"],
+        @"hideShortsAvatars": @[@"avatar", @"pivot", @"nativepivot"],
+    };
+    ytagShortsApplyNamedViewRules(overlay, rules);
+    ytagShortsApplySignatureRulesRecursively(overlay, rules);
+    ytagShortsApplyActionVisibilityRecursively(overlay);
+}
+
+static void ytagShortsApplyWatchHeaderVisibility(id header) {
+    NSDictionary<NSString *, NSArray<NSString *> *> *rules = @{
+        @"hideShortsChannelName": @[@"channelbar", @"channelname", @"username", @"subscribe", @"follow"],
+        @"hideShortsDescription": @[@"headerrenderer", @"shortsvideotitle", @"description", @"title", @"expandabletext"],
+        @"hideShortsAudioTrack": @[@"soundmetadata", @"audiotrack", @"audio", @"music", @"sound"],
+        @"hideShortsPromoCards": @[@"actionelement", @"promo", @"promotion", @"suggestion", @"product", @"shopping", @"sticker", @"card"],
+        @"hideShortsThanks": @[@"badge", @"thanks", @"superthanks"],
+        @"hideShortsSource": @[@"multiformat", @"source", @"link", @"sourcebutton"],
+    };
+    ytagShortsApplyNamedViewRules(header, rules);
+    ytagShortsApplySignatureRulesRecursively(header, rules);
+}
 
 static BOOL ytag_commentsPinned(void) {
     return ytagInt(@"commentsHeaderMode") == 1;
@@ -1048,6 +1274,11 @@ void autoSkipShorts(YTPlayerViewController *self, YTSingleVideoController *video
 
 // Fit Shorts Button Labels For Localizations
 %hook YTReelPlayerButton
+- (void)layoutSubviews {
+    %orig;
+    ytagShortsApplyActionButtonVisibility(self);
+}
+
 - (UILabel *)titleLabel {
     UILabel *label = %orig;
     label.adjustsFontSizeToFitWidth = YES;
@@ -1310,45 +1541,79 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
 
 // Hide Shorts Elements
 %hook YTReelPausedStateCarouselView
-- (void)setPausedStateCarouselVisible:(BOOL)arg1 animated:(BOOL)arg2 { ytagBool(@"hideShortsSubscriptions") ? %orig(arg1 = NO, arg2) : %orig; }
+- (void)layoutSubviews {
+    %orig;
+    ytagShortsSetHiddenByAfterglow((UIView *)self, ytagBool(@"hideShortsSubscriptions"), @"subscriptions-carousel");
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    ytagShortsSetHiddenByAfterglow((UIView *)self, ytagBool(@"hideShortsSubscriptions"), @"subscriptions-carousel");
+}
+
+- (void)setPausedStateCarouselVisible:(BOOL)arg1 animated:(BOOL)arg2 {
+    BOOL visible = ytagBool(@"hideShortsSubscriptions") ? NO : arg1;
+    %orig(visible, arg2);
+    ytagShortsSetHiddenByAfterglow((UIView *)self, ytagBool(@"hideShortsSubscriptions"), @"subscriptions-carousel");
+}
 %end
 
 %hook YTReelWatchPlaybackOverlayView
-- (void)setReelLikeButton:(id)arg1 { if (!ytagBool(@"hideShortsLike")) %orig; }
-- (void)setReelDislikeButton:(id)arg1 { if (!ytagBool(@"hideShortsDislike")) %orig; }
-- (void)setViewCommentButton:(id)arg1 { if (!ytagBool(@"hideShortsComments")) %orig; }
-- (void)setRemixButton:(id)arg1 { if (!ytagBool(@"hideShortsRemix")) %orig; }
-- (void)setShareButton:(id)arg1 { if (!ytagBool(@"hideShortsShare")) %orig; }
-- (void)setNativePivotButton:(id)arg1 { if (!ytagBool(@"hideShortsAvatars")) %orig; }
-- (void)setPivotButtonElementRenderer:(id)arg1 { if (!ytagBool(@"hideShortsAvatars")) %orig; }
+- (void)layoutSubviews {
+    %orig;
+    ytagShortsApplyOverlayVisibility(self);
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    ytagShortsApplyOverlayVisibility(self);
+}
+
+- (void)setReelLikeButton:(id)arg1 { %orig; ytagShortsApplyOverlayVisibility(self); }
+- (void)setReelDislikeButton:(id)arg1 { %orig; ytagShortsApplyOverlayVisibility(self); }
+- (void)setViewCommentButton:(id)arg1 { %orig; ytagShortsApplyOverlayVisibility(self); }
+- (void)setRemixButton:(id)arg1 { %orig; ytagShortsApplyOverlayVisibility(self); }
+- (void)setShareButton:(id)arg1 { %orig; ytagShortsApplyOverlayVisibility(self); }
+- (void)setNativePivotButton:(id)arg1 { %orig; ytagShortsApplyOverlayVisibility(self); }
+- (void)setPivotButtonElementRenderer:(id)arg1 { %orig; ytagShortsApplyOverlayVisibility(self); }
 %end
 
 %hook YTReelHeaderView
-- (void)setTitleLabelVisible:(BOOL)arg1 animated:(BOOL)arg2 { ytagBool(@"hideShortsLogo") ? %orig(arg1 = NO, arg2) : %orig; }
+- (void)layoutSubviews {
+    %orig;
+    NSDictionary *rules = @{@"hideShortsLogo": @[@"shortslogo", @"logo", @"title"]};
+    ytagShortsApplyNamedViewRules(self, rules);
+    ytagShortsApplySignatureRulesRecursively(self, rules);
+}
+- (void)setTitleLabelVisible:(BOOL)arg1 animated:(BOOL)arg2 { %orig(ytagBool(@"hideShortsLogo") ? NO : arg1, arg2); }
 %end
 
 %hook YTReelTransparentStackView
 - (void)layoutSubviews {
     %orig;
 
-    for (YTQTMButton *button in self.subviews) {
-        if ([button respondsToSelector:@selector(buttonRenderer)]) {
-            if (ytagBool(@"hideShortsSearch") && button.buttonRenderer.icon.iconType == 1045) button.hidden = YES;
-            if (ytagBool(@"hideShortsCamera") && button.buttonRenderer.icon.iconType == 1046) button.hidden = YES;
-            if (ytagBool(@"hideShortsMore") && button.buttonRenderer.icon.iconType == 1047) button.hidden = YES;
-        }
-    }
+    ytagShortsApplyActionVisibilityRecursively(self);
 }
 %end
 
 %hook YTReelWatchHeaderView
-- (void)setChannelBarElementRenderer:(id)renderer { if (!ytagBool(@"hideShortsChannelName")) %orig; }
-- (void)setHeaderRenderer:(id)renderer { if (!ytagBool(@"hideShortsDescription")) %orig; }
-- (void)setShortsVideoTitleElementRenderer:(id)renderer { if (!ytagBool(@"hideShortsDescription")) %orig; }
-- (void)setSoundMetadataElementRenderer:(id)renderer { if (!ytagBool(@"hideShortsAudioTrack")) %orig; }
-- (void)setActionElement:(id)renderer { if (!ytagBool(@"hideShortsPromoCards")) %orig; }
-- (void)setBadgeRenderer:(id)renderer { if (!ytagBool(@"hideShortsThanks")) %orig; }
-- (void)setMultiFormatLinkElementRenderer:(id)renderer { if (!ytagBool(@"hideShortsSource")) %orig; }
+- (void)layoutSubviews {
+    %orig;
+    ytagShortsApplyWatchHeaderVisibility(self);
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    ytagShortsApplyWatchHeaderVisibility(self);
+}
+
+- (void)setChannelBarElementRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
+- (void)setHeaderRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
+- (void)setShortsVideoTitleElementRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
+- (void)setSoundMetadataElementRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
+- (void)setActionElement:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
+- (void)setBadgeRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
+- (void)setMultiFormatLinkElementRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
 %end
 
 static BOOL isOverlayShown = YES;
@@ -1695,15 +1960,83 @@ static NSString *ytagPivotId(YTIPivotBarSupportedRenderers *r) {
     return pid;
 }
 
-static NSString *ytagNormalizedPivotId(NSString *pivotId) {
+static NSString *ytagBrowseIdForTabId(NSString *tabId) {
+    if ([tabId isEqualToString:@"FEtrending"]) {
+        NSString *trendingBrowseId = [%c(YTIBrowseRequest) browseIDForTrendingTab];
+        return trendingBrowseId.length > 0 ? trendingBrowseId : @"FEtrending";
+    }
+    if ([tabId isEqualToString:@"FEexplore"]) {
+        NSString *exploreBrowseId = [%c(YTIBrowseRequest) browseIDForExploreTab];
+        return exploreBrowseId.length > 0 ? exploreBrowseId : @"FEexplore";
+    }
+    return tabId;
+}
+
+static NSString *ytagCanonicalPivotId(NSString *pivotId) {
     if (![pivotId isKindOfClass:[NSString class]] || pivotId.length == 0) return nil;
+
+    NSString *trendingBrowseId = [%c(YTIBrowseRequest) browseIDForTrendingTab];
+    if (trendingBrowseId.length > 0 && [pivotId isEqualToString:trendingBrowseId]) {
+        return @"FEtrending";
+    }
 
     NSString *exploreBrowseId = [%c(YTIBrowseRequest) browseIDForExploreTab];
     if (exploreBrowseId.length > 0 && [pivotId isEqualToString:exploreBrowseId]) {
-        return @"FEexplore";
+        return @"FEtrending";
+    }
+
+    if ([pivotId isEqualToString:@"FEexplore"]) {
+        return @"FEtrending";
     }
 
     return pivotId;
+}
+
+static int ytagIconTypeForTabId(NSString *tabId) {
+    if ([tabId isEqualToString:@"FEtrending"]) return 67;
+    if ([tabId isEqualToString:@"FEhype_leaderboard"]) return 67;
+    if ([tabId isEqualToString:@"FEhistory"]) return 876;
+    if ([tabId isEqualToString:@"VLWL"]) return 877;
+    if ([tabId isEqualToString:@"FEpost_home"]) return 878;
+    if ([tabId isEqualToString:@"FEuploads"]) return 80;
+    return 65;
+}
+
+static void ytagConfigurePivotTab(YTIPivotBarSupportedRenderers *tab, NSString *tabId) {
+    YTIPivotBarItemRenderer *item = [tab pivotBarItemRenderer];
+    if (!item) return;
+
+    NSString *browseId = ytagBrowseIdForTabId(tabId);
+    item.pivotIdentifier = tabId;
+    item.targetId = browseId;
+
+    @try {
+        YTICommand *endpoint = [%c(YTICommand) browseNavigationEndpointWithBrowseID:browseId];
+        if (endpoint) item.navigationEndpoint = endpoint;
+        item.navigationEndpoint.browseEndpoint.browseId = browseId;
+        if ([tabId isEqualToString:@"VLWL"]) {
+            item.navigationEndpoint.browseEndpoint.canonicalBaseURL = @"/playlist?list=WL";
+        } else if ([tabId isEqualToString:@"FEhistory"]) {
+            item.navigationEndpoint.browseEndpoint.canonicalBaseURL = @"/feed/history";
+        } else if ([tabId isEqualToString:@"FEpost_home"]) {
+            item.navigationEndpoint.browseEndpoint.canonicalBaseURL = @"/posts";
+        }
+    } @catch (__unused id exception) {
+    }
+}
+
+static YTIPivotBarSupportedRenderers *ytagCreatePivotTab(NSString *tabId) {
+    YTIPivotBarSupportedRenderers *tab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:ytagBrowseIdForTabId(tabId) title:LOC(tabId) iconType:ytagIconTypeForTabId(tabId)];
+    ytagConfigurePivotTab(tab, tabId);
+    return tab;
+}
+
+static BOOL ytagItemsContainTab(NSArray<YTIPivotBarSupportedRenderers *> *items, NSString *tabId) {
+    for (YTIPivotBarSupportedRenderers *item in items) {
+        NSString *pid = ytagCanonicalPivotId(ytagPivotId(item));
+        if ([pid isEqualToString:tabId]) return YES;
+    }
+    return NO;
 }
 
 // Tab Management - Get default active tabs
@@ -1721,50 +2054,18 @@ static NSArray *ytagDefaultTabs() {
     // Remove tabs not in activeTabs
     NSMutableArray *toRemove = [NSMutableArray array];
     for (YTIPivotBarSupportedRenderers *item in items) {
-        NSString *pid = ytagNormalizedPivotId(ytagPivotId(item));
+        NSString *pid = ytagCanonicalPivotId(ytagPivotId(item));
         if (pid && ![activeTabs containsObject:pid]) {
             [toRemove addObject:item];
         }
     }
     [items removeObjectsInArray:toRemove];
 
-    // Add Explore tab if in activeTabs but not in items
-    if ([activeTabs containsObject:@"FEexplore"]) {
-        BOOL found = NO;
-        for (YTIPivotBarSupportedRenderers *item in items) {
-            if ([ytagPivotId(item) isEqualToString:@"FEexplore"] ||
-                [ytagPivotId(item) isEqualToString:[%c(YTIBrowseRequest) browseIDForExploreTab]]) {
-                found = YES;
-                break;
-            }
-        }
-        if (!found) {
-            YTIPivotBarSupportedRenderers *exploreTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:[%c(YTIBrowseRequest) browseIDForExploreTab] title:LOC(@"FEexplore") iconType:292];
-            [items addObject:exploreTab];
-        }
-    }
-
-    // Add History tab if in activeTabs but not in items
-    if ([activeTabs containsObject:@"FEhistory"]) {
-        BOOL found = NO;
-        for (YTIPivotBarSupportedRenderers *item in items) {
-            if ([ytagPivotId(item) isEqualToString:@"FEhistory"]) { found = YES; break; }
-        }
-        if (!found) {
-            YTIPivotBarSupportedRenderers *historyTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"FEhistory" title:LOC(@"FEhistory") iconType:876];
-            [items addObject:historyTab];
-        }
-    }
-
-    // Add Watch Later tab if in activeTabs but not in items
-    if ([activeTabs containsObject:@"VLWL"]) {
-        BOOL found = NO;
-        for (YTIPivotBarSupportedRenderers *item in items) {
-            if ([ytagPivotId(item) isEqualToString:@"VLWL"]) { found = YES; break; }
-        }
-        if (!found) {
-            YTIPivotBarSupportedRenderers *vlwlTab = [%c(YTIPivotBarRenderer) pivotSupportedRenderersWithBrowseId:@"VLWL" title:LOC(@"VLWL") iconType:877];
-            [items addObject:vlwlTab];
+    // Add optional tabs only when YouTube did not supply them natively.
+    for (NSString *tabId in @[@"FEtrending", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"]) {
+        if ([activeTabs containsObject:tabId] && !ytagItemsContainTab(items, tabId)) {
+            YTIPivotBarSupportedRenderers *tab = ytagCreatePivotTab(tabId);
+            if (tab) [items addObject:tab];
         }
     }
 
@@ -1772,7 +2073,7 @@ static NSArray *ytagDefaultTabs() {
     NSMutableArray *ordered = [NSMutableArray array];
     for (NSString *tabId in activeTabs) {
         for (YTIPivotBarSupportedRenderers *item in items) {
-            NSString *pid = ytagNormalizedPivotId(ytagPivotId(item));
+            NSString *pid = ytagCanonicalPivotId(ytagPivotId(item));
             if ([pid isEqualToString:tabId]) {
                 [ordered addObject:item];
                 break;

@@ -119,6 +119,55 @@ static NSString *YTAGFormatBytesShort(long long bytes) {
     return [NSString stringWithFormat:@"%.0f KB", kb];
 }
 
+static NSString *YTAGAudioCodecDisplayName(YTAGFormat *audio) {
+    NSString *codec = audio.codec.lowercaseString;
+    NSString *container = audio.container.lowercaseString;
+    if ([codec hasPrefix:@"mp4a"] || [container isEqualToString:@"m4a"]) return @"AAC";
+    if ([codec containsString:@"opus"]) return @"Opus";
+    if ([codec containsString:@"vorbis"]) return @"Vorbis";
+    if (audio.container.length > 0) return audio.container.uppercaseString;
+    return @"Audio";
+}
+
+static NSString *YTAGAudioBitrateString(YTAGFormat *audio) {
+    if (audio.bitrate <= 0) return nil;
+    return [NSString stringWithFormat:@"%ld kbps", (long)((audio.bitrate + 500) / 1000)];
+}
+
+static NSString *YTAGAudioTrackPickerTitle(YTAGFormat *audio) {
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    if (audio.audioTrackName.length > 0) {
+        [parts addObject:audio.audioTrackName];
+    } else if (audio.audioLanguageCode.length > 0) {
+        [parts addObject:[audio.audioLanguageCode uppercaseString]];
+    } else if (audio.bitrate > 0 || audio.codec.length > 0 || audio.container.length > 0) {
+        NSString *codec = YTAGAudioCodecDisplayName(audio);
+        NSString *bitrate = YTAGAudioBitrateString(audio);
+        [parts addObject:bitrate.length > 0 ? [NSString stringWithFormat:@"%@ %@", codec, bitrate] : codec];
+    } else if (audio.itag > 0) {
+        [parts addObject:[NSString stringWithFormat:@"Track %ld", (long)audio.itag]];
+    } else {
+        [parts addObject:@"Audio track"];
+    }
+
+    if (audio.audioIsDefault) [parts addObject:@"Default"];
+    if (audio.audioIsDubbed) [parts addObject:@"Dubbed"];
+    return [parts componentsJoinedByString:@" · "];
+}
+
+static NSString *YTAGAudioTrackPickerSubtitle(YTAGFormat *audio) {
+    NSMutableArray<NSString *> *bits = [NSMutableArray array];
+    if (audio.audioLanguageCode.length > 0) [bits addObject:[audio.audioLanguageCode uppercaseString]];
+    NSString *codec = YTAGAudioCodecDisplayName(audio);
+    NSString *bitrate = YTAGAudioBitrateString(audio);
+    if (codec.length > 0 && audio.audioLanguageCode.length > 0) [bits addObject:bitrate.length > 0 ? [NSString stringWithFormat:@"%@ %@", codec, bitrate] : codec];
+    if (audio.itag > 0) [bits addObject:[NSString stringWithFormat:@"itag %ld", (long)audio.itag]];
+    NSString *size = YTAGFormatBytesShort(audio.contentLength);
+    if (size.length > 0) [bits addObject:size];
+    if (audio.isDRC) [bits addObject:@"Stable volume"];
+    return bits.count > 0 ? [bits componentsJoinedByString:@" · "] : @"Audio stream";
+}
+
 static NSInteger YTAGDownloadIntegerForKey(NSString *key) {
     return [[YTAGUserDefaults standardUserDefaults] integerForKey:key];
 }
@@ -1130,18 +1179,8 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
 
     NSMutableArray<YTAGDownloadPickerEntry *> *entries = [NSMutableArray array];
     for (YTAGFormatPair *audioPair in audioPairs) {
-        NSString *label = audioPair.descriptorString;
-        if (audioPair.audioFormat.audioIsDefault) {
-            label = [label stringByAppendingString:@"  ✓"];
-        }
-        if (audioPair.audioFormat.audioIsDubbed) {
-            label = [label stringByAppendingString:@" · Dubbed"];
-        }
-        NSMutableArray<NSString *> *bits = [NSMutableArray array];
-        if (audioPair.audioFormat.audioLanguageCode.length > 0) [bits addObject:[audioPair.audioFormat.audioLanguageCode uppercaseString]];
-        if (audioPair.audioFormat.itag > 0) [bits addObject:[NSString stringWithFormat:@"itag %ld", (long)audioPair.audioFormat.itag]];
-        if (audioPair.audioFormat.isDRC) [bits addObject:@"Stable volume"];
-        NSString *subtitle = bits.count > 0 ? [bits componentsJoinedByString:@" · "] : @"Audio stream";
+        NSString *label = YTAGAudioTrackPickerTitle(audioPair.audioFormat);
+        NSString *subtitle = YTAGAudioTrackPickerSubtitle(audioPair.audioFormat);
         [entries addObject:[YTAGDownloadPickerEntry entryWithTitle:label
                                                           subtitle:subtitle
                                                         symbolName:@"speaker.wave.2"

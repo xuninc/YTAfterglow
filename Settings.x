@@ -614,7 +614,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     else if ([tabId isEqualToString:@"FEshorts"]) symbolName = @"play.square.fill";
     else if ([tabId isEqualToString:@"FEsubscriptions"]) symbolName = @"play.rectangle.on.rectangle.fill";
     else if ([tabId isEqualToString:@"FElibrary"]) symbolName = @"books.vertical.fill";
-    else if ([tabId isEqualToString:@"FEexplore"]) symbolName = @"safari.fill";
+    else if ([tabId isEqualToString:@"FEtrending"]) symbolName = @"flame.fill";
+    else if ([tabId isEqualToString:@"FEhype_leaderboard"]) symbolName = @"bolt.fill";
     else if ([tabId isEqualToString:@"FEhistory"]) symbolName = @"clock.fill";
     else if ([tabId isEqualToString:@"VLWL"]) symbolName = @"bookmark.fill";
     else if ([tabId isEqualToString:@"FEpost_home"]) symbolName = @"text.bubble.fill";
@@ -1049,7 +1050,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
 %new
 - (NSArray<NSString *> *)ytag_allTabs {
-    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEexplore", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
+    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEtrending", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
 }
 
 %new
@@ -1059,7 +1060,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         @"FEshorts": LOC(@"FEshorts"),
         @"FEsubscriptions": LOC(@"FEsubscriptions"),
         @"FElibrary": LOC(@"FElibrary"),
-        @"FEexplore": LOC(@"FEexplore"),
+        @"FEtrending": LOC(@"FEtrending"),
+        @"FEhype_leaderboard": LOC(@"FEhype_leaderboard"),
         @"FEhistory": LOC(@"FEhistory"),
         @"VLWL": LOC(@"VLWL"),
         @"FEpost_home": @"Posts",
@@ -2366,6 +2368,13 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             [rows addObject:space];
             [rows addObject:[self themeSectionHeaderWithTitle:LOC(@"DebugLogging") description:LOC(@"DebugLoggingDesc")]];
             [rows addObject:[self switchWithTitle:@"DebugLogging" key:@"debugLogEnabled"]];
+            [rows addObject:[self switchWithTitle:@"DebugLogFirehose" key:@"debugLogFirehose"]];
+            [rows addObject:[self themeSectionHeaderWithTitle:LOC(@"DebugLogCategories") description:LOC(@"DebugLogCategoriesDesc")]];
+            [rows addObject:[self switchWithTitle:@"DebugLogDownloads" key:@"debugLogDownloads"]];
+            [rows addObject:[self switchWithTitle:@"DebugLogPlayerUI" key:@"debugLogPlayerUI"]];
+            [rows addObject:[self switchWithTitle:@"DebugLogPremiumControls" key:@"debugLogPremiumControls"]];
+            [rows addObject:[self switchWithTitle:@"DebugLogPiP" key:@"debugLogPiP"]];
+            [rows addObject:[self switchWithTitle:@"DebugLogProbes" key:@"debugLogProbes"]];
             [rows addObject:[%c(YTSettingsSectionItem) switchItemWithTitle:LOC(@"ShowDebugHUD") titleDescription:LOC(@"ShowDebugHUDDesc") accessibilityIdentifier:@"YTAfterglowSectionItem" switchOn:ytagBool(@"debugHUDEnabled") switchBlock:^BOOL (YTSettingsCell *cell, BOOL enabled) {
                 ytagSetBool(enabled, @"debugHUDEnabled");
                 if (enabled) [[YTAGDebugHUD sharedHUD] show];

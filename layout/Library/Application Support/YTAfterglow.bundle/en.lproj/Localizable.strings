@@ -424,6 +424,7 @@
 "Tabbar" = "Tab bar";
 "Startup" = "Startup page";
 "FEwhat_to_watch" = "Home";
+"FEtrending" = "Trending";
 "FEexplore" = "Explore";
 "FEshorts" = "Shorts";
 "FEsubscriptions" = "Subscriptions";
@@ -477,10 +478,10 @@
 "RemoveLabelsDesc" = "Removes text labels from the Tab bar buttons.";
 "RemoveIndicators" = "Remove tab indicators";
 "RemoveIndicatorsDesc" = "Removes notification indicators from the Tab bar.";
-"ReExplore" = "Restore Explore tab";
-"ReExploreDesc" = "Replaces the Shorts tab with the Explore tab.";
-"AddExplore" = "Add Explore tab";
-"AddExploreDesc" = "Adds the Explore tab to the Tab bar.";
+"ReExplore" = "Restore Trending tab";
+"ReExploreDesc" = "Replaces the Shorts tab with the Trending tab.";
+"AddExplore" = "Add Trending tab";
+"AddExploreDesc" = "Adds the Trending tab to the Tab bar.";
 "HideShortsTab" = "Hide Shorts tab";
 "HideShortsTabDesc" = "Hides the Shorts tab from the Tab bar.";
 "HideSubscriptionsTab" = "Hide Subscriptions tab";
@@ -733,7 +734,21 @@
 "ClearCache" = "Clear cache";
 
 "DebugLogging" = "Debug logging";
-"DebugLoggingDesc" = "Enables an in-memory + on-disk log of hook decisions (PiP, fullscreen actions, etc.) used to diagnose misbehavior. Off by default; no runtime cost when off.";
+"DebugLoggingDesc" = "Enables selected in-memory and on-disk diagnostic logs. Off by default; no runtime cost when off.";
+"DebugLogFirehose" = "Firehose logging";
+"DebugLogFirehoseDesc" = "Turns on every Afterglow log category, including noisy internals and future categories. Use briefly when chasing stubborn bugs.";
+"DebugLogCategories" = "Logging scope";
+"DebugLogCategoriesDesc" = "Choose which log buckets are captured when Debug logging is enabled. Firehose ignores these filters.";
+"DebugLogDownloads" = "Downloads";
+"DebugLogDownloadsDesc" = "Capture download buttons, format extraction, stream downloads, FFmpeg, caption, thumbnail, and save-to-Photos logs.";
+"DebugLogPlayerUI" = "Player UI";
+"DebugLogPlayerUIDesc" = "Capture player overlay, mute/lock buttons, Shorts overlay, fullscreen, and view-controller resolution logs.";
+"DebugLogPremiumControls" = "Premium controls";
+"DebugLogPremiumControlsDesc" = "Capture the pseudo-Premium controls sheet, action taps, speed controls, and related presentation logs.";
+"DebugLogPiP" = "Picture in Picture";
+"DebugLogPiPDesc" = "Capture PiP compatibility and activation logs. Usually noisy, so it is off by default.";
+"DebugLogProbes" = "Probes and internals";
+"DebugLogProbesDesc" = "Capture startup probes, offline hooks, constructor logs, and other low-level breadcrumbs. Noisy and off by default.";
 "ShowDebugHUD" = "Show debug HUD";
 "ShowDebugHUDDesc" = "Floating on-screen overlay showing the latest log lines. Drag to reposition, double-tap to clear, long-press to hide.";
 "ShareDebugLog" = "Share debug log";
