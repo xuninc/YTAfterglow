@@ -12,10 +12,9 @@ control. `.gitignore` is set to ignore `Frameworks/*.xcframework/`.
 ## ffmpeg-kit (required for HQ download manager mux)
 
 `Utils/FFMpegHelper.m` calls into ffmpeg-kit for the audio/video mux step of the
-HQ download pipeline (YTLite-parity). Without the xcframework the tweak still
-builds — `FFMpegHelper.m` uses `__has_include` to fall back to stub forward
-declarations — but any actual call into the helper will crash at runtime with
-`dyld: Symbol not found: _OBJC_CLASS_$_FFmpegKit`.
+HQ download pipeline (YTLite-parity). The build auto-fetches the xcframeworks via
+`scripts/fetch-ffmpegkit.sh`; if that fetch fails, the package should fail loudly
+instead of shipping a download button whose mux path crashes at runtime.
 
 ### 1. Status of upstream
 
@@ -30,7 +29,9 @@ Releases directly. Download links are now surfaced via the project homepage:
 - Homepage: https://arthenica.github.io/ffmpeg-kit
 - Releases page (tags only, no binaries since archive): https://github.com/arthenica/ffmpeg-kit/releases
 - iOS binary archive: follow "iOS" on the homepage to the current hosted zip bundle
-  (CDN / mirror). Grab the **`ffmpeg-kit-ios-min-6.0.LTS.zip`** bundle (~40 MB).
+  (CDN / mirror). Afterglow currently fetches a pinned community mirror of the
+  v6.0 full iOS bundle because the original release assets are no longer hosted
+  directly on GitHub.
 
 If the homepage link has rotted, community mirrors of v6.0.LTS are easy to find;
 any SHA-verified copy of `ffmpeg-kit-ios-min-6.0.LTS.zip` from a reputable
@@ -39,7 +40,9 @@ blessed release before archive.
 
 ### 2. Which variant to download
 
-ffmpeg-kit ships several iOS variants at each release. Pick **`min`**:
+ffmpeg-kit ships several iOS variants at each release. For manual installs,
+`min` is sufficient for our mux/transcode needs, but the current automated fetch
+uses the available pinned `ios-full` mirror and copies its runtime framework set:
 
 | Variant       | Size    | Contents                                           | Our use? |
 | ------------- | ------- | -------------------------------------------------- | -------- |
@@ -55,20 +58,30 @@ Our call sites only need:
 - `-c:v copy -c:a copy` remux (no codec work, container-only)
 - webp → jpg thumbnail transcode (needs `libwebp` and `mjpeg`, both in `min`)
 
-So `min` is sufficient. If a future feature needs more, bump the variant here
-and re-drop the xcframework.
+So `min` is sufficient if you are installing manually. If a future feature needs
+more codecs, keep using the broader automated bundle or update the fetch script.
 
 ### 3. Drop-in procedure
 
 ```bash
-# From the project root, with the zip already downloaded:
+# From the project root, usually this is enough:
+bash scripts/fetch-ffmpegkit.sh
+
+# For manual drop-in with a zip already downloaded:
 cd /home/corey/repos/xuninc/YTAfterglow/Frameworks/
 
-# Unzip; the zip contains ffmpegkit.xcframework/ at its root.
+# Unzip; the archive must contain ffmpegkit.xcframework and its sibling libav*.xcframeworks.
 unzip -q ~/Downloads/ffmpeg-kit-ios-min-6.0.LTS.zip
 
 # You should now have:
 #   Frameworks/ffmpegkit.xcframework/
+#   Frameworks/libavcodec.xcframework/
+#   Frameworks/libavformat.xcframework/
+#   Frameworks/libavutil.xcframework/
+#   Frameworks/libavdevice.xcframework/
+#   Frameworks/libavfilter.xcframework/
+#   Frameworks/libswresample.xcframework/
+#   Frameworks/libswscale.xcframework/
 #   Frameworks/ffmpegkit.xcframework/Info.plist
 #   Frameworks/ffmpegkit.xcframework/ios-arm64/
 #   Frameworks/ffmpegkit.xcframework/ios-arm64/ffmpegkit.framework/
@@ -77,8 +90,7 @@ ls Frameworks/ffmpegkit.xcframework/
 ```
 
 Expected final path: `Frameworks/ffmpegkit.xcframework/`
-Makefile condition: Theos auto-detects the xcframework if
-`Frameworks/ffmpegkit.xcframework/Info.plist` exists.
+Makefile condition: `scripts/fetch-ffmpegkit.sh` creates this path before compile.
 
 ### 4. Verify
 
@@ -116,11 +128,10 @@ $(TWEAK_NAME)_LDFLAGS += -F$(PWD)/Frameworks \
                           -framework ffmpegkit
 ```
 
-The first `-F` lets cyan's embedder find the xcframework wrapper; the second
-`-F` points the linker directly at the arm64 `.framework` slice so it can
-resolve symbols. `$(TWEAK_NAME)_EMBED_FRAMEWORKS` handles copying the full
-xcframework tree into the built `.dylib` bundle so cyan can pull the right
-slice into the IPA.
+The direct `-F` points the linker at the arm64 `.framework` slice so it can
+resolve symbols. The Makefile then manually stages the required runtime
+frameworks into the package under `/Library/Frameworks/` and normalizes rpaths
+for both jailbreak and sideloaded IPA layouts.
 
 If the link step fails with `library not found for -lffmpegkit` on Linux, verify
 that `Frameworks/ffmpegkit.xcframework/ios-arm64/ffmpegkit.framework/ffmpegkit`

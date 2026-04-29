@@ -107,7 +107,7 @@ jobs:
           done
           cyan -i youtube.ipa -o YTAfterglow_Beta.ipa -uwef $tweaks -n "${{ github.event.inputs.display_name }}" -b ${{ github.event.inputs.bundle_id }}
 
-      - name: Scrub signing artifacts and fix Substrate load paths
+      - name: Scrub, fix load paths, and sign FFmpegKit frameworks
         run: |
           mkdir -p ipa_contents
           unzip -q YTAfterglow_Beta.ipa -d ipa_contents
@@ -115,6 +115,13 @@ jobs:
           bash scripts/scrub_signing_artifacts.sh "$APP_DIR"
           bash scripts/fix_appex_bundle_ids.sh "$APP_DIR" "${{ github.event.inputs.bundle_id }}"
           bash scripts/fix_substrate_load_paths.sh "$APP_DIR"
+          for fw in ffmpegkit libavcodec libavformat libavutil libavdevice libavfilter libswresample libswscale; do
+            FW_DIR="$APP_DIR/Frameworks/${fw}.framework"
+            if [ -d "$FW_DIR" ]; then
+              codesign --sign - --force --timestamp=none "$FW_DIR"
+              echo "signed: ${fw}.framework"
+            fi
+          done
           cd ipa_contents
           zip -qr ../YTAfterglow_Beta_fixed.ipa Payload
           cd ..

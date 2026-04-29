@@ -58,9 +58,28 @@ static NSString *YTAGSizeString(long long bytes) {
     return [NSString stringWithFormat:@"%.1f MB", mb];
 }
 
-/// Pick the best audio format from a set of candidates sharing an itag.
-/// Prefers DRC variant when available (YTLite "Prefer stable volume" default-on).
-static YTAGFormat * _Nullable YTAGPreferDRC(NSArray<YTAGFormat *> *candidates) {
+static NSString *YTAGAudioTrackLabel(YTAGFormat * _Nullable audio) {
+    if (!audio) return nil;
+    if (audio.audioTrackName.length > 0) return audio.audioTrackName;
+    if (audio.audioLanguageCode.length > 0) return [audio.audioLanguageCode uppercaseString];
+    return nil;
+}
+
+static NSString *YTAGAudioTrackKey(YTAGFormat *audio) {
+    if (!audio) return @"none";
+    NSString *idPart = audio.audioTrackID.length > 0 ? audio.audioTrackID : nil;
+    NSString *langPart = audio.audioLanguageCode.length > 0 ? audio.audioLanguageCode : nil;
+    NSString *namePart = audio.audioTrackName.length > 0 ? audio.audioTrackName : nil;
+    if (idPart.length > 0) return idPart;
+    if (langPart.length > 0 || namePart.length > 0) {
+        return [NSString stringWithFormat:@"%@|%@", langPart ?: @"", namePart ?: @""];
+    }
+    return @"default-audio-track";
+}
+
+/// Pick the best audio format from a candidate set. Stable-volume variants are
+/// optional because some users prefer the untouched track.
+static YTAGFormat * _Nullable YTAGPreferAudioVariant(NSArray<YTAGFormat *> *candidates, BOOL preferDRC) {
     if (candidates.count == 0) return nil;
     YTAGFormat *drc = nil;
     YTAGFormat *nonDRC = nil;
@@ -68,7 +87,7 @@ static YTAGFormat * _Nullable YTAGPreferDRC(NSArray<YTAGFormat *> *candidates) {
         if (f.isDRC && drc == nil) drc = f;
         else if (!f.isDRC && nonDRC == nil) nonDRC = f;
     }
-    return drc ?: nonDRC ?: candidates.firstObject;
+    return preferDRC ? (drc ?: nonDRC ?: candidates.firstObject) : (nonDRC ?: drc ?: candidates.firstObject);
 }
 
 static NSArray<YTAGFormat *> *YTAGFormatsWithItag(NSArray<YTAGFormat *> *formats, NSInteger itag) {
@@ -80,16 +99,17 @@ static NSArray<YTAGFormat *> *YTAGFormatsWithItag(NSArray<YTAGFormat *> *formats
 }
 
 static YTAGFormat * _Nullable YTAGSelectAudioFormat(YTAGExtractionResult *result,
-                                                    YTAGAudioQualityPreference pref) {
+                                                    YTAGAudioQualityPreference pref,
+                                                    BOOL preferDRC) {
     NSArray<YTAGFormat *> *audios = result.audioFormats;
     if (audios.count == 0) return nil;
 
     if (pref == YTAGAudioQualityHigh) {
         NSArray<YTAGFormat *> *i141 = YTAGFormatsWithItag(audios, 141);
-        YTAGFormat *pick = YTAGPreferDRC(i141);
+        YTAGFormat *pick = YTAGPreferAudioVariant(i141, preferDRC);
         if (pick) return pick;
         NSArray<YTAGFormat *> *i140 = YTAGFormatsWithItag(audios, 140);
-        pick = YTAGPreferDRC(i140);
+        pick = YTAGPreferAudioVariant(i140, preferDRC);
         if (pick) return pick;
         // fallback: highest-bitrate audio
         NSArray<YTAGFormat *> *sorted = [audios sortedArrayUsingComparator:^NSComparisonResult(YTAGFormat *a, YTAGFormat *b) {
@@ -101,9 +121,28 @@ static YTAGFormat * _Nullable YTAGSelectAudioFormat(YTAGExtractionResult *result
 
     // Standard
     NSArray<YTAGFormat *> *i140 = YTAGFormatsWithItag(audios, 140);
-    YTAGFormat *pick = YTAGPreferDRC(i140);
+    YTAGFormat *pick = YTAGPreferAudioVariant(i140, preferDRC);
     if (pick) return pick;
     return audios.firstObject;
+}
+
+static YTAGFormat * _Nullable YTAGSelectAudioFromCandidates(NSArray<YTAGFormat *> *audios,
+                                                            YTAGAudioQualityPreference pref,
+                                                            BOOL preferDRC) {
+    if (audios.count == 0) return nil;
+    if (pref == YTAGAudioQualityHigh) {
+        YTAGFormat *pick = YTAGPreferAudioVariant(YTAGFormatsWithItag(audios, 141), preferDRC);
+        if (pick) return pick;
+    }
+    YTAGFormat *pick = YTAGPreferAudioVariant(YTAGFormatsWithItag(audios, 140), preferDRC);
+    if (pick) return pick;
+
+    NSArray<YTAGFormat *> *sorted = [audios sortedArrayUsingComparator:^NSComparisonResult(YTAGFormat *a, YTAGFormat *b) {
+        if (a.bitrate != b.bitrate) return a.bitrate > b.bitrate ? NSOrderedAscending : NSOrderedDescending;
+        if (a.itag != b.itag) return a.itag < b.itag ? NSOrderedAscending : NSOrderedDescending;
+        return NSOrderedSame;
+    }];
+    return YTAGPreferAudioVariant(sorted, preferDRC);
 }
 
 /// Comparator for "best video" within a candidate set at a single resolution bucket:
@@ -136,10 +175,18 @@ static NSComparisonResult YTAGCompareVideoBest(YTAGFormat *a, YTAGFormat *b) {
     long long size = self.estimatedSize;
     NSString *sizeStr = YTAGSizeString(size);
     if (_videoFormat == nil) {
+        NSString *track = YTAGAudioTrackLabel(_audioFormat);
+        if (track.length > 0) {
+            return [NSString stringWithFormat:@"%@ · Audio only · %@", track, sizeStr];
+        }
         return [NSString stringWithFormat:@"Audio only · %@", sizeStr];
     }
     NSString *label = _videoFormat.qualityLabel.length > 0 ? _videoFormat.qualityLabel : @"Video";
     NSString *codecShort = YTAGCodecShortName(_videoFormat.codec, _videoFormat.container);
+    NSString *audioTrack = YTAGAudioTrackLabel(_audioFormat);
+    if (audioTrack.length > 0) {
+        return [NSString stringWithFormat:@"%@ · %@ · %@ · %@", label, codecShort, audioTrack, sizeStr];
+    }
     return [NSString stringWithFormat:@"%@ · %@ · %@", label, codecShort, sizeStr];
 }
 
@@ -223,7 +270,7 @@ static NSComparisonResult YTAGCompareVideoBest(YTAGFormat *a, YTAGFormat *b) {
     if (result == nil) return nil;
     YTAGFormat *video = [self bestVideoForResult:result quality:quality codec:codec];
     if (video == nil) return nil;
-    YTAGFormat *audio = YTAGSelectAudioFormat(result, audioQuality);
+    YTAGFormat *audio = YTAGSelectAudioFormat(result, audioQuality, YES);
 
     YTAGFormatPair *pair = [[YTAGFormatPair alloc] init];
     pair.videoFormat = video;
@@ -241,8 +288,14 @@ static NSComparisonResult YTAGCompareVideoBest(YTAGFormat *a, YTAGFormat *b) {
 
 + (nullable YTAGFormatPair *)selectAudioPairFromResult:(YTAGExtractionResult *)result
                                           audioQuality:(YTAGAudioQualityPreference)audioQuality {
+    return [self selectAudioPairFromResult:result audioQuality:audioQuality preferDRC:YES];
+}
+
++ (nullable YTAGFormatPair *)selectAudioPairFromResult:(YTAGExtractionResult *)result
+                                          audioQuality:(YTAGAudioQualityPreference)audioQuality
+                                             preferDRC:(BOOL)preferDRC {
     if (result == nil) return nil;
-    YTAGFormat *audio = YTAGSelectAudioFormat(result, audioQuality);
+    YTAGFormat *audio = YTAGSelectAudioFormat(result, audioQuality, preferDRC);
     if (audio == nil) return nil;
     YTAGFormatPair *pair = [[YTAGFormatPair alloc] init];
     pair.videoFormat = nil;
@@ -256,10 +309,16 @@ static NSComparisonResult YTAGCompareVideoBest(YTAGFormat *a, YTAGFormat *b) {
 
 + (NSArray<YTAGFormatPair *> *)allOfferablePairsFromResult:(YTAGExtractionResult *)result
                                               audioQuality:(YTAGAudioQualityPreference)audioQuality {
+    return [self allOfferablePairsFromResult:result audioQuality:audioQuality preferDRC:YES];
+}
+
++ (NSArray<YTAGFormatPair *> *)allOfferablePairsFromResult:(YTAGExtractionResult *)result
+                                              audioQuality:(YTAGAudioQualityPreference)audioQuality
+                                                 preferDRC:(BOOL)preferDRC {
     NSMutableArray<YTAGFormatPair *> *out = [NSMutableArray array];
     if (result == nil) return out;
 
-    YTAGFormat *audio = YTAGSelectAudioFormat(result, audioQuality);
+    YTAGFormat *audio = YTAGSelectAudioFormat(result, audioQuality, preferDRC);
 
     // v40: reverted the H.264-only filter. That was based on a wrong premise —
     // I thought Photos refused VP9/AV1 due to codec policy. Actual fix is in
@@ -333,6 +392,47 @@ static NSComparisonResult YTAGCompareVideoBest(YTAGFormat *a, YTAGFormat *b) {
     YTAGLog(@"selector", @"offerable pairs: %lu rows (audio itag=%ld)",
             (unsigned long)out.count,
             (long)(audio ? audio.itag : -1));
+    return out;
+}
+
++ (NSArray<YTAGFormatPair *> *)allAudioPairsFromResult:(YTAGExtractionResult *)result
+                                          audioQuality:(YTAGAudioQualityPreference)audioQuality
+                                             preferDRC:(BOOL)preferDRC {
+    NSMutableArray<YTAGFormatPair *> *out = [NSMutableArray array];
+    if (!result) return out;
+
+    NSMutableDictionary<NSString *, NSMutableArray<YTAGFormat *> *> *groups = [NSMutableDictionary dictionary];
+    NSMutableArray<NSString *> *order = [NSMutableArray array];
+    for (YTAGFormat *audio in result.audioFormats) {
+        NSString *key = YTAGAudioTrackKey(audio);
+        NSMutableArray<YTAGFormat *> *bucket = groups[key];
+        if (!bucket) {
+            bucket = [NSMutableArray array];
+            groups[key] = bucket;
+            [order addObject:key];
+        }
+        [bucket addObject:audio];
+    }
+
+    for (NSString *key in order) {
+        YTAGFormat *audio = YTAGSelectAudioFromCandidates(groups[key], audioQuality, preferDRC);
+        if (!audio) continue;
+        YTAGFormatPair *pair = [[YTAGFormatPair alloc] init];
+        pair.videoFormat = nil;
+        pair.audioFormat = audio;
+        [out addObject:pair];
+    }
+
+    [out sortUsingComparator:^NSComparisonResult(YTAGFormatPair *a, YTAGFormatPair *b) {
+        BOOL ad = a.audioFormat.audioIsDefault;
+        BOOL bd = b.audioFormat.audioIsDefault;
+        if (ad != bd) return ad ? NSOrderedAscending : NSOrderedDescending;
+        NSString *al = YTAGAudioTrackLabel(a.audioFormat) ?: @"";
+        NSString *bl = YTAGAudioTrackLabel(b.audioFormat) ?: @"";
+        return [al localizedCaseInsensitiveCompare:bl];
+    }];
+
+    YTAGLog(@"selector", @"audio tracks: %lu rows", (unsigned long)out.count);
     return out;
 }
 

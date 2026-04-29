@@ -52,10 +52,23 @@ typedef NS_ENUM(NSInteger, YTAGAudioQualityPreference) {
 + (nullable YTAGFormatPair *)selectAudioPairFromResult:(YTAGExtractionResult *)result
                                           audioQuality:(YTAGAudioQualityPreference)audioQuality;
 
++ (nullable YTAGFormatPair *)selectAudioPairFromResult:(YTAGExtractionResult *)result
+                                          audioQuality:(YTAGAudioQualityPreference)audioQuality
+                                             preferDRC:(BOOL)preferDRC;
+
 /// Returns one pair per distinct quality-label in the result, suitable for a UIAlertController picker.
 /// Includes audio-only as the last entry (with a nil videoFormat).
 + (NSArray<YTAGFormatPair *> *)allOfferablePairsFromResult:(YTAGExtractionResult *)result
                                               audioQuality:(YTAGAudioQualityPreference)audioQuality;
+
++ (NSArray<YTAGFormatPair *> *)allOfferablePairsFromResult:(YTAGExtractionResult *)result
+                                              audioQuality:(YTAGAudioQualityPreference)audioQuality
+                                                 preferDRC:(BOOL)preferDRC;
+
+/// Returns one audio-only row per distinct YouTube audio track/language.
++ (NSArray<YTAGFormatPair *> *)allAudioPairsFromResult:(YTAGExtractionResult *)result
+                                          audioQuality:(YTAGAudioQualityPreference)audioQuality
+                                             preferDRC:(BOOL)preferDRC;
 
 @end
 

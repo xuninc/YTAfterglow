@@ -222,6 +222,14 @@ didFinishDownloadingToURL:(NSURL *)location {
         return;
     }
 
+    if (bodyBytes == 0) {
+        NSError *err = [NSError errorWithDomain:kYTAGStreamDownloaderErrorDomain
+                                           code:-4
+                                       userInfo:@{NSLocalizedDescriptionKey: @"Stream server returned an empty file"}];
+        [self fireCompletionWithURL:nil error:err];
+        return;
+    }
+
     NSURL *destination = self.destinationURL;
     NSError *moveError = nil;
 

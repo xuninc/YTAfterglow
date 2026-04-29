@@ -9,7 +9,7 @@
 //   - "🅿 Premium controls" pill + close X
 //   - Large video title + channel name
 //   - Playback row: restart / back-10 / play-pause / forward-10 / next
-//   - Tile row: Like / Save / Speed / Quality / Stable volume
+//   - Utility tiles: Download / Speed / Stable volume / Mute / Copy link / Lock
 
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
@@ -55,6 +55,10 @@ extern UIColor *themeColor(NSString *key);
 @property (nonatomic, strong) UIButton *playPauseButton;
 @property (nonatomic, strong) UIButton *speedTile;
 @property (nonatomic, strong) UIButton *stableVolumeTile;
+@property (nonatomic, strong) UIButton *muteTile;
+@property (nonatomic, strong) UIButton *lockTile;
+@property (nonatomic, assign) BOOL muted;
+@property (nonatomic, assign) BOOL locked;
 - (instancetype)initWithPlayerVC:(id)playerVC anchorView:(UIView *)anchorView;
 @end
 
@@ -138,6 +142,63 @@ static UIButton *YTAGPCMakeTile(NSString *symbolName,
         [txt.bottomAnchor      constraintLessThanOrEqualToAnchor:b.bottomAnchor],
     ]];
     return b;
+}
+
+static void YTAGPCUpdateTile(UIButton *tile, NSString *symbolName, NSString *label, BOOL selected) {
+    UIView *circle = [tile viewWithTag:1001];
+    UIImageView *iv = (UIImageView *)[tile viewWithTag:1002];
+    UILabel *txt = (UILabel *)[tile viewWithTag:1003];
+    tile.accessibilityLabel = label;
+    tile.selected = selected;
+    if ([iv isKindOfClass:[UIImageView class]]) {
+        iv.image = [YTAGPCSymbol(symbolName, 20.0, UIImageSymbolWeightRegular) imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    }
+    if ([txt isKindOfClass:[UILabel class]]) txt.text = label;
+    if ([circle isKindOfClass:[UIView class]]) {
+        if (selected) {
+            circle.backgroundColor = (themeColor(@"theme_accent") ?: [UIColor colorWithRed:0.95 green:0.25 blue:0.25 alpha:1.0]);
+        } else {
+            circle.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.12];
+        }
+    }
+}
+
+static id YTAGPCOverlayVCFromAnchor(UIView *anchor) {
+    Class controlsClass = NSClassFromString(@"YTMainAppControlsOverlayView");
+    UIView *view = anchor;
+    while (view) {
+        if (controlsClass && [view isKindOfClass:controlsClass]) {
+            id vc = nil;
+            @try { vc = [view valueForKey:@"_eventsDelegate"]; } @catch (id ex) {}
+            if (!vc) {
+                @try { vc = [view valueForKey:@"eventsDelegate"]; } @catch (id ex) {}
+            }
+            return vc;
+        }
+        view = view.superview;
+    }
+    return nil;
+}
+
+static UIViewController *YTAGPCTopPresenter(void) {
+    UIWindow *keyWindow = nil;
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+        if (scene.activationState != UISceneActivationStateForegroundActive) continue;
+        for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+            if (window.isKeyWindow) {
+                keyWindow = window;
+                break;
+            }
+        }
+        if (keyWindow) break;
+    }
+
+    UIViewController *top = keyWindow.rootViewController;
+    while (top.presentedViewController && !top.presentedViewController.isBeingDismissed) {
+        top = top.presentedViewController;
+    }
+    return top;
 }
 
 // --- Implementation ---
@@ -280,20 +341,62 @@ static UIButton *YTAGPCMakeTile(NSString *symbolName,
 
     // Tile row
     NSString *speedLabel = [NSString stringWithFormat:@"%@x", [self rateString:_currentPlaybackRate]];
-    UIButton *likeTile   = YTAGPCMakeTile(@"hand.thumbsup", @"Like", self, @selector(likeTapped));
-    UIButton *saveTile   = YTAGPCMakeTile(@"bookmark",      @"Save", self, @selector(saveTapped));
     UIButton *speedTile  = YTAGPCMakeTile(@"gauge",         speedLabel, self, @selector(speedTapped));
-    UIButton *qualTile   = YTAGPCMakeTile(@"slider.horizontal.3", @"Quality", self, @selector(qualityTapped));
     UIButton *stableTile = YTAGPCMakeTile(@"waveform",      @"Stable volume", self, @selector(stableVolumeTapped));
+    UIButton *downloadTile = YTAGPCMakeTile(@"arrow.down.to.line", @"Download", self, @selector(downloadTapped));
+    UIButton *muteTile = YTAGPCMakeTile(@"speaker.wave.2", @"Mute", self, @selector(muteTapped));
+    UIButton *copyTile = YTAGPCMakeTile(@"link", @"Copy link", self, @selector(copyLinkTapped));
+    UIButton *lockTile = YTAGPCMakeTile(@"lock.open", @"Lock", self, @selector(lockTapped));
     self.speedTile = speedTile;
     self.stableVolumeTile = stableTile;
+    self.muteTile = muteTile;
+    self.lockTile = lockTile;
 
-    UIStackView *tileRow = [[UIStackView alloc] initWithArrangedSubviews:@[likeTile, saveTile, speedTile, qualTile, stableTile]];
-    tileRow.translatesAutoresizingMaskIntoConstraints = NO;
-    tileRow.axis = UILayoutConstraintAxisHorizontal;
-    tileRow.distribution = UIStackViewDistributionFillEqually;
-    tileRow.alignment = UIStackViewAlignmentTop;
-    tileRow.spacing = 12.0;
+    @try {
+        id video = [self.playerVC respondsToSelector:@selector(activeVideo)]
+            ? ((id (*)(id, SEL))objc_msgSend)(self.playerVC, @selector(activeVideo))
+            : nil;
+        if ([video respondsToSelector:@selector(isMuted)]) {
+            self.muted = ((BOOL (*)(id, SEL))objc_msgSend)(video, @selector(isMuted));
+        }
+    } @catch (id ex) {}
+    id overlayVC = YTAGPCOverlayVCFromAnchor(self.anchorView);
+    @try {
+        if ([overlayVC respondsToSelector:@selector(lockModeStateEntityController)]) {
+            id lc = ((id (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeStateEntityController));
+            if ([lc respondsToSelector:@selector(isLockModeActive)]) {
+                self.locked = ((BOOL (*)(id, SEL))objc_msgSend)(lc, @selector(isLockModeActive));
+            } else {
+                NSNumber *v = [lc valueForKey:@"lockModeActive"];
+                if ([v respondsToSelector:@selector(boolValue)]) self.locked = v.boolValue;
+            }
+        }
+    } @catch (id ex) {}
+    YTAGPCUpdateTile(self.muteTile,
+                     self.muted ? @"speaker.slash" : @"speaker.wave.2",
+                     self.muted ? @"Unmute" : @"Mute",
+                     self.muted);
+    YTAGPCUpdateTile(self.lockTile,
+                     self.locked ? @"lock.fill" : @"lock.open",
+                     self.locked ? @"Unlock" : @"Lock",
+                     self.locked);
+
+    UIStackView *tileRow1 = [[UIStackView alloc] initWithArrangedSubviews:@[downloadTile, speedTile, stableTile]];
+    tileRow1.axis = UILayoutConstraintAxisHorizontal;
+    tileRow1.distribution = UIStackViewDistributionFillEqually;
+    tileRow1.alignment = UIStackViewAlignmentTop;
+    tileRow1.spacing = 12.0;
+
+    UIStackView *tileRow2 = [[UIStackView alloc] initWithArrangedSubviews:@[muteTile, copyTile, lockTile]];
+    tileRow2.axis = UILayoutConstraintAxisHorizontal;
+    tileRow2.distribution = UIStackViewDistributionFillEqually;
+    tileRow2.alignment = UIStackViewAlignmentTop;
+    tileRow2.spacing = 12.0;
+
+    UIStackView *tileGrid = [[UIStackView alloc] initWithArrangedSubviews:@[tileRow1, tileRow2]];
+    tileGrid.translatesAutoresizingMaskIntoConstraints = NO;
+    tileGrid.axis = UILayoutConstraintAxisVertical;
+    tileGrid.spacing = 18.0;
 
     // Parent
     [self.view addSubview:pill];
@@ -301,7 +404,7 @@ static UIButton *YTAGPCMakeTile(NSString *symbolName,
     [self.view addSubview:titleLabel];
     [self.view addSubview:channelLabel];
     [self.view addSubview:playbackRow];
-    [self.view addSubview:tileRow];
+    [self.view addSubview:tileGrid];
 
     UILayoutGuide *g = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
@@ -335,9 +438,10 @@ static UIButton *YTAGPCMakeTile(NSString *symbolName,
         [playbackRow.leadingAnchor  constraintEqualToAnchor:g.leadingAnchor constant:20],
         [playbackRow.trailingAnchor constraintEqualToAnchor:g.trailingAnchor constant:-20],
 
-        [tileRow.topAnchor      constraintEqualToAnchor:playbackRow.bottomAnchor constant:40],
-        [tileRow.leadingAnchor  constraintEqualToAnchor:g.leadingAnchor constant:12],
-        [tileRow.trailingAnchor constraintEqualToAnchor:g.trailingAnchor constant:-12],
+        [tileGrid.topAnchor      constraintEqualToAnchor:playbackRow.bottomAnchor constant:34],
+        [tileGrid.leadingAnchor  constraintEqualToAnchor:g.leadingAnchor constant:12],
+        [tileGrid.trailingAnchor constraintEqualToAnchor:g.trailingAnchor constant:-12],
+        [tileGrid.bottomAnchor constraintLessThanOrEqualToAnchor:g.bottomAnchor constant:-18],
     ]];
 }
 
@@ -432,24 +536,20 @@ static UIButton *YTAGPCMakeTile(NSString *symbolName,
     }
 }
 
-- (void)likeTapped {
-    [self showHUD:@"Like — available in a future build"];
-}
-
-- (void)saveTapped {
+- (void)downloadTapped {
     // Dismiss this sheet, then surface the existing YTAG download action sheet.
     UIView *anchor = self.anchorView;
     [self dismissViewControllerAnimated:YES completion:^{
-        if (anchor) {
+        if ([anchor isKindOfClass:[UIButton class]]) {
             // Trigger download flow via a synthetic tap on the anchor we remembered.
             [YTAGDownloadTrigger handleDownloadTap:(UIButton *)anchor];
         }
     }];
-    YTAGLog(@"premium-ctrl", @"save tapped → download");
+    YTAGLog(@"premium-ctrl", @"download tapped");
 }
 
 - (void)speedTapped {
-    NSArray *rates = @[@0.25, @0.5, @0.75, @1.0, @1.25, @1.5, @1.75, @2.0];
+    NSArray *rates = @[@0.25, @0.5, @0.75, @1.0, @1.25, @1.5, @1.75, @2.0, @2.25, @2.5, @3.0, @3.5, @4.0, @4.5, @5.0];
     UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"Playback speed"
                                                                 message:nil
                                                          preferredStyle:UIAlertControllerStyleActionSheet];
@@ -473,10 +573,6 @@ static UIButton *YTAGPCMakeTile(NSString *symbolName,
     [self presentViewController:ac animated:YES completion:nil];
 }
 
-- (void)qualityTapped {
-    [self showHUD:@"Quality picker — use YouTube's ⚙️ menu for now"];
-}
-
 - (void)stableVolumeTapped {
     id pvc = self.playerVC;
     BOOL newVal = !self.stableVolumeEnabled;
@@ -486,6 +582,70 @@ static UIButton *YTAGPCMakeTile(NSString *symbolName,
     self.stableVolumeEnabled = newVal;
     [self refreshStableVolumeTile];
     YTAGLog(@"premium-ctrl", @"stable volume -> %@", newVal ? @"ON" : @"OFF");
+}
+
+- (void)muteTapped {
+    id pvc = self.playerVC;
+    id video = nil;
+    if ([pvc respondsToSelector:@selector(activeVideo)]) {
+        video = ((id (*)(id, SEL))objc_msgSend)(pvc, @selector(activeVideo));
+    }
+    if (![video respondsToSelector:@selector(setMuted:)]) {
+        [self showHUD:@"Mute is unavailable right now"];
+        return;
+    }
+    BOOL newMuted = !self.muted;
+    [[NSUserDefaults standardUserDefaults] setBool:newMuted forKey:@"YouMuteKeepMuted"];
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(video, @selector(setMuted:), newMuted);
+    self.muted = newMuted;
+    YTAGPCUpdateTile(self.muteTile,
+                     newMuted ? @"speaker.slash" : @"speaker.wave.2",
+                     newMuted ? @"Unmute" : @"Mute",
+                     newMuted);
+    YTAGLog(@"premium-ctrl", @"mute -> %@", newMuted ? @"ON" : @"OFF");
+}
+
+- (void)copyLinkTapped {
+    NSString *videoID = nil;
+    id pvc = self.playerVC;
+    if ([pvc respondsToSelector:@selector(contentVideoID)]) {
+        videoID = [pvc performSelector:@selector(contentVideoID)];
+    }
+    if (videoID.length == 0) {
+        [self showHUD:@"No video link available"];
+        return;
+    }
+    [UIPasteboard generalPasteboard].string = [NSString stringWithFormat:@"https://youtu.be/%@", videoID];
+    [self showHUD:@"Copied link"];
+    YTAGLog(@"premium-ctrl", @"copied link %@", videoID);
+}
+
+- (void)lockTapped {
+    id overlayVC = YTAGPCOverlayVCFromAnchor(self.anchorView);
+    if (![overlayVC respondsToSelector:@selector(lockModeStateEntityController)]) {
+        [self showHUD:@"Lock is unavailable right now"];
+        return;
+    }
+    id lockCtl = ((id (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeStateEntityController));
+    if (!lockCtl || ![lockCtl respondsToSelector:@selector(setLockModeActive:)]) {
+        [self showHUD:@"Lock is unavailable right now"];
+        return;
+    }
+
+    BOOL newLocked = !self.locked;
+    if (newLocked && [overlayVC respondsToSelector:@selector(lockModeDidRequestShowFullscreen)]) {
+        ((void (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeDidRequestShowFullscreen));
+        lockCtl = ((id (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeStateEntityController));
+    }
+    if ([lockCtl respondsToSelector:@selector(setLockModeActive:)]) {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(lockCtl, @selector(setLockModeActive:), newLocked);
+    }
+    self.locked = newLocked;
+    YTAGPCUpdateTile(self.lockTile,
+                     newLocked ? @"lock.fill" : @"lock.open",
+                     newLocked ? @"Unlock" : @"Lock",
+                     newLocked);
+    YTAGLog(@"premium-ctrl", @"lock -> %@", newLocked ? @"ON" : @"OFF");
 }
 
 - (void)showHUD:(NSString *)message {
@@ -523,6 +683,7 @@ static UIButton *YTAGPCMakeTile(NSString *symbolName,
     while (presenter.presentingViewController == nil && presenter.parentViewController) {
         presenter = presenter.parentViewController;
     }
+    if (!presenter) presenter = YTAGPCTopPresenter();
     if (!presenter) {
         YTAGLog(@"premium-ctrl", @"no presenting VC from sender");
         return;

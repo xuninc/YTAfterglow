@@ -9,6 +9,12 @@ NSString *const YTAGLogDidAppendNotification = @"YTAGLogDidAppend";
 
 static NSString *const kSuiteName = @"afterglow.vault";
 static NSString *const kEnabledKey = @"debugLogEnabled";
+static NSString *const kFirehoseKey = @"debugLogFirehose";
+static NSString *const kDownloadsKey = @"debugLogDownloads";
+static NSString *const kPlayerUIKey = @"debugLogPlayerUI";
+static NSString *const kPremiumControlsKey = @"debugLogPremiumControls";
+static NSString *const kPiPKey = @"debugLogPiP";
+static NSString *const kProbesKey = @"debugLogProbes";
 static const NSUInteger kMaxRingEntries = 200;
 static const off_t kRollBytes = 1024 * 1024;
 
@@ -50,7 +56,39 @@ static NSDateFormatter *time_formatter(void) {
 
 BOOL YTAGLogEnabled(void) {
     NSUserDefaults *d = [[NSUserDefaults alloc] initWithSuiteName:kSuiteName];
-    return [d boolForKey:kEnabledKey];
+    return [d boolForKey:kEnabledKey] || [d boolForKey:kFirehoseKey];
+}
+
+static BOOL YTAGLogCategoryMatches(NSString *category, NSArray<NSString *> *prefixes) {
+    for (NSString *prefix in prefixes) {
+        if ([category hasPrefix:prefix]) return YES;
+    }
+    return NO;
+}
+
+static BOOL YTAGLogCategoryEnabled(NSString *category) {
+    NSUserDefaults *d = [[NSUserDefaults alloc] initWithSuiteName:kSuiteName];
+    if ([d boolForKey:kFirehoseKey]) return YES;
+
+    NSString *cat = category ?: @"";
+
+    if (YTAGLogCategoryMatches(cat, @[@"dl-", @"downloader", @"extractor", @"selector", @"ffmpeg", @"action-sheet"])) {
+        return [d boolForKey:kDownloadsKey];
+    }
+    if (YTAGLogCategoryMatches(cat, @[@"overlay", @"shorts-ui", @"vc-resolve", @"fullscreen"])) {
+        return [d boolForKey:kPlayerUIKey];
+    }
+    if ([cat hasPrefix:@"premium-ctrl"]) {
+        return [d boolForKey:kPremiumControlsKey];
+    }
+    if ([cat hasPrefix:@"pip"]) {
+        return [d boolForKey:kPiPKey];
+    }
+    if (YTAGLogCategoryMatches(cat, @[@"offline-", @"ctor"])) {
+        return [d boolForKey:kProbesKey];
+    }
+
+    return YES;
 }
 
 NSString *YTAGLogFilePath(void) { return log_file_path(); }
@@ -94,6 +132,7 @@ static void ytag_log_emit(NSString *category, NSString *message) {
 
 void YTAGLogWrite(NSString *category, NSString *message) {
     if (!YTAGLogEnabled()) return;
+    if (!YTAGLogCategoryEnabled(category)) return;
     ytag_log_emit(category, message);
 }
 

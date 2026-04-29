@@ -25,17 +25,16 @@ $(TWEAK_NAME)_FILES = $(wildcard *.x Utils/*.m UI/*.m)
 # The xcframework is NOT checked into git (~40 MB for the "min" variant, ~500 MB+ for
 # the full "ios" variant). See Frameworks/README.md for drop-in instructions.
 #
-# When the xcframework is present Theos links against it and embeds it in the .dylib's
-# bundle (cyan then propagates it into the final IPA's Frameworks/). When it's absent
-# the build still compiles — FFMpegHelper.m uses __has_include to fall back to stub
-# forward declarations — but the mux will crash at runtime if actually invoked.
+# The fetch target below runs before compilation, so wire the flags unconditionally:
+# a clean checkout should either fetch ffmpeg-kit and build correctly, or fail loudly
+# instead of producing a download button whose mux path crashes at runtime.
 FFMPEGKIT_XCFRAMEWORK := $(PWD)/Frameworks/ffmpegkit.xcframework
-ifneq ($(wildcard $(FFMPEGKIT_XCFRAMEWORK)/Info.plist),)
-# xcframework present — wire it in for both linking (Theos+Xcode on macOS) and
-# direct slice lookup (Theos+L1ghtmann on Linux, which doesn't grok xcframeworks).
+FFMPEGKIT_RUNTIME_FRAMEWORKS := ffmpegkit libavcodec libavformat libavutil libavdevice libavfilter libswresample libswscale
+
+# Wire direct slice lookup for Theos/L1ghtmann, which does not fully understand
+# xcframework wrappers. The runtime frameworks are manually staged in after-stage.
+$(TWEAK_NAME)_CFLAGS += -F$(FFMPEGKIT_XCFRAMEWORK)/ios-arm64
 $(TWEAK_NAME)_LDFLAGS += -F$(PWD)/Frameworks -F$(FFMPEGKIT_XCFRAMEWORK)/ios-arm64 -framework ffmpegkit
-$(TWEAK_NAME)_EMBED_FRAMEWORKS += Frameworks/ffmpegkit.xcframework
-endif
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
@@ -77,7 +76,43 @@ after-stage::
 	      /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate \
 	      @rpath/CydiaSubstrate.framework/CydiaSubstrate \
 	      "$$DYLIB" 2>/dev/null || true; \
+	    $(INSTALL_NAME_TOOL) -add_rpath @loader_path "$$DYLIB" 2>/dev/null || true; \
+	    $(INSTALL_NAME_TOOL) -add_rpath /Library/Frameworks "$$DYLIB" 2>/dev/null || true; \
+	    if command -v $(TARGET_CODESIGN) >/dev/null 2>&1; then \
+	      CODESIGN_ALLOCATE="$(TARGET_CODESIGN_ALLOCATE)" $(TARGET_CODESIGN) $(TARGET_CODESIGN_FLAGS) "$$DYLIB" >/dev/null 2>&1 || true; \
+	    fi; \
 	  fi; \
 	else \
 	  echo "  install_name_tool not found — skipping Substrate path rewrite (will need post-cyan fix)"; \
+	fi
+
+after-stage::
+	@FW_DST="$(THEOS_STAGING_DIR)/Library/Frameworks"; \
+	mkdir -p "$$FW_DST"; \
+	for fw in $(FFMPEGKIT_RUNTIME_FRAMEWORKS); do \
+	  src="$(PWD)/Frameworks/$$fw.xcframework/ios-arm64/$$fw.framework"; \
+	  dst="$$FW_DST/$$fw.framework"; \
+	  if [ ! -d "$$src" ]; then \
+	    echo "  ERROR: missing ffmpeg-kit runtime framework: $$src"; \
+	    exit 1; \
+	  fi; \
+	  rm -rf "$$dst"; \
+	  cp -R "$$src" "$$dst"; \
+	  find "$$dst" -name .DS_Store -delete; \
+	  echo "  Staged $$fw.framework"; \
+	done; \
+	if [ -n "$(INSTALL_NAME_TOOL)" ]; then \
+	  for fw in $(FFMPEGKIT_RUNTIME_FRAMEWORKS); do \
+	    bin="$$FW_DST/$$fw.framework/$$fw"; \
+	    if [ -f "$$bin" ]; then \
+	      $(INSTALL_NAME_TOOL) -id "@rpath/$$fw.framework/$$fw" "$$bin" 2>/dev/null || true; \
+	      $(INSTALL_NAME_TOOL) -add_rpath @loader_path/.. "$$bin" 2>/dev/null || true; \
+	      $(INSTALL_NAME_TOOL) -add_rpath /Library/Frameworks "$$bin" 2>/dev/null || true; \
+	      if command -v $(TARGET_CODESIGN) >/dev/null 2>&1; then \
+	        CODESIGN_ALLOCATE="$(TARGET_CODESIGN_ALLOCATE)" $(TARGET_CODESIGN) $(TARGET_CODESIGN_FLAGS) "$$bin" >/dev/null 2>&1 || true; \
+	      fi; \
+	    fi; \
+	  done; \
+	else \
+	  echo "  install_name_tool not found — ffmpeg-kit framework rpaths were not normalized"; \
 	fi

@@ -185,6 +185,169 @@ static long long YTAGSafeLongLongForKey(id obj, NSString *key) {
     return 0;
 }
 
+static id YTAGLooseValueForKey(id obj, NSString *key) {
+    if (!obj || !key) return nil;
+    if ([obj isKindOfClass:[NSDictionary class]]) return ((NSDictionary *)obj)[key];
+    return YTAGSafeValueForKey(obj, key);
+}
+
+static NSString *YTAGLooseStringForKey(id obj, NSString *key) {
+    id v = YTAGLooseValueForKey(obj, key);
+    NSString *s = YTAGStringValue(v);
+    if (s) return s;
+    if ([v isKindOfClass:[NSURL class]]) return [(NSURL *)v absoluteString];
+    return nil;
+}
+
+static BOOL YTAGLooseBoolForKey(id obj, NSString *key) {
+    return YTAGBoolValue(YTAGLooseValueForKey(obj, key));
+}
+
+static NSArray *YTAGLooseArrayForKey(id obj, NSString *key) {
+    id v = YTAGLooseValueForKey(obj, key);
+    return [v isKindOfClass:[NSArray class]] ? v : nil;
+}
+
+static NSString *YTAGTextFromObject(id obj) {
+    if (!obj || obj == [NSNull null]) return nil;
+    NSString *direct = YTAGStringValue(obj);
+    if (direct.length > 0) return direct;
+
+    NSString *simple = YTAGLooseStringForKey(obj, @"simpleText");
+    if (simple.length > 0) return simple;
+
+    NSArray *runs = YTAGLooseArrayForKey(obj, @"runsArray") ?: YTAGLooseArrayForKey(obj, @"runs");
+    if (runs.count > 0) {
+        NSMutableString *text = [NSMutableString string];
+        for (id run in runs) {
+            NSString *piece = YTAGLooseStringForKey(run, @"text");
+            if (piece.length > 0) [text appendString:piece];
+        }
+        if (text.length > 0) return text;
+    }
+    return nil;
+}
+
+static NSString *YTAGXTagString(NSString * _Nullable urlString) {
+    if (urlString.length == 0) return nil;
+    NSURLComponents *comps = [NSURLComponents componentsWithString:urlString];
+    for (NSURLQueryItem *item in comps.queryItems) {
+        if ([item.name isEqualToString:@"xtags"] && item.value.length > 0) {
+            return item.value;
+        }
+    }
+    NSRange range = [urlString rangeOfString:@"xtags="];
+    if (range.location == NSNotFound) return nil;
+    NSString *tail = [urlString substringFromIndex:NSMaxRange(range)];
+    NSRange amp = [tail rangeOfString:@"&"];
+    if (amp.location != NSNotFound) tail = [tail substringToIndex:amp.location];
+    return [tail stringByRemovingPercentEncoding] ?: tail;
+}
+
+static NSString *YTAGXTagValue(NSString * _Nullable urlString, NSString *key) {
+    NSString *xtags = YTAGXTagString(urlString);
+    if (xtags.length == 0 || key.length == 0) return nil;
+    for (NSString *part in [xtags componentsSeparatedByString:@":"]) {
+        NSRange eq = [part rangeOfString:@"="];
+        if (eq.location == NSNotFound) continue;
+        NSString *name = [part substringToIndex:eq.location];
+        if ([name isEqualToString:key]) {
+            return [part substringFromIndex:NSMaxRange(eq)];
+        }
+    }
+    return nil;
+}
+
+static BOOL YTAGXTagsContain(NSString * _Nullable urlString, NSString *needle) {
+    NSString *xtags = YTAGXTagString(urlString);
+    if (xtags.length == 0 || needle.length == 0) return NO;
+    return [xtags rangeOfString:needle options:NSCaseInsensitiveSearch].location != NSNotFound;
+}
+
+static NSString *YTAGCaptionURLByAddingTlang(NSString *baseURL, NSString *languageCode) {
+    if (baseURL.length == 0 || languageCode.length == 0) return baseURL ?: @"";
+    NSURLComponents *components = [NSURLComponents componentsWithString:baseURL];
+    if (!components) {
+        NSString *separator = [baseURL rangeOfString:@"?"].location != NSNotFound ? @"&" : @"?";
+        return [NSString stringWithFormat:@"%@%@tlang=%@", baseURL, separator, languageCode];
+    }
+
+    NSMutableArray<NSURLQueryItem *> *items = [components.queryItems mutableCopy] ?: [NSMutableArray array];
+    NSIndexSet *existing = [items indexesOfObjectsPassingTest:^BOOL(NSURLQueryItem *item, NSUInteger idx, BOOL *stop) {
+        return [item.name isEqualToString:@"tlang"];
+    }];
+    if (existing.count > 0) [items removeObjectsAtIndexes:existing];
+    [items addObject:[NSURLQueryItem queryItemWithName:@"tlang" value:languageCode]];
+    components.queryItems = items;
+    return components.URL.absoluteString ?: baseURL;
+}
+
+static void YTAGApplyAudioTrackMetadata(YTAGFormat *fmt, id audioTrack) {
+    if (!fmt || !fmt.isAudioOnly) return;
+
+    fmt.audioTrackID = YTAGLooseStringForKey(audioTrack, @"id") ?: YTAGLooseStringForKey(audioTrack, @"audioTrackId");
+    fmt.audioTrackName = YTAGTextFromObject(YTAGLooseValueForKey(audioTrack, @"displayName"))
+        ?: YTAGTextFromObject(YTAGLooseValueForKey(audioTrack, @"name"));
+    fmt.audioLanguageCode = YTAGLooseStringForKey(audioTrack, @"languageCode")
+        ?: YTAGLooseStringForKey(audioTrack, @"language")
+        ?: YTAGXTagValue(fmt.url, @"lang");
+    fmt.audioIsDefault = YTAGLooseBoolForKey(audioTrack, @"audioIsDefault")
+        || YTAGLooseBoolForKey(audioTrack, @"isDefault");
+    fmt.audioIsDubbed = YTAGLooseBoolForKey(audioTrack, @"audioIsDubbed")
+        || YTAGLooseBoolForKey(audioTrack, @"isDubbed")
+        || YTAGXTagsContain(fmt.url, @"dubbed");
+
+    if (fmt.audioTrackName.length == 0 && fmt.audioLanguageCode.length > 0) {
+        fmt.audioTrackName = [fmt.audioLanguageCode uppercaseString];
+    }
+}
+
+static void YTAGAppendTranslatedCaptionTracks(NSMutableArray<YTAGCaptionTrack *> *captions, id translationLanguages) {
+    if (captions.count == 0) return;
+
+    YTAGCaptionTrack *source = nil;
+    for (YTAGCaptionTrack *track in captions) {
+        if (!track.isTranslated && !track.isAutoGenerated) { source = track; break; }
+    }
+    if (!source) {
+        for (YTAGCaptionTrack *track in captions) {
+            if (!track.isTranslated) { source = track; break; }
+        }
+    }
+    if (!source.baseURL.length) return;
+
+    NSArray *languages = [translationLanguages isKindOfClass:[NSArray class]] ? translationLanguages : nil;
+    if (languages.count == 0) return;
+
+    NSMutableSet<NSString *> *seen = [NSMutableSet set];
+    for (YTAGCaptionTrack *track in captions) {
+        NSString *key = [NSString stringWithFormat:@"%@|%d|%d",
+                         track.languageCode ?: @"",
+                         track.isAutoGenerated,
+                         track.isTranslated];
+        [seen addObject:key];
+    }
+
+    for (id language in languages) {
+        NSString *code = YTAGLooseStringForKey(language, @"languageCode");
+        if (code.length == 0 || [code isEqualToString:source.languageCode]) continue;
+        NSString *key = [NSString stringWithFormat:@"%@|0|1", code];
+        if ([seen containsObject:key]) continue;
+
+        YTAGCaptionTrack *translated = [[YTAGCaptionTrack alloc] init];
+        translated.baseURL = YTAGCaptionURLByAddingTlang(source.baseURL, code);
+        translated.languageCode = code;
+        NSString *name = YTAGTextFromObject(YTAGLooseValueForKey(language, @"languageName"))
+            ?: YTAGTextFromObject(YTAGLooseValueForKey(language, @"name"))
+            ?: [code uppercaseString];
+        translated.displayName = [NSString stringWithFormat:@"%@ (translated)", name];
+        translated.isTranslated = YES;
+        translated.sourceLanguageCode = source.languageCode;
+        [captions addObject:translated];
+        [seen addObject:key];
+    }
+}
+
 #pragma mark - YTAGURLExtractor
 
 @implementation YTAGURLExtractor
@@ -335,6 +498,7 @@ static long long YTAGSafeLongLongForKey(id obj, NSString *key) {
         fmt.isDRC = YTAGDetectDRCFromURL(fmt.url);
         fmt.isVideoOnly = [fmt.mimeType hasPrefix:@"video/"];
         fmt.isAudioOnly = [fmt.mimeType hasPrefix:@"audio/"];
+        YTAGApplyAudioTrackMetadata(fmt, YTAGSafeValueForKey(f, @"audioTrack"));
 
         if (fmt.url.length > 0) [formats addObject:fmt];
     }
@@ -351,16 +515,21 @@ static long long YTAGSafeLongLongForKey(id obj, NSString *key) {
     if ([tracksArray isKindOfClass:[NSArray class]]) {
         for (id t in (NSArray *)tracksArray) {
             YTAGCaptionTrack *track = [[YTAGCaptionTrack alloc] init];
-            track.baseURL = YTAGSafeStringValueForKey(t, @"baseUrl") ?: @"";
+            track.baseURL = YTAGSafeStringValueForKey(t, @"baseUrl") ?: YTAGSafeStringValueForKey(t, @"baseURL") ?: @"";
             track.languageCode = YTAGSafeStringValueForKey(t, @"languageCode") ?: @"";
             // Display name may be under .name.simpleText or .name.runs[0].text.
             id name = YTAGSafeValueForKey(t, @"name");
-            track.displayName = YTAGSafeStringValueForKey(name, @"simpleText");
+            track.displayName = YTAGTextFromObject(name);
             NSString *kind = YTAGSafeStringValueForKey(t, @"kind");
             track.isAutoGenerated = [kind isEqualToString:@"asr"];
             if (track.baseURL.length > 0) [captions addObject:track];
         }
     }
+    id translationLanguages = YTAGSafeValueForKey(tracklistRenderer, @"translationLanguagesArray");
+    if (![translationLanguages isKindOfClass:[NSArray class]]) {
+        translationLanguages = YTAGSafeValueForKey(tracklistRenderer, @"translationLanguages");
+    }
+    YTAGAppendTranslatedCaptionTracks(captions, translationLanguages);
     result.captionTracks = [captions copy];
 
     YTAGLog(@"extractor", @"live-read: videoID=%@ title=%@ formats=%lu captions=%lu",
@@ -523,13 +692,15 @@ static long long YTAGSafeLongLongForKey(id obj, NSString *key) {
                     track.languageCode = YTAGStringValue(t[@"languageCode"]) ?: @"";
                     NSDictionary *nameDict = t[@"name"];
                     if ([nameDict isKindOfClass:[NSDictionary class]]) {
-                        track.displayName = YTAGStringValue(nameDict[@"simpleText"]);
+                        track.displayName = YTAGTextFromObject(nameDict);
                     }
                     NSString *kind = YTAGStringValue(t[@"kind"]);
                     track.isAutoGenerated = [kind isEqualToString:@"asr"];
                     if (track.baseURL.length > 0) [captionTracks addObject:track];
                 }
             }
+            id translationList = [tracklist isKindOfClass:[NSDictionary class]] ? tracklist[@"translationLanguages"] : nil;
+            YTAGAppendTranslatedCaptionTracks(captionTracks, translationList);
         }
         result.captionTracks = [captionTracks copy];
 
@@ -571,6 +742,7 @@ static long long YTAGSafeLongLongForKey(id obj, NSString *key) {
 
                     fmt.isVideoOnly = [fmt.mimeType hasPrefix:@"video/"];
                     fmt.isAudioOnly = [fmt.mimeType hasPrefix:@"audio/"];
+                    YTAGApplyAudioTrackMetadata(fmt, f[@"audioTrack"]);
 
                     [formats addObject:fmt];
                 }

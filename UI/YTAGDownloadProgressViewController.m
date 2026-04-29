@@ -36,9 +36,19 @@
 
     self.modalPresentationStyle = UIModalPresentationPageSheet;
     self.view.backgroundColor = [UIColor systemBackgroundColor];
+    self.preferredContentSize = CGSizeMake(390.0, 520.0);
 
     if (self.presentationController) {
         self.presentationController.delegate = self;
+    }
+    if (@available(iOS 15.0, *)) {
+        UISheetPresentationController *sheet = self.sheetPresentationController;
+        sheet.detents = @[
+            UISheetPresentationControllerDetent.mediumDetent,
+            UISheetPresentationControllerDetent.largeDetent
+        ];
+        sheet.prefersGrabberVisible = YES;
+        sheet.preferredCornerRadius = 18.0;
     }
 
     [self buildHierarchy];
@@ -269,6 +279,10 @@
             self.phaseLabel.text = @"Done";
             self.phaseLabel.textColor = [UIColor labelColor];
             break;
+        case YTAGDownloadPhaseFinalizing:
+            self.phaseLabel.text = @"Finalizing…";
+            self.phaseLabel.textColor = [UIColor labelColor];
+            break;
         case YTAGDownloadPhaseError:
             self.phaseLabel.text = @"Error";
             self.phaseLabel.textColor = [UIColor systemRedColor];
@@ -302,6 +316,9 @@
             } else {
                 showSpinner = YES;
             }
+            break;
+        case YTAGDownloadPhaseFinalizing:
+            showSpinner = YES;
             break;
         case YTAGDownloadPhaseFinished:
             showCheckmark = YES;
@@ -337,6 +354,8 @@
     } else if (self.phase == YTAGDownloadPhaseFinished ||
                self.phase == YTAGDownloadPhaseCancelled) {
         // Button irrelevant — hide it while we auto-dismiss.
+        self.cancelButton.hidden = YES;
+    } else if (self.phase == YTAGDownloadPhaseFinalizing) {
         self.cancelButton.hidden = YES;
     } else {
         // Active phase — respect onCancel presence.
@@ -378,7 +397,8 @@
         return;
     }
     if (self.phase == YTAGDownloadPhaseFinished ||
-        self.phase == YTAGDownloadPhaseCancelled) {
+        self.phase == YTAGDownloadPhaseCancelled ||
+        self.phase == YTAGDownloadPhaseFinalizing) {
         self.cancelButton.hidden = YES;
         return;
     }

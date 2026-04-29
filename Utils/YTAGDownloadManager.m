@@ -11,6 +11,32 @@
 
 static NSString *const kYTAGDownloadManagerErrorDomain = @"YTAGDownloadManager";
 
+static UIViewController *YTAGDownloadTopPresenter(UIViewController *preferred) {
+    UIWindow *keyWindow = nil;
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:[UIWindowScene class]]) continue;
+        if (scene.activationState != UISceneActivationStateForegroundActive) continue;
+        for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+            if (window.isKeyWindow) {
+                keyWindow = window;
+                break;
+            }
+        }
+        if (keyWindow) break;
+    }
+
+    UIViewController *top = keyWindow.rootViewController ?: preferred;
+    while (top.presentedViewController && !top.presentedViewController.isBeingDismissed) {
+        top = top.presentedViewController;
+    }
+    return top ?: preferred;
+}
+
+static BOOL YTAGDownloadSameFileURL(NSURL *a, NSURL *b) {
+    if (!a || !b) return NO;
+    return [a.path isEqualToString:b.path];
+}
+
 #pragma mark - YTAGDownloadRequest
 
 @implementation YTAGDownloadRequest
@@ -89,9 +115,15 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
             request.videoID ?: @"<nil>",
             NSStringFromClass([presentingVC class]) ?: @"<nil>",
             (request.pair != nil));
-    NSParameterAssert(request != nil);
-    NSParameterAssert(request.videoID.length > 0);
-    NSParameterAssert(presentingVC != nil);
+    if (!request || request.videoID.length == 0 || !presentingVC) {
+        NSError *err = [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
+                                           code:-100
+                                       userInfo:@{NSLocalizedDescriptionKey: @"Download could not start because the current video or presenter was unavailable."}];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (completion) completion(nil, err);
+        });
+        return [NSObject new];
+    }
 
     // MVP: reject concurrent downloads.
     if (self.activeSession != nil) {
@@ -170,7 +202,7 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 - (void)presentProgressForSession:(YTAGDLSession *)session {
     YTAGLog(@"dl-mgr", @"[bc] presentProgressForSession: ENTER vid=%@", session.request.videoID);
     YTAGDownloadProgressViewController *vc = [[YTAGDownloadProgressViewController alloc] init];
-    vc.modalPresentationStyle = UIModalPresentationFullScreen;
+    vc.modalPresentationStyle = UIModalPresentationPageSheet;
     vc.titleText = session.request.titleOverride.length > 0 ? session.request.titleOverride : @"Downloading…";
     vc.thumbnailImage = nil;
     vc.phase = YTAGDownloadPhaseDownloadingVideo;
@@ -201,6 +233,8 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
     };
 
     session.progressVC = vc;
+    UIViewController *host = YTAGDownloadTopPresenter(session.presentingVC);
+    session.presentingVC = host ?: session.presentingVC;
     YTAGLog(@"dl-mgr", @"[bc] presentProgressForSession: presenting progressVC on %@",
             NSStringFromClass([session.presentingVC class]));
     [session.presentingVC presentViewController:vc animated:YES completion:^{
@@ -294,11 +328,19 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
     BOOL audioOnly = (vRemote == nil && aRemote != nil);
     YTAGLog(@"dl-mgr", @"[bc] beginDownloads: vRemote=%@ aRemote=%@ audioOnly=%d",
             vRemote ? @"ok" : @"<nil>", aRemote ? @"ok" : @"<nil>", audioOnly);
-    // Must have at least one stream. Both-nil or video-only isn't valid for download.
+    // Must have a usable stream shape. Video-only is not enough for an MP4 download
+    // because the result would be silent; keep that failure explicit and early.
     if (!aRemote && !vRemote) {
         NSError *err = [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
                                            code:-4
                                        userInfo:@{NSLocalizedDescriptionKey: @"Invalid stream URLs"}];
+        [self failSession:session withError:err];
+        return;
+    }
+    if (vRemote && !aRemote) {
+        NSError *err = [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
+                                           code:-41
+                                       userInfo:@{NSLocalizedDescriptionKey: @"No downloadable audio track was available for this video."}];
         [self failSession:session withError:err];
         return;
     }
@@ -570,19 +612,9 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
         [self removeURLIfExists:session.videoLocalURL];
     }
 
-    // Do NOT flip progressVC to Finished here — that schedules a 0.75s auto-
-    // dismiss that races with the Photos permission prompt / Share sheet /
-    // post-action alert, yanking them off-screen before the user can tap.
-    // Corey hit this 2026-04-24: "the menu closed before i was able to do
-    // anything like authorize access to the photos app".
-    // The post-action handler (saveToPhotosForSession / shareForSession /
-    // askPostActionForSession) will set Finished + dismiss explicitly once
-    // its work is complete.
     session.progressVC.progressFraction = 1.0;
-
-    // Flip the progress VC to Finished before dismissing.
-    session.progressVC.phase = YTAGDownloadPhaseFinished;
-    session.progressVC.progressFraction = 1.0;
+    session.progressVC.phase = YTAGDownloadPhaseFinalizing;
+    session.progressVC.subtitleText = @"Preparing file…";
 
     YTAGLog(@"dl-mgr", @"[%@] delivering (post=%ld) → %@", session.request.videoID, (long)session.request.postAction, finalURL.lastPathComponent);
 
@@ -652,6 +684,8 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
     NSURL *fileURL = session.finalOutputURL;
     __weak typeof(self) weakSelf = self;
     __weak YTAGDLSession *weakSession = session;
+    session.progressVC.phase = YTAGDownloadPhaseFinalizing;
+    session.progressVC.subtitleText = @"Saving to Photos…";
 
     void (^doSave)(void) = ^{
         [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
@@ -709,27 +743,51 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
         }];
     };
 
+    void (^fallbackToShare)(void) = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        YTAGDLSession *s = weakSession;
+        if (!strongSelf || !s) return;
+        YTAGLog(@"dl-mgr", @"[%@] Photos access unavailable — falling back to Share sheet", s.request.videoID);
+        [strongSelf shareForSession:s];
+    };
+
+    BOOL (^canSaveWithStatus)(PHAuthorizationStatus) = ^BOOL(PHAuthorizationStatus status) {
+        if (status == PHAuthorizationStatusAuthorized) return YES;
+        if (@available(iOS 14, *)) {
+            if (status == PHAuthorizationStatusLimited) return YES;
+        }
+        return NO;
+    };
+
     if (@available(iOS 14, *)) {
-        if ([PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly] == PHAuthorizationStatusNotDetermined) {
+        PHAuthorizationStatus status = [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly];
+        if (status == PHAuthorizationStatusNotDetermined) {
             [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly
                                                        handler:^(PHAuthorizationStatus status) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    doSave();
+                    if (canSaveWithStatus(status)) doSave();
+                    else fallbackToShare();
                 });
             }];
-        } else {
+        } else if (canSaveWithStatus(status)) {
             doSave();
+        } else {
+            fallbackToShare();
         }
     } else {
         // iOS 13 fallback: older unscoped authorization request.
-        if ([PHPhotoLibrary authorizationStatus] == PHAuthorizationStatusNotDetermined) {
+        PHAuthorizationStatus status = [PHPhotoLibrary authorizationStatus];
+        if (status == PHAuthorizationStatusNotDetermined) {
             [PHPhotoLibrary requestAuthorization:^(PHAuthorizationStatus status) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    doSave();
+                    if (canSaveWithStatus(status)) doSave();
+                    else fallbackToShare();
                 });
             }];
-        } else {
+        } else if (canSaveWithStatus(status)) {
             doSave();
+        } else {
+            fallbackToShare();
         }
     }
 }
@@ -738,6 +796,8 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
     NSURL *fileURL = session.finalOutputURL;
     __weak typeof(self) weakSelf = self;
     __weak YTAGDLSession *weakSession = session;
+    session.progressVC.phase = YTAGDownloadPhaseFinalizing;
+    session.progressVC.subtitleText = @"Preparing share sheet…";
 
     YTAGLog(@"dl-mgr", @"[bc] shareForSession: ENTER file=%@", fileURL.lastPathComponent);
 
@@ -780,23 +840,10 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
         }];
     };
 
-    // Find a stable host. session.presentingVC is the YTMainAppVideoPlayerOverlay
-    // VC, which is tied to player chrome and can disappear mid-flow. Walk up to
-    // the keyWindow's rootViewController's top-most presented VC, which is
-    // always alive and can host modals.
+    // Find a stable host. session.presentingVC may be tied to player chrome and
+    // can disappear mid-flow, so prefer the foreground key-window presenter.
     UIViewController *(^findStableHost)(void) = ^UIViewController *{
-        UIWindow *keyWindow = nil;
-        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
-            if (scene.activationState != UISceneActivationStateForegroundActive) continue;
-            for (UIWindow *w in ((UIWindowScene *)scene).windows) {
-                if (w.isKeyWindow) { keyWindow = w; break; }
-            }
-            if (keyWindow) break;
-        }
-        UIViewController *top = keyWindow.rootViewController;
-        while (top.presentedViewController) top = top.presentedViewController;
-        return top ?: session.presentingVC;
+        return YTAGDownloadTopPresenter(session.presentingVC);
     };
 
     // If the progressVC is still up, dismiss first so the share sheet has a clean host.
@@ -924,9 +971,15 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 }
 
 - (void)cleanupTempFilesForSession:(YTAGDLSession *)session {
-    [self removeURLIfExists:session.videoLocalURL];
-    [self removeURLIfExists:session.audioLocalURL];
-    [self removeURLIfExists:session.muxedOutputURL];
+    if (!YTAGDownloadSameFileURL(session.videoLocalURL, session.finalOutputURL)) {
+        [self removeURLIfExists:session.videoLocalURL];
+    }
+    if (!YTAGDownloadSameFileURL(session.audioLocalURL, session.finalOutputURL)) {
+        [self removeURLIfExists:session.audioLocalURL];
+    }
+    if (!YTAGDownloadSameFileURL(session.muxedOutputURL, session.finalOutputURL)) {
+        [self removeURLIfExists:session.muxedOutputURL];
+    }
     // Intentionally leave finalOutputURL + tmpDir until a later idle point; the share
     // sheet / Photos import need the file on disk briefly. The OS reaps NSTemporaryDirectory
     // on app restart regardless.

@@ -29,6 +29,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 - (YTSettingsSectionItem *)holdToSpeedItemWithSettingsVC:(YTSettingsViewController *)settingsViewController;
 - (YTSettingsSectionItem *)defaultPlaybackRateItemWithSettingsVC:(YTSettingsViewController *)settingsViewController;
 - (YTSettingsSectionItem *)playbackQualityItemWithTitle:(NSString *)title key:(NSString *)key settingsVC:(YTSettingsViewController *)settingsViewController;
+- (YTSettingsSectionItem *)ytagPickerItemWithTitle:(NSString *)title description:(NSString *)description key:(NSString *)key labels:(NSArray<NSString *> *)labels settingsVC:(YTSettingsViewController *)settingsViewController;
 - (YTSettingsSectionItem *)startupTabItemWithSettingsVC:(YTSettingsViewController *)settingsViewController;
 - (NSString *)themeHexFromColor:(UIColor *)color;
 - (NSString *)themeColorDetailForKey:(NSString *)key;
@@ -613,7 +614,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     else if ([tabId isEqualToString:@"FEshorts"]) symbolName = @"play.square.fill";
     else if ([tabId isEqualToString:@"FEsubscriptions"]) symbolName = @"play.rectangle.on.rectangle.fill";
     else if ([tabId isEqualToString:@"FElibrary"]) symbolName = @"books.vertical.fill";
-    else if ([tabId isEqualToString:@"FEexplore"]) symbolName = @"safari.fill";
+    else if ([tabId isEqualToString:@"FEtrending"]) symbolName = @"flame.fill";
+    else if ([tabId isEqualToString:@"FEhype_leaderboard"]) symbolName = @"bolt.fill";
     else if ([tabId isEqualToString:@"FEhistory"]) symbolName = @"clock.fill";
     else if ([tabId isEqualToString:@"VLWL"]) symbolName = @"bookmark.fill";
     else if ([tabId isEqualToString:@"FEpost_home"]) symbolName = @"text.bubble.fill";
@@ -980,6 +982,33 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 }
 
 %new
+- (YTSettingsSectionItem *)ytagPickerItemWithTitle:(NSString *)title description:(NSString *)description key:(NSString *)key labels:(NSArray<NSString *> *)labels settingsVC:(YTSettingsViewController *)settingsViewController {
+    Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
+    return [YTSettingsSectionItemClass itemWithTitle:title
+        titleDescription:description
+        accessibilityIdentifier:@"YTAfterglowSectionItem"
+        detailTextBlock:^NSString *() {
+            NSInteger index = MIN(MAX(ytagInt(key), 0), (NSInteger)labels.count - 1);
+            return labels[index];
+        }
+        selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
+            for (NSUInteger i = 0; i < labels.count; i++) {
+                NSString *rowTitle = labels[i];
+                [rows addObject:[YTSettingsSectionItemClass checkmarkItemWithTitle:rowTitle titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
+                    ytagSetInt((int)innerArg1, key);
+                    ytag_refreshSettingsHierarchy(settingsViewController);
+                    return YES;
+                }]];
+            }
+            NSInteger selected = MIN(MAX(ytagInt(key), 0), (NSInteger)labels.count - 1);
+            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:title pickerSectionTitle:nil rows:rows selectedItemIndex:selected parentResponder:[self parentResponder]];
+            [settingsViewController pushViewController:picker];
+            return YES;
+        }];
+}
+
+%new
 - (YTSettingsSectionItem *)startupTabItemWithSettingsVC:(YTSettingsViewController *)settingsViewController {
     Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
 
@@ -1021,7 +1050,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
 %new
 - (NSArray<NSString *> *)ytag_allTabs {
-    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEexplore", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
+    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEtrending", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
 }
 
 %new
@@ -1031,7 +1060,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         @"FEshorts": LOC(@"FEshorts"),
         @"FEsubscriptions": LOC(@"FEsubscriptions"),
         @"FElibrary": LOC(@"FElibrary"),
-        @"FEexplore": LOC(@"FEexplore"),
+        @"FEtrending": LOC(@"FEtrending"),
+        @"FEhype_leaderboard": LOC(@"FEhype_leaderboard"),
         @"FEhistory": LOC(@"FEhistory"),
         @"VLWL": LOC(@"VLWL"),
         @"FEpost_home": @"Posts",
@@ -1349,7 +1379,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         [entries addObject:[self ytag_searchPageEntryWithTitle:layoutButtonsTitle description:@"Hide specific Shorts UI elements and action buttons." path:@[shortsTitle, layoutButtonsTitle] aliases:@[@"shorts layout", @"shorts buttons"]]];
     }
 
-    [entries addObject:[self ytag_searchPageEntryWithTitle:downloadsTitle description:@"Download features and offline tools will live here." path:@[downloadsTitle] aliases:@[@"offline"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:downloadsTitle description:@"Download behavior, audio tracks, captions, and save handling." path:@[downloadsTitle] aliases:@[@"offline", @"save video", @"camera roll"]]];
 
     [entries addObject:[self ytag_searchPageEntryWithTitle:feedTitle description:@"Clean up the home feed and menu items." path:@[feedTitle] aliases:@[@"browse", @"video menus"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:toolsTitle description:@"Extra utility actions that do not belong to one primary surface." path:@[toolsTitle] aliases:@[@"misc", @"utilities"]]];
@@ -1433,6 +1463,18 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         [self ytag_addSearchEntries:entries forSettingKeys:@[@"HideShortsLogo", @"HideShortsSearch", @"HideShortsCamera", @"HideShortsMore", @"HideShortsSubscriptions", @"HideShortsLike", @"HideShortsDislike", @"HideShortsComments", @"HideShortsRemix", @"HideShortsShare", @"HideShortsAvatars", @"HideShortsThanks", @"HideShortsSource", @"HideShortsChannelName", @"HideShortsDescription", @"HideShortsAudioTrack", @"HideShortsPromoCards"] path:@[shortsTitle, layoutButtonsTitle] aliasesByKey:nil];
     }
 
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"DownloadPostAction", @"DownloadRefreshMetadata", @"DownloadAudioTrack", @"DownloadAudioQuality", @"DownloadPreferStableAudio", @"DownloadIncludeAutoCaptions", @"DownloadOfferTranslatedCaptions", @"DownloadPickerTextSize", @"DownloadPickerFont"] path:@[downloadsTitle] aliasesByKey:@{
+        @"DownloadPostAction": @[@"save to photos", @"share sheet", @"camera roll"],
+        @"DownloadRefreshMetadata": @[@"captions fallback", @"metadata"],
+        @"DownloadAudioTrack": @[@"audio language", @"dubbed audio", @"language tracks"],
+        @"DownloadAudioQuality": @[@"high audio", @"premium audio"],
+        @"DownloadPreferStableAudio": @[@"drc", @"stable volume"],
+        @"DownloadIncludeAutoCaptions": @[@"auto captions", @"generated captions"],
+        @"DownloadOfferTranslatedCaptions": @[@"translated subtitles", @"caption translation"],
+        @"DownloadPickerTextSize": @[@"download font size", @"quality picker text"],
+        @"DownloadPickerFont": @[@"download font face", @"quality picker font"]
+    }];
+
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"RemovePlayNext", @"RemoveWatchLaterMenu", @"RemoveSaveToPlaylistMenu", @"RemoveNotInterestedMenu", @"RemoveDontRecommendMenu", @"RemoveReportMenu"] path:@[feedTitle] aliasesByKey:@{
         @"RemoveDontRecommendMenu": @[@"don't recommend channel"]
     }];
@@ -1478,6 +1520,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSArray *playerKeys = [[[[playerPlaybackKeys arrayByAddingObjectsFromArray:playerControlKeys] arrayByAddingObjectsFromArray:playerOverlayKeys] arrayByAddingObjectsFromArray:playerActionBarKeys] arrayByAddingObjectsFromArray:playerMenuKeys];
     NSArray *shortsBehaviorKeys = @[@"shortsOnlyMode", @"autoSkipShorts", @"hideShorts", @"shortsProgress", @"pinchToFullscreenShorts", @"shortsToRegular", @"resumeShorts"];
     NSArray *shortsUIKeys = @[@"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"];
+    NSArray *downloadKeys = @[@"downloadRefreshMetadata", @"downloadPreferStableAudio", @"downloadIncludeAutoCaptions", @"downloadOfferTranslatedCaptions", @"downloadPickerFontScaleMode", @"downloadPickerFontFaceMode"];
     NSArray *feedKeys = @[@"removePlayNext", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu"];
     NSArray *toolKeys = @[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare", @"copyWithTimestamp"];
 
@@ -1876,7 +1919,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                 selectBlock:^BOOL(YTSettingsCell *resetCell, NSUInteger resetArg1) {
                     UIAlertController *alert = [UIAlertController alertControllerWithTitle:LOC(@"ResetAllColors") message:@"This removes every preset, custom color, and gradient value in Themes. Restart YouTube to fully return to the default look." preferredStyle:UIAlertControllerStyleAlert];
                     [alert addAction:[UIAlertAction actionWithTitle:LOC(@"ResetAndRestart") style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
-                        NSArray *keys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar", @"theme_background", @"theme_textPrimary", @"theme_textSecondary", @"theme_navBar", @"theme_accent", @"theme_gradientStart", @"theme_gradientEnd", @"theme_glowEnabled"];
+                        NSArray *keys = @[@"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar", @"theme_seekBarLive", @"theme_seekBarScrubber", @"theme_seekBarScrubberLive", @"theme_background", @"theme_textPrimary", @"theme_textSecondary", @"theme_navBar", @"theme_accent", @"theme_gradientStart", @"theme_gradientEnd", @"theme_glowEnabled"];
                         for (NSString *key in keys) {
                             [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:key];
                         }
@@ -2138,14 +2181,48 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     [sectionItems addObject:shorts];
 
     YTSettingsSectionItem *downloads = [self pageItemWithTitle:LOC(@"Downloads")
-        titleDescription:@"Download features and offline tools will live here."
+        titleDescription:@"Download behavior, audio tracks, captions, and save handling."
         summary:^NSString *() {
-            return @"Coming soon";
+            return [self enabledSummaryForKeys:downloadKeys];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSArray <YTSettingsSectionItem *> *rows = @[
-                [self themeSectionHeaderWithTitle:@"Coming Soon" description:@"New download features and offline tools will be added here."]
-            ];
+            NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
+            [rows addObject:[self themeSectionHeaderWithTitle:@"Behavior" description:@"Choose what happens after a download and whether Afterglow should refresh missing metadata before showing actions."]];
+            [rows addObject:[self ytagPickerItemWithTitle:LOC(@"DownloadPostAction")
+                                               description:LOC(@"DownloadPostActionDesc")
+                                                       key:@"downloadPostActionMode"
+                                                    labels:@[LOC(@"AskEveryTime"), LOC(@"SaveToPhotos"), LOC(@"ShareSheet")]
+                                                settingsVC:settingsViewController]];
+            [rows addObject:[self switchWithTitle:@"DownloadRefreshMetadata" key:@"downloadRefreshMetadata"]];
+            [rows addObject:space];
+            [rows addObject:[self themeSectionHeaderWithTitle:@"Audio" description:@"Control audio quality and whether multilingual or dubbed tracks are offered before downloading."]];
+            [rows addObject:[self ytagPickerItemWithTitle:LOC(@"DownloadAudioTrack")
+                                               description:LOC(@"DownloadAudioTrackDesc")
+                                                       key:@"downloadAudioTrackMode"
+                                                    labels:@[LOC(@"DefaultAudioTrack"), LOC(@"AskForAudioTrack")]
+                                                settingsVC:settingsViewController]];
+            [rows addObject:[self ytagPickerItemWithTitle:LOC(@"DownloadAudioQuality")
+                                               description:LOC(@"DownloadAudioQualityDesc")
+                                                       key:@"downloadAudioQualityMode"
+                                                    labels:@[LOC(@"StandardAudioQuality"), LOC(@"HighAudioQuality")]
+                                                settingsVC:settingsViewController]];
+            [rows addObject:[self switchWithTitle:@"DownloadPreferStableAudio" key:@"downloadPreferStableAudio"]];
+            [rows addObject:space];
+            [rows addObject:[self themeSectionHeaderWithTitle:@"Captions" description:@"Control which caption tracks are shown in the download sheet."]];
+            [rows addObject:[self switchWithTitle:@"DownloadIncludeAutoCaptions" key:@"downloadIncludeAutoCaptions"]];
+            [rows addObject:[self switchWithTitle:@"DownloadOfferTranslatedCaptions" key:@"downloadOfferTranslatedCaptions"]];
+            [rows addObject:space];
+            [rows addObject:[self themeSectionHeaderWithTitle:@"Picker" description:@"Tune the compact quality/audio list shown before downloads start."]];
+            [rows addObject:[self ytagPickerItemWithTitle:LOC(@"DownloadPickerTextSize")
+                                               description:LOC(@"DownloadPickerTextSizeDesc")
+                                                       key:@"downloadPickerFontScaleMode"
+                                                    labels:@[LOC(@"Compact"), LOC(@"Standard"), LOC(@"Large")]
+                                                settingsVC:settingsViewController]];
+            [rows addObject:[self ytagPickerItemWithTitle:LOC(@"DownloadPickerFont")
+                                               description:LOC(@"DownloadPickerFontDesc")
+                                                       key:@"downloadPickerFontFaceMode"
+                                                    labels:@[LOC(@"SystemFont"), LOC(@"RoundedFont"), LOC(@"SerifFont"), LOC(@"MonoFont")]
+                                                settingsVC:settingsViewController]];
 
             YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Downloads") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
@@ -2291,6 +2368,13 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             [rows addObject:space];
             [rows addObject:[self themeSectionHeaderWithTitle:LOC(@"DebugLogging") description:LOC(@"DebugLoggingDesc")]];
             [rows addObject:[self switchWithTitle:@"DebugLogging" key:@"debugLogEnabled"]];
+            [rows addObject:[self switchWithTitle:@"DebugLogFirehose" key:@"debugLogFirehose"]];
+            [rows addObject:[self themeSectionHeaderWithTitle:LOC(@"DebugLogCategories") description:LOC(@"DebugLogCategoriesDesc")]];
+            [rows addObject:[self switchWithTitle:@"DebugLogDownloads" key:@"debugLogDownloads"]];
+            [rows addObject:[self switchWithTitle:@"DebugLogPlayerUI" key:@"debugLogPlayerUI"]];
+            [rows addObject:[self switchWithTitle:@"DebugLogPremiumControls" key:@"debugLogPremiumControls"]];
+            [rows addObject:[self switchWithTitle:@"DebugLogPiP" key:@"debugLogPiP"]];
+            [rows addObject:[self switchWithTitle:@"DebugLogProbes" key:@"debugLogProbes"]];
             [rows addObject:[%c(YTSettingsSectionItem) switchItemWithTitle:LOC(@"ShowDebugHUD") titleDescription:LOC(@"ShowDebugHUDDesc") accessibilityIdentifier:@"YTAfterglowSectionItem" switchOn:ytagBool(@"debugHUDEnabled") switchBlock:^BOOL (YTSettingsCell *cell, BOOL enabled) {
                 ytagSetBool(enabled, @"debugHUDEnabled");
                 if (enabled) [[YTAGDebugHUD sharedHUD] show];
