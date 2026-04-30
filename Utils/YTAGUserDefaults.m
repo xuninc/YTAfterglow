@@ -196,6 +196,7 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         @"muteButton": @YES,
         @"lockButton": @YES,
         @"downloadButton": @YES,
+        @"overlayDeclutterButton": @YES,
         @"downloadPostActionMode": @1,
         @"downloadAudioTrackMode": @1,
         @"downloadAudioQualityMode": @0,

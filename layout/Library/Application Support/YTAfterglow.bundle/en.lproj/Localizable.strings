@@ -163,6 +163,8 @@
 "DownloadButtonDesc" = "Displays a button on the overlay to download the current video, audio, captions, or thumbnail.";
 "ControlsSheetButton" = "Premium controls button";
 "ControlsSheetButtonDesc" = "Displays a button on the overlay that opens Afterglow's rebuild of YouTube Premium's controls sheet with playback, speed, stable volume, and save tiles.";
+"OverlayDeclutterButton" = "Clean overlay button";
+"OverlayDeclutterButtonDesc" = "Adds a player and Shorts overlay button that hides the other overlay buttons until tapped again.";
 "HideOverlayTitle" = "Hide video title";
 "HideOverlayTitleDesc" = "Hides the video title in fullscreen overlay.";
 "HideAutoplay" = "Hide Autoplay switch";

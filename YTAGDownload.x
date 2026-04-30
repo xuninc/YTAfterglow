@@ -12,7 +12,7 @@
 // Download tap -> presents YTAGDownloadActionSheetViewController (tile grid).
 // Mute tap   -> toggles YTSingleVideoController.setMuted: on the player's active video.
 // Lock tap   -> activates YouTube's native lock-mode via lockModeStateEntityController.
-// All three are individually toggleable from YTAfterglow's Player → Overlay settings.
+// Overlay buttons are individually toggleable from YTAfterglow's Player -> Overlay settings.
 
 #import <UIKit/UIKit.h>
 #import <Photos/Photos.h>
@@ -83,6 +83,7 @@ extern UIColor *themeColor(NSString *key);
 + (void)handleMuteTap:(UIButton *)sender;
 + (void)handleLockTap:(UIButton *)sender;
 + (void)handleControlsTap:(UIButton *)sender;
++ (void)handleDeclutterTap:(UIButton *)sender;
 // Entry point for OfflineProbe.x's native Download-button routing. Resolves
 // formats via live-read off playerVC and presents our action sheet.
 + (void)routeFromPlayerVC:(id)playerVC fromView:(UIView *)sourceView;
@@ -106,6 +107,11 @@ static const NSInteger kYTAGButtonStackTag = 998877;  // stack view tag
 static void *kYTAGStackKey = &kYTAGStackKey;           // assoc object key
 static const NSInteger kYTAGShortsButtonStackTag = 998878;
 static void *kYTAGShortsStackKey = &kYTAGShortsStackKey;
+static const NSInteger kYTAGOverlayDeclutterButtonTag = 998879;
+static void *kYTAGOverlayDeclutterActiveKey = &kYTAGOverlayDeclutterActiveKey;
+static void *kYTAGOverlayDeclutterOriginalHiddenKey = &kYTAGOverlayDeclutterOriginalHiddenKey;
+static void *kYTAGOverlayDeclutterOriginalAlphaKey = &kYTAGOverlayDeclutterOriginalAlphaKey;
+static void *kYTAGOverlayDeclutterOriginalInteractionKey = &kYTAGOverlayDeclutterOriginalInteractionKey;
 
 // --- File-scope helper: format a byte count for the chip ("2.4 MB" / "780 KB") ---
 
@@ -293,6 +299,96 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
     return nil;
 }
 
+static BOOL YTAGOverlayDeclutterButtonLike(UIView *view) {
+    if (!view || view.tag == kYTAGOverlayDeclutterButtonTag) return NO;
+    NSString *className = NSStringFromClass(view.class);
+    BOOL classLooksLikeButton = [className rangeOfString:@"Button" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+                                [className rangeOfString:@"Control" options:NSCaseInsensitiveSearch].location != NSNotFound;
+    BOOL accessibilityLooksLikeButton = (view.accessibilityTraits & UIAccessibilityTraitButton) == UIAccessibilityTraitButton;
+    return [view isKindOfClass:[UIControl class]] || classLooksLikeButton || accessibilityLooksLikeButton;
+}
+
+static UIView *YTAGOverlayDeclutterRootForView(UIView *view) {
+    for (UIView *walk = view; walk; walk = walk.superview) {
+        NSString *className = NSStringFromClass(walk.class);
+        if ([className isEqualToString:@"YTMainAppControlsOverlayView"] ||
+            [className isEqualToString:@"YTReelWatchPlaybackOverlayView"]) {
+            return walk;
+        }
+    }
+    return view.superview ?: view;
+}
+
+static void YTAGOverlayDeclutterRestoreView(UIView *view) {
+    NSNumber *storedHidden = objc_getAssociatedObject(view, kYTAGOverlayDeclutterOriginalHiddenKey);
+    NSNumber *storedAlpha = objc_getAssociatedObject(view, kYTAGOverlayDeclutterOriginalAlphaKey);
+    NSNumber *storedInteraction = objc_getAssociatedObject(view, kYTAGOverlayDeclutterOriginalInteractionKey);
+    if (!storedHidden && !storedAlpha && !storedInteraction) return;
+
+    view.hidden = storedHidden ? storedHidden.boolValue : NO;
+    view.alpha = storedAlpha ? storedAlpha.doubleValue : 1.0;
+    view.userInteractionEnabled = storedInteraction ? storedInteraction.boolValue : YES;
+    objc_setAssociatedObject(view, kYTAGOverlayDeclutterOriginalHiddenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(view, kYTAGOverlayDeclutterOriginalAlphaKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(view, kYTAGOverlayDeclutterOriginalInteractionKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static void YTAGOverlayDeclutterHideView(UIView *view) {
+    if (!objc_getAssociatedObject(view, kYTAGOverlayDeclutterOriginalHiddenKey)) {
+        objc_setAssociatedObject(view, kYTAGOverlayDeclutterOriginalHiddenKey, @(view.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, kYTAGOverlayDeclutterOriginalAlphaKey, @(view.alpha), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(view, kYTAGOverlayDeclutterOriginalInteractionKey, @(view.userInteractionEnabled), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    view.hidden = YES;
+    view.alpha = 0.0;
+    view.userInteractionEnabled = NO;
+}
+
+static void YTAGOverlayDeclutterUpdateButton(UIButton *button, BOOL active) {
+    if (!button) return;
+    button.alpha = active ? 0.16 : 1.0;
+    button.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:active ? 0.24 : 0.70];
+    button.accessibilityLabel = active ? @"Show overlay buttons" : @"Hide overlay buttons";
+    UIImage *image = YTAGSymbol(active ? @"eye.fill" : @"eye.slash.fill", 21.0);
+    if (image) {
+        [button setImage:[image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
+                forState:UIControlStateNormal];
+    }
+}
+
+static void YTAGOverlayDeclutterApplyToTree(UIView *view, UIView *keptButton, BOOL active) {
+    if (!view) return;
+
+    if (!active) {
+        YTAGOverlayDeclutterRestoreView(view);
+    } else if (view == keptButton || [keptButton isDescendantOfView:view]) {
+        // Keep the toggle and every ancestor needed for layout/hit-testing alive.
+    } else if (YTAGOverlayDeclutterButtonLike(view)) {
+        YTAGOverlayDeclutterHideView(view);
+        return;
+    }
+
+    for (UIView *subview in [view.subviews copy]) {
+        YTAGOverlayDeclutterApplyToTree(subview, keptButton, active);
+    }
+}
+
+static void YTAGOverlayDeclutterApply(UIView *root, UIButton *button, BOOL active) {
+    if (!root || !button) return;
+    objc_setAssociatedObject(root, kYTAGOverlayDeclutterActiveKey, @(active), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    YTAGOverlayDeclutterApplyToTree(root, button, active);
+    YTAGOverlayDeclutterUpdateButton(button, active);
+    YTAGLog(@"overlay", @"declutter %@ root=%@", active ? @"on" : @"off", NSStringFromClass(root.class));
+}
+
+static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
+    NSNumber *active = objc_getAssociatedObject(root, kYTAGOverlayDeclutterActiveKey);
+    UIButton *button = (UIButton *)[root viewWithTag:kYTAGOverlayDeclutterButtonTag];
+    if (![button isKindOfClass:[UIButton class]]) return;
+    YTAGOverlayDeclutterUpdateButton(button, active.boolValue);
+    if (active.boolValue) YTAGOverlayDeclutterApply(root, button, YES);
+}
+
 // --- Hooks ---
 
 %hook YTIPlayerResponse
@@ -327,7 +423,10 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
     %orig;
 
     // Install once per overlay. Tag-check prevents re-add on each layout pass.
-    if ([self viewWithTag:kYTAGButtonStackTag]) return;
+    if ([self viewWithTag:kYTAGButtonStackTag]) {
+        YTAGOverlayDeclutterReapplyIfNeeded(self);
+        return;
+    }
 
     YTAGUserDefaults *prefs = [YTAGUserDefaults standardUserDefaults];
     BOOL showMute     = [prefs boolForKey:@"muteButton"];
@@ -336,7 +435,8 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
     // v35: controlsSheetButton re-enabled after v32/v33/v34 cold-launch bisect
     // cleared it. Default ON via YTAGUserDefaults.
     BOOL showControls = [prefs boolForKey:@"controlsSheetButton"];
-    if (!showMute && !showLock && !showDownload && !showControls) return;
+    BOOL showDeclutter = [prefs boolForKey:@"overlayDeclutterButton"];
+    if (!showMute && !showLock && !showDownload && !showControls && !showDeclutter) return;
 
     UIView *topContainer = nil;
     if ([self respondsToSelector:@selector(topControlsAccessibilityContainerView)]) {
@@ -419,6 +519,17 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
             @selector(handleControlsTap:));
         if (controls) [stack addArrangedSubview:controls];
     }
+    if (showDeclutter) {
+        UIButton *declutter = YTAGMakeOverlayButton(
+            @"Hide overlay buttons",
+            0,
+            YTAGSymbol(@"eye.slash.fill", 21.0),
+            [YTAGDownloadTrigger class],
+            @selector(handleDeclutterTap:));
+        declutter.tag = kYTAGOverlayDeclutterButtonTag;
+        if (declutter) [stack addArrangedSubview:declutter];
+        YTAGOverlayDeclutterUpdateButton(declutter, [objc_getAssociatedObject(self, kYTAGOverlayDeclutterActiveKey) boolValue]);
+    }
 
     // Position the stack as a second row immediately below topContainer's own
     // layout, right-aligned. topContainer has clipsToBounds=NO so the overflow
@@ -433,6 +544,7 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
     // recreated but `self` (YTMainAppControlsOverlayView) persists for the
     // lifetime of the player session.
     objc_setAssociatedObject(self, kYTAGStackKey, stack, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    YTAGOverlayDeclutterReapplyIfNeeded(self);
     YTAGLog(@"overlay", @"installed stack w=%@ in topContainer<%@>",
             @(stack.arrangedSubviews.count), NSStringFromClass([topContainer class]));
 }
@@ -458,12 +570,16 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
 - (void)layoutSubviews {
     %orig;
 
-    if ([self viewWithTag:kYTAGShortsButtonStackTag]) return;
+    if ([self viewWithTag:kYTAGShortsButtonStackTag]) {
+        YTAGOverlayDeclutterReapplyIfNeeded(self);
+        return;
+    }
 
     YTAGUserDefaults *prefs = [YTAGUserDefaults standardUserDefaults];
     BOOL showDownload = [prefs boolForKey:@"downloadButton"];
     BOOL showControls = [prefs boolForKey:@"controlsSheetButton"];
-    if (!showDownload && !showControls) return;
+    BOOL showDeclutter = [prefs boolForKey:@"overlayDeclutterButton"];
+    if (!showDownload && !showControls && !showDeclutter) return;
 
     UIStackView *stack = [[UIStackView alloc] init];
     stack.axis = UILayoutConstraintAxisHorizontal;
@@ -494,6 +610,18 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
         if (controls) [stack addArrangedSubview:controls];
     }
 
+    if (showDeclutter) {
+        UIButton *declutter = YTAGMakeOverlayButton(
+            @"Hide overlay buttons",
+            0,
+            YTAGSymbol(@"eye.slash.fill", 21.0),
+            [YTAGDownloadTrigger class],
+            @selector(handleDeclutterTap:));
+        declutter.tag = kYTAGOverlayDeclutterButtonTag;
+        if (declutter) [stack addArrangedSubview:declutter];
+        YTAGOverlayDeclutterUpdateButton(declutter, [objc_getAssociatedObject(self, kYTAGOverlayDeclutterActiveKey) boolValue]);
+    }
+
     UILayoutGuide *guide = self.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
         [stack.trailingAnchor constraintEqualToAnchor:guide.trailingAnchor constant:-14.0],
@@ -501,6 +629,7 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
     ]];
 
     objc_setAssociatedObject(self, kYTAGShortsStackKey, stack, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    YTAGOverlayDeclutterReapplyIfNeeded(self);
     YTAGLog(@"overlay", @"installed Shorts stack w=%@", @(stack.arrangedSubviews.count));
 }
 
@@ -828,6 +957,12 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
     [YTAGPremiumControlsTrigger handleControlsTap:sender
                                           playerVC:pvc
                               anchorDownloadButton:downloadAnchor];
+}
+
++ (void)handleDeclutterTap:(UIButton *)sender {
+    UIView *root = YTAGOverlayDeclutterRootForView(sender);
+    BOOL active = ![objc_getAssociatedObject(root, kYTAGOverlayDeclutterActiveKey) boolValue];
+    YTAGOverlayDeclutterApply(root, sender, active);
 }
 
 + (void)handleDownloadTap:(UIButton *)sender {
