@@ -11,7 +11,7 @@ static NSString *const kSettingsMigrationVersionKey = @"settingsMigrationVersion
 static const NSUInteger kMinimumActiveTabsCount = 2;
 static const NSUInteger kMaximumActiveTabsCount = 6;
 static const NSInteger kCurrentThemeMigrationVersion = 2;
-static const NSInteger kCurrentSettingsMigrationVersion = 2;
+static const NSInteger kCurrentSettingsMigrationVersion = 3;
 
 static NSData *YTAGArchiveColor(UIColor *color) {
     return [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
@@ -88,12 +88,12 @@ static void YTAGApplyAfterglow2ThemePreset(NSUserDefaults *defaults) {
 }
 
 static NSString *YTAGCanonicalTabId(NSString *tabId) {
-    if ([tabId isEqualToString:@"FEexplore"]) return @"FEtrending";
+    if ([tabId isEqualToString:@"FEexplore"] || [tabId isEqualToString:@"FEtrending"]) return @"FEhype_leaderboard";
     return tabId;
 }
 
 static NSArray<NSString *> *YTAGAllowedTabs(void) {
-    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEtrending", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
+    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
 }
 
 + (YTAGUserDefaults *)standardUserDefaults {
@@ -283,6 +283,16 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         NSString *startupTab = [self objectForKey:kStartupTabKey];
         if ([startupTab isKindOfClass:[NSString class]] && [startupTab isEqualToString:@"FEexplore"]) {
             [self setObject:@"FEtrending" forKey:kStartupTabKey];
+        }
+    }
+
+    if (recordedVersion < 3) {
+        [self setActiveTabs:[self currentActiveTabs]];
+
+        NSString *startupTab = [self objectForKey:kStartupTabKey];
+        if ([startupTab isKindOfClass:[NSString class]] &&
+            ([startupTab isEqualToString:@"FEexplore"] || [startupTab isEqualToString:@"FEtrending"])) {
+            [self setObject:@"FEhype_leaderboard" forKey:kStartupTabKey];
         }
     }
 

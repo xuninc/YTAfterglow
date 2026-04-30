@@ -35,24 +35,36 @@
                     "class": "DepictionSpacerView"
                 },
                 {
+                    "markdown": "### Credits\nProject stewardship, AI co-development, and open-source acknowledgements.",
+                    "class": "DepictionMarkdownView",
+                    "useBottomMargin": false,
+                    "title": "markdown-credits",
+                    "useBoldText": true
+                },
+                {
                     "text": "Corey Hamilton",
                     "class": "DepictionTableTextView",
                     "title": "Maintainer / Senior Developer"
                 },
                 {
-                    "text": "Claude Opus 4.6",
+                    "text": "Claude Opus 4.6 / 4.7",
                     "class": "DepictionTableTextView",
-                    "title": "AI Core Developer"
+                    "title": "AI Co-Development Team"
                 },
                 {
-                    "text": "Codex (forgets things)",
+                    "text": "OpenAI Codex",
                     "class": "DepictionTableTextView",
-                    "title": "AI Contributor"
+                    "title": "AI Co-Development Team"
                 },
                 {
-                    "text": "Based on YTLite by dayanch96 (last open-source files, pre-4.0)",
+                    "text": "YTLite - open-source base, pre-4.0",
                     "class": "DepictionTableTextView",
-                    "title": "Foundation"
+                    "title": "Acknowledgements"
+                },
+                {
+                    "text": "Keeps widely used YouTube tweak repos open and maintained for everyone",
+                    "class": "DepictionTableTextView",
+                    "title": "PoomSmart"
                 },
                 {
                     "spacing": 8,

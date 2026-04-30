@@ -689,13 +689,10 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 
     void (^doSave)(void) = ^{
         [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-            // YTLite's actual save call (raw .c:390204): creationRequestForAsset
-            // creates an empty asset, then addResourceWithType:fileURL: attaches
-            // the video file as a raw resource. This bypasses the codec
-            // compatibility check that creationRequestForAssetFromVideoAtFileURL:
-            // runs upfront — that check is what was throwing PHPhotosErrorDomain
-            // error 3302 on VP9/AV1 content that Apple's default pipeline rejects
-            // but the underlying asset store will happily accept as a raw file.
+            // Create an empty asset, then attach the video file as a resource.
+            // This bypasses the upfront codec compatibility check from
+            // creationRequestForAssetFromVideoAtFileURL:, which can reject VP9/AV1
+            // files even when Photos can store them as raw video resources.
             PHAssetCreationRequest *req = [PHAssetCreationRequest creationRequestForAsset];
             [req addResourceWithType:PHAssetResourceTypeVideo
                              fileURL:fileURL

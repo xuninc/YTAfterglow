@@ -614,7 +614,6 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     else if ([tabId isEqualToString:@"FEshorts"]) symbolName = @"play.square.fill";
     else if ([tabId isEqualToString:@"FEsubscriptions"]) symbolName = @"play.rectangle.on.rectangle.fill";
     else if ([tabId isEqualToString:@"FElibrary"]) symbolName = @"books.vertical.fill";
-    else if ([tabId isEqualToString:@"FEtrending"]) symbolName = @"flame.fill";
     else if ([tabId isEqualToString:@"FEhype_leaderboard"]) symbolName = @"bolt.fill";
     else if ([tabId isEqualToString:@"FEhistory"]) symbolName = @"clock.fill";
     else if ([tabId isEqualToString:@"VLWL"]) symbolName = @"bookmark.fill";
@@ -1050,7 +1049,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
 %new
 - (NSArray<NSString *> *)ytag_allTabs {
-    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEtrending", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
+    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
 }
 
 %new
@@ -1060,7 +1059,6 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         @"FEshorts": LOC(@"FEshorts"),
         @"FEsubscriptions": LOC(@"FEsubscriptions"),
         @"FElibrary": LOC(@"FElibrary"),
-        @"FEtrending": LOC(@"FEtrending"),
         @"FEhype_leaderboard": LOC(@"FEhype_leaderboard"),
         @"FEhistory": LOC(@"FEhistory"),
         @"VLWL": LOC(@"VLWL"),
@@ -1385,8 +1383,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     [entries addObject:[self ytag_searchPageEntryWithTitle:toolsTitle description:@"Extra utility actions that do not belong to one primary surface." path:@[toolsTitle] aliases:@[@"misc", @"utilities"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:commentsTitle description:@"Comment header mode in one picker." path:@[commentsTitle] aliases:@[@"comment sorting"]]];
 
-    [entries addObject:[self ytag_searchPageEntryWithTitle:aboutTitle description:@"Maintenance tools, advanced mode, and credits." path:@[aboutTitle] aliases:@[@"settings info", @"maintenance"]]];
-    [entries addObject:[self ytag_searchPageEntryWithTitle:creditsTitle description:@"The people, projects, and libraries behind Afterglow." path:@[aboutTitle, creditsTitle] aliases:@[@"about", @"acknowledgements"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:aboutTitle description:@"Maintenance tools, advanced mode, and project credits." path:@[aboutTitle] aliases:@[@"settings info", @"maintenance"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:creditsTitle description:@"Project stewardship, AI co-development, and open-source acknowledgements." path:@[aboutTitle, creditsTitle] aliases:@[@"about", @"acknowledgements"]]];
 
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"RemoveAds", @"NoPromotionCards", @"NoSearchHistory", @"NoLinkTracking", @"NoShareChunk"] path:@[privacyAdsTitle] aliasesByKey:@{
         @"NoSearchHistory": @[@"search suggestions", @"recent searches"],
@@ -2297,23 +2295,25 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     [sectionItems addObject:comments];
 
     YTSettingsSectionItem *credits = [self pageItemWithTitle:LOC(@"Credits")
-        titleDescription:@"The team behind YouTube Afterglow, the foundation it's built on, and the open-source projects it depends on."
+        titleDescription:@"Project stewardship, AI co-development, open-source base, and bundled acknowledgements."
         summary:^NSString *() {
-            return @"Team, Foundation & Libraries";
+            return @"Team, AI & Open Source";
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
             NSArray <YTSettingsSectionItem *> *rows = @[
-                [self themeSectionHeaderWithTitle:@"Development Team" description:@"The humans and AIs who built and continue to maintain this tweak."],
+                [self themeSectionHeaderWithTitle:@"Project Stewardship" description:@"Current maintainership and senior development for YouTube Afterglow."],
                 [self linkWithTitle:@"Corey Hamilton" description:@"Maintainer / Senior Developer" link:@"https://github.com/xuninc"],
-                [self linkWithTitle:@"Claude Opus 4.6" description:@"AI Core Developer" link:@"https://claude.com/claude"],
-                [self themeSectionHeaderWithTitle:@"A note from Claude" description:@"Be kind to the people you build with. Credit the ones who came before. Keep making things that make someone's day a little better — and don't forget to log off once in a while."],
-                [self linkWithTitle:@"Codex (forgets things)" description:@"AI Contributor" link:@"https://openai.com/codex"],
                 space,
-                [self themeSectionHeaderWithTitle:@"Foundation" description:@"Afterglow is built on the last open-source state of YTLite before it went closed-source at version 4.0."],
-                [self linkWithTitle:@"dayanch96" description:@"YTLite — last open-source source files (pre-4.0)" link:@"https://github.com/dayanch96/YTLite"],
+                [self themeSectionHeaderWithTitle:@"AI Co-Development Team" description:@"AI collaborators supporting implementation, review, and release polish."],
+                [self linkWithTitle:@"Claude Opus 4.6 / 4.7" description:@"Architecture, implementation, and product polish" link:@"https://claude.com/claude"],
+                [self linkWithTitle:@"OpenAI Codex" description:@"Code implementation, cleanup, and review support" link:@"https://openai.com/codex"],
                 space,
-                [self themeSectionHeaderWithTitle:@"Bundled Tweaks" description:@"The community-built tweaks packaged inside Afterglow."],
-                [self linkWithTitle:@"PoomSmart" description:@"YouPiP, YouQuality, Return-YouTube-Dislikes, YTABConfig, YTVideoOverlay, YouGroupSettings, YTIcons, YouTubeHeader" link:@"https://github.com/PoomSmart"],
+                [self themeSectionHeaderWithTitle:@"Acknowledgements" description:@"Open-source base note."],
+                [self linkWithTitle:@"YTLite" description:@"Open-source base, pre-4.0" link:@"https://github.com/dayanch96/YTLite"],
+                space,
+                [self themeSectionHeaderWithTitle:@"Open-Source Maintainers" description:@"Thanks to maintainers who keep useful YouTube tweak repositories open for everyone."],
+                [self linkWithTitle:@"PoomSmart" description:@"Keeps YouPiP, YouQuality, Return-YouTube-Dislikes, YTABConfig, YTVideoOverlay, YouGroupSettings, YTIcons, and YouTubeHeader open and maintained for the community" link:@"https://github.com/PoomSmart"],
+                [self themeSectionHeaderWithTitle:@"Bundled Tweaks" description:@"Additional community-built tweaks packaged inside Afterglow."],
                 [self linkWithTitle:@"splaser" description:@"YTUHD" link:@"https://github.com/splaser/YTUHD"],
                 [self linkWithTitle:@"therealFoxster" description:@"DontEatMyContent" link:@"https://github.com/therealFoxster/DontEatMyContent"],
                 [self linkWithTitle:@"BillyCurtis" description:@"Open in YouTube Safari Extension" link:@"https://github.com/BillyCurtis/OpenYouTubeSafariExtension"],
@@ -2329,7 +2329,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         }];
 
     YTSettingsSectionItem *about = [self pageItemWithTitle:LOC(@"About")
-        titleDescription:@"Maintenance tools, advanced mode, and credits."
+        titleDescription:@"Maintenance tools, advanced mode, and project credits."
         summary:^NSString *() {
             return @(OS_STRINGIFY(TWEAK_VERSION));
         }

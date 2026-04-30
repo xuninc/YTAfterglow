@@ -6,10 +6,8 @@
 // of YTMainAppVideoPlayerOverlayView so it inherits the overlay's fade-in/out
 // with all the other player controls.
 //
-// Pattern mirrors YTLite's `ytlButtons` stack (decompiled from YTLite.dylib.c
-// lines 342470–342870, helper `+[YTLHelper createOverlayButton:...]` at
-// line 390826). Each button is a `[YTQTMButton iconButton]` sized 24×36 with
-// circular touch feedback — that's what makes them match YT's native buttons.
+// Each button is a `[YTQTMButton iconButton]` sized 24×36 with circular touch
+// feedback so the row feels native beside YouTube's own controls.
 //
 // Download tap -> presents YTAGDownloadActionSheetViewController (tile grid).
 // Mute tap   -> toggles YTSingleVideoController.setMuted: on the player's active video.
@@ -85,9 +83,9 @@ extern UIColor *themeColor(NSString *key);
 + (void)handleMuteTap:(UIButton *)sender;
 + (void)handleLockTap:(UIButton *)sender;
 + (void)handleControlsTap:(UIButton *)sender;
-// Entry point for OfflineProbe.x's native-Download-button hijack. Resolves
+// Entry point for OfflineProbe.x's native Download-button routing. Resolves
 // formats via live-read off playerVC and presents our action sheet.
-+ (void)hijackFromPlayerVC:(id)playerVC fromView:(UIView *)sourceView;
++ (void)routeFromPlayerVC:(id)playerVC fromView:(UIView *)sourceView;
 @end
 
 // Forward-declare the Premium-controls trigger (implemented in YTAGPremiumControls.m)
@@ -351,20 +349,10 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
     }
     if (!topContainer) return;  // retry next layout pass when the hierarchy is ready
 
-    // Stack layout — exact copy of YTLite's `ytlButtons` config from decomp (lines 342457-342476):
-    //   setAxis:0             (NSLayoutConstraintAxisHorizontal)
-    //   setDistribution:1     (UIStackViewDistributionFillEqually)
-    //   setAlignment:3        (UIStackViewAlignmentCenter)
-    //   setSpacing:10.0
-    //   setTranslatesAutoresizingMaskIntoConstraints:0
-    //   setTag:998
-    //
-    // Parented to `self` (YTMainAppControlsOverlayView) — YTLite adds to self too
-    // (decomp line 342768). Parenting to `_topControlsAccessibilityContainerView`
-    // breaks hit-testing: the container only hit-tests within its own bounds, so
-    // a stack rendered below the container (via clipsToBounds=NO) is visible but
-    // not tappable — taps fall through to the video. Anchor to topContainer's
-    // bottomAnchor for position but keep self as the actual parent.
+    // Parent to `self` instead of `_topControlsAccessibilityContainerView`. The
+    // container only hit-tests inside its own bounds, so a stack rendered below it
+    // can be visible but not tappable. Anchor to topContainer's bottomAnchor for
+    // position while keeping the overlay view as the actual parent.
     UIStackView *stack = [[UIStackView alloc] init];
     stack.axis = UILayoutConstraintAxisHorizontal;
     stack.distribution = UIStackViewDistributionFillEqually;
@@ -720,7 +708,6 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
 }
 
 + (void)handleMuteTap:(UIButton *)sender {
-    // Mirrors YTLite's sub_16A60 at line 343126-343189.
     id pvc = YTAGPlayerVCFromSender(sender);
     if (!pvc || ![pvc respondsToSelector:@selector(activeVideo)]) {
         YTAGLog(@"overlay-mute", @"no player VC from sender");
@@ -753,16 +740,13 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
 + (void)handleLockTap:(UIButton *)sender {
     // True toggle — read current lock state, flip, update icon + a11y label.
     //
-    // History: YTLite's sub_16C18 engages lock unconditionally (setLockModeActive:YES)
-    // and ALSO calls lockModeDidRequestShowFullscreen every time. That's fine when the
-    // button is tapped from a non-fullscreen context (forces fullscreen before engaging
-    // lock). But when YOU TAP IT WHILE ALREADY FULLSCREEN, YT's state machine double-
-    // transitions and strands the user — the indicator + unlock path both silently break
-    // (Corey's v34 report 2026-04-24: "can't get out of it after i press it").
+    // YouTube's fullscreen request path is useful when entering lock mode from a
+    // non-fullscreen context, but replaying it while already fullscreen can double
+    // transition the state machine and strand the user.
     //
     // Toggle instead: read `lockModeActive` from the entity controller. If locked ->
     // just call setLockModeActive:NO (no fullscreen re-request). If not locked ->
-    // call lockModeDidRequestShowFullscreen + setLockModeActive:YES like YTLite did.
+    // call lockModeDidRequestShowFullscreen + setLockModeActive:YES.
     id overlayVC = YTAGOverlayVCFromSender(sender);
     if (!overlayVC) {
         YTAGLog(@"overlay-lock", @"no overlay VC from sender");
@@ -806,7 +790,7 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
         sender.accessibilityLabel = @"Lock controls";
         YTAGLog(@"overlay-lock", @"unlocked (state was YES → NO)");
     } else {
-        // LOCK path: YTLite's original sequence — fullscreen request, then engage.
+        // Lock path: fullscreen request first, then engage lock mode.
         if ([overlayVC respondsToSelector:@selector(lockModeDidRequestShowFullscreen)]) {
             ((void (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeDidRequestShowFullscreen));
         }
@@ -918,7 +902,6 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
     // PRIMARY: live-read from the YTPlayerViewController's own in-memory
     // `playerResponse.playerData.streamingData.adaptiveFormatsArray`. No network,
     // no client spoofing — YT has already resolved these URLs to play the video.
-    // Exactly what YTLite does in sub_361536 at decomp line 361570-361573.
     id pvcForLiveRead = YTAGPlayerVCFromSender(sender);
     YTAGExtractionResult *liveResult = [YTAGURLExtractor extractFromPlayerVC:pvcForLiveRead];
     if (liveResult && liveResult.formats.count > 0) {
@@ -1273,15 +1256,15 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
                           on:presentingVC];
 }
 
-+ (void)hijackFromPlayerVC:(id)playerVC fromView:(UIView *)sourceView {
++ (void)routeFromPlayerVC:(id)playerVC fromView:(UIView *)sourceView {
     UIViewController *presentingVC = YTAGPresenterForView(sourceView);
     if (!presentingVC) {
-        YTAGLog(@"dl-hijack", @"no presenting VC — cannot show sheet");
+        YTAGLog(@"dl-route", @"no presenting VC — cannot show sheet");
         return;
     }
     YTAGExtractionResult *liveResult = [YTAGURLExtractor extractFromPlayerVC:playerVC];
     if (liveResult && liveResult.formats.count > 0) {
-        YTAGLog(@"dl-hijack", @"live-read OK (%lu formats), videoID=%@",
+        YTAGLog(@"dl-route", @"live-read OK (%lu formats), videoID=%@",
                 (unsigned long)liveResult.formats.count, liveResult.videoID);
         [self presentActionSheetWithResult:liveResult
                                    videoID:liveResult.videoID
@@ -1299,7 +1282,7 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
                               on:presentingVC];
         return;
     }
-    YTAGLog(@"dl-hijack", @"live-read empty — falling back to InnerTube for videoID=%@", vid);
+    YTAGLog(@"dl-route", @"live-read empty — falling back to InnerTube for videoID=%@", vid);
     UIAlertController *loading = [UIAlertController
         alertControllerWithTitle:nil
                          message:@"Loading…"

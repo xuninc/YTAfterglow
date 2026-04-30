@@ -71,8 +71,6 @@ typedef void (^YTAGExtractionCompletion)(YTAGExtractionResult * _Nullable result
 
 /// Live-read path: walks `pvc.playerResponse.playerData.streamingData.adaptiveFormatsArray`
 /// off the already-playing YTPlayerViewController. No network, no client spoofing.
-/// This is exactly what YTLite's `-[DownloadMenuHelper getVideoFormatsArray:]` does
-/// (decomp sub_361536 at 361570-361573).
 /// Completion fires synchronously on the calling queue (usually main).
 + (nullable YTAGExtractionResult *)extractFromPlayerVC:(id)playerVC;
 

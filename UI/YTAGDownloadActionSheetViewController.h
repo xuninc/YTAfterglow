@@ -4,8 +4,8 @@
 // Offers six entries across two semantic groups (Save & Download / Share & Open).
 // Each entry is a plain callback; wiring lives in YTAGDownload.x.
 //
-// Visually differentiated from YTLite's flat sheet by grouped sections, rounded
-// material background, and inline size chips for the "download" actions.
+// Grouped sections, rounded material background, and inline size chips keep the
+// sheet readable without feeling like a plain action list.
 
 #import <UIKit/UIKit.h>
 

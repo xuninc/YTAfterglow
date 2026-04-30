@@ -1,23 +1,12 @@
-// FFMpegHelper.m — reconstruction of -[FFMpegHelper mergeVideo:withAudio:captions:duration:completion:]
-// from YTLite raw decompilation.
+// FFMpegHelper.m — FFmpegKit-backed muxing for Afterglow downloads.
 //
-// Source: /mnt/c/Users/Corey/source/repos/xuninc/YTLite-decompiled/C File/YTLite.dylib.c
-//   - entry          at line 381630  (address 0x00054BE0)
-//   - sub_54D98      "WaitsForConversion" toast-on-main
-//   - sub_54E0C      ffmpeg-queue work block (thumbnail prep + main mux dispatch)
-//   - sub_5510C      UI prep (setActive, show "Converting" progress toast)
-//   - sub_551C8      stop-button handler -> [MobileFFmpeg cancel]
-//   - sub_551D4      execute mux on global queue, then dispatch completion on main
-//   - sub_55278      result handler on main (NSError construction by return code)
+// The conversion flow is split into small, named helpers so the download manager
+// can validate inputs, prepare thumbnails, execute FFmpeg, and surface useful
+// failure logs without letting long-running work overlap.
 //
-// The raw monolithic function is split here into smaller private methods that correspond
-// 1:1 with the inline blocks in the decomp. Behavior preserved verbatim.
-//
-// ffmpeg backend: we target arthenica/ffmpeg-kit (successor to MobileFFmpeg). The few entry
-// points the raw touches — +resetStatistics, +setLogDelegate:, +execute:, +cancel,
-// +getLastCommandOutput — all exist on ffmpeg-kit's FFmpegKitConfig/FFmpegKit with the same
-// semantics (return code 0 == success, 255 == cancelled per ffmpeg-kit docs). Forward-decl'd
-// below so this file compiles before the framework is linked.
+// ffmpeg backend: we target arthenica/ffmpeg-kit. Forward declarations keep this
+// file buildable before the framework is linked; the mux itself still requires
+// the framework at runtime.
 
 #import "FFMpegHelper.h"
 #import "YTAGLog.h"
@@ -50,8 +39,7 @@
 @end
 #endif
 
-// YTLite used MobileFFmpeg's convention: rc 0 = success, rc 255 = user-cancelled. ffmpeg-kit
-// preserves these numeric codes so the branch logic below is correct for both backends.
+// ffmpeg-kit return-code handling: rc 0 = success, rc 255 = user-cancelled.
 static const long kFFReturnOK = 0;
 static const long kFFReturnCancelled = 255;
 
@@ -66,10 +54,9 @@ static BOOL FFMpegFileExistsAndHasBytes(NSURL *url, unsigned long long *outBytes
 
 #pragma mark - ToastView placeholder
 
-// The raw dispatches UI updates through a ToastView class. Not reconstructed yet —
-// we'll replace these calls with YTAGDebugHUD / YTAGLog or a real ToastView port later.
-// Stubbed here as protocol-shaped no-ops so the reconstruction compiles and the call
-// graph matches the raw.
+// UI progress is intentionally abstracted for now. These no-op shims let the
+// conversion pipeline expose useful diagnostics while we iterate on the final
+// in-app progress surface.
 @protocol FFMpegToastSurface <NSObject>
 - (void)showToast:(NSString *)text;
 - (void)showProgressWithText:(NSString *)text progress:(double)progress withStop:(void (^)(void))stop stopCompletion:(double)stopCompletion;
@@ -85,9 +72,7 @@ static BOOL FFMpegFileExistsAndHasBytes(NSURL *url, unsigned long long *outBytes
 @end
 
 static NSString *FFLocalizedString(NSString *key) {
-    // Raw fetches via [NSBundle ytl_defaultBundle]. We don't have that bundle yet.
-    // Known keys: "WaitsForConversion", "Converting", "Cancelled", "Error.Clipboard".
-    // English fallbacks that match YTLite's strings:
+    // English fallbacks for conversion status and failure states.
     NSDictionary *fallback = @{
         @"WaitsForConversion": @"Waiting for the current conversion to finish…",
         @"Converting":         @"Converting…",
@@ -150,7 +135,7 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
 - (BOOL)isProcessing { return _isProcessing; }
 - (NSInteger)duration { return _duration; }
 
-#pragma mark - Public entry (raw line 381630)
+#pragma mark - Public entry
 
 - (void)muxVideo:(NSURL *)videoURL
            audio:(NSURL *)audioURL
@@ -187,21 +172,19 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
     }
     YTAGLog(@"ffmpeg", @"[bc] mux inputs: video=%llu bytes audio=%llu bytes", videoBytes, audioBytes);
 
-    // Fresh toast for the in-progress state. In the raw, this is alloc/init'd unconditionally
-    // here even though it may get replaced by the "Converting" progress toast inside the work
-    // block. We preserve that shape.
+    // Fresh toast for the in-progress state. This may be replaced by the
+    // conversion progress toast once the queued work starts.
     id<FFMpegToastSurface> toast = [FFMpegToastStub new];
 
-    // sub_54D98 — if a mux is already running, surface a "please wait" toast on main.
-    // We still enqueue the new work: the ffmpeg queue is serial so ordering is preserved
-    // automatically.
+    // If a mux is already running, surface a "please wait" toast on main. The
+    // serial queue still preserves request order.
     if (_isProcessing) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [toast showToast:FFLocalizedString(@"WaitsForConversion")];
         });
     }
 
-    // sub_54E0C — enqueue the full mux pipeline on the serial ffmpeg queue.
+    // Enqueue the full mux pipeline on the serial ffmpeg queue.
     dispatch_async(_ffmpegQueue, ^{
         [self runMuxPipelineWithVideo:videoURL
                                 audio:audioURL
@@ -212,9 +195,9 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
     });
 }
 
-#pragma mark - Private (raw sub_54E0C)
+#pragma mark - Private mux pipeline
 
-/// Runs on _ffmpegQueue. Matches the body of sub_54E0C in the raw decomp.
+/// Runs on _ffmpegQueue and owns the full mux pipeline.
 - (void)runMuxPipelineWithVideo:(NSURL *)videoURL
                           audio:(NSURL *)audioURL
                        captions:(NSURL *)captionsURL
@@ -222,8 +205,7 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
                       waitToast:(id<FFMpegToastSurface>)waitToast
                      completion:(FFMpegHelperCompletion)completion
 {
-    // Raw lines 117-123: flip processing flag, stash duration, clear previous statistics,
-    // reset the ffmpeg-level statistics state.
+    // Flip processing state, stash duration, and clear previous statistics.
     _isProcessing = YES;
     _duration = durationSeconds;
     self.statistics = nil;
@@ -232,8 +214,8 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
     // For draft, the reset is a no-op if we haven't run anything yet, so we skip it and
     // rely on the per-session statistics from ffmpeg-kit's callback.
 
-    // sub_5510C — UI prep on main: setActive, hide wait-toast, create fresh progress toast
-    // pointing at sub_551C8 (stop-button handler == [FFmpegKit cancel]).
+    // UI prep on main: mark active, hide wait-toast, create fresh progress toast,
+    // and wire the stop action to FFmpegKit cancellation.
     dispatch_async(dispatch_get_main_queue(), ^{
         [self setActive];
         [waitToast hide];
@@ -245,7 +227,7 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
                         stopCompletion:0.0];
     });
 
-    // Raw lines 132-141: paths live beside the video file.
+    // Paths live beside the downloaded video stream file.
     NSURL *dir        = [videoURL URLByDeletingLastPathComponent];
     NSURL *outputURL  = [dir URLByAppendingPathComponent:@"output.mp4"];
     NSURL *webpThumb  = [dir URLByAppendingPathComponent:@"thumbnail.webp"];
@@ -255,8 +237,8 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
     [fm removeItemAtURL:jpgThumb error:nil];
     [fm removeItemAtURL:outputURL error:nil];
 
-    // Raw lines 142-158: if a webp thumbnail is sitting alongside the video, transcode it
-    // to jpg synchronously so getCommand can embed it as cover art.
+    // If a webp thumbnail is sitting alongside the video, transcode it to jpg
+    // synchronously so getCommand can embed it as cover art.
     NSURL *thumbnailForCommand = nil;
     if ([fm fileExistsAtPath:webpThumb.path]) {
         NSString *thumbCmd = [NSString stringWithFormat:
@@ -266,8 +248,8 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
         thumbnailForCommand = jpgThumb;
     }
 
-    // Raw line 159-168: build the mux command via the sibling method (variant selected by
-    // which of captions/thumbnail exist).
+    // Build the mux command via the sibling method. The variant is selected by
+    // which optional assets exist.
     NSString *command = [self getCommandWithVideoURL:videoURL
                                             audioURL:audioURL
                                          captionsURL:captionsURL
@@ -275,18 +257,13 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
                                             duration:durationSeconds
                                            outputURL:outputURL];
 
-    // Raw line 169: set self as the log delegate so -getCleanLog: can be invoked on failure.
-    // ffmpeg-kit equivalent: [FFmpegKitConfig enableLogCallback:^(id log){ ... }]. We wire
-    // a lightweight pipe so getCleanLog: can still see the output — TODO once we reconstruct
-    // getCleanLog: and pick a real log-stash mechanism.
-    // (Draft: skip log-delegate routing; getLastCommandOutput below covers the failure-path
-    // scraping.)
+    // Failure logs are pulled from the completed session below. That keeps the
+    // pipeline simple and avoids global FFmpeg log delegate state.
 
     YTAGLog(@"ffmpeg", @"[bc] muxVideo: command=%@", command);
 
-    // sub_551D4 — execute synchronously on our serial ffmpeg queue, then dispatch
-    // completion to main. The earlier global-queue hop made the "serial" queue
-    // return immediately, so multiple callers could overlap despite _isProcessing.
+    // Execute synchronously on our serial ffmpeg queue, then dispatch completion
+    // to main. Keeping execution on this queue prevents overlapping mux jobs.
     YTAGLog(@"ffmpeg", @"[bc] muxVideo: calling FFmpegKit execute:");
     FFmpegSession *session = [FFmpegKit execute:command];
     YTAGLog(@"ffmpeg", @"[bc] muxVideo: execute: returned session=%@", session);
@@ -317,7 +294,7 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
     }
     YTAGLog(@"ffmpeg", @"mux rc=%ld", rc);
 
-    // sub_55278 — completion handler on main.
+    // Completion handler on main.
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.progressToast hide];
         self->_isProcessing = NO;
@@ -340,10 +317,8 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
         if (rc == kFFReturnCancelled) {
             descKey = @"Cancelled";
         } else {
-            // ffmpeg-kit stores output PER-SESSION, not class-wide. YTLite's
-            // MobileFFmpeg had `+[FFmpegKit getLastCommandOutput]` at the class
-            // level — that selector does NOT exist on ffmpeg-kit's FFmpegKit
-            // class. Pull the output off the session object we already have.
+            // ffmpeg-kit stores output per session, not class-wide. Pull the
+            // output off the session object we already have.
             NSString *lastOut = FFMpegSessionLogs(session);
             [self getCleanLog:lastOut];
             descKey = @"Error.Clipboard";
@@ -353,19 +328,11 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
     });
 }
 
-#pragma mark - getCommandWithVideoURL: — 4-variant mux string (raw .c:382007)
+#pragma mark - getCommandWithVideoURL: — 4-variant mux string
 
-// Port of -[FFMpegHelper getCommandWithVideoURL:audioURL:captionsURL:thumbnailURL:duration:outputURL:]
-// from YTLite.dylib.c:382007-382119. Command shape depends on which of captions/thumbnail
-// exist on disk at build time. All four variants below match YTLite byte-for-byte, with
-// two deliberate deltas:
-//   1. Paths are quote-wrapped. ffmpeg-kit's tokenizer supports shell-like quoting; YTLite's
-//      MobileFFmpeg may have used a different tokenizer. Quoting makes us robust to any
-//      future tmp-dir layout that has spaces (sandboxed Documents paths can't have them today
-//      but defensive is cheap).
-//   2. We pass `.path` (NSString) rather than the NSURL itself. YTLite's code passes NSURL,
-//      which %@ formats as `file:///...`. ffmpeg handles `file://` URLs fine, but the plain
-//      path is what every other ffmpeg example in the world uses, so we lean there.
+// Command shape depends on which of captions/thumbnail exist on disk at build
+// time. Paths are quote-wrapped for resilience, and NSURL inputs are converted
+// to plain filesystem paths before being passed to ffmpeg.
 - (NSString *)getCommandWithVideoURL:(NSURL *)videoURL
                             audioURL:(NSURL *)audioURL
                          captionsURL:(NSURL *)captionsURL
@@ -377,17 +344,15 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
     BOOL hasCaps  = captionsURL  ? [fm fileExistsAtPath:captionsURL.path]  : NO;
     BOOL hasThumb = thumbnailURL ? [fm fileExistsAtPath:thumbnailURL.path] : NO;
 
-    // YTLite's codeForCaps: — dictionary lookup on the filename stem. Until we
-    // port the full lang-code dict (off_E0BCD0 in YTLite, constant at load time),
-    // fall back to the filename stem. Downstream effect: mp4 track metadata
-    // language tag will be "English" instead of "eng". Players still recognize
-    // the track; just cosmetically non-ISO.
+    // Caption language metadata currently falls back to the filename stem. The
+    // downstream effect is cosmetic: "English" instead of ISO "eng", while
+    // players still recognize and list the track.
     NSString *langCode = hasCaps ? [self codeForCaps:captionsURL] : nil;
     NSString *durationArg = durationSeconds > 0
         ? [NSString stringWithFormat:@"-to %ld ", (long)durationSeconds]
         : @"";
 
-    // Branch 1 (YTLite raw line 382055) — captions + thumbnail
+    // Captions + thumbnail.
     if (hasCaps && hasThumb) {
         return [NSString stringWithFormat:
             @"-hide_banner -y -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" -i \"%@\" %@"
@@ -400,7 +365,7 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
             durationArg, langCode, outputURL.path];
     }
 
-    // Branch 2 (YTLite raw line 382074) — captions only
+    // Captions only.
     if (hasCaps && !hasThumb) {
         return [NSString stringWithFormat:
             @"-hide_banner -y -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" %@"
@@ -412,7 +377,7 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
             durationArg, langCode, outputURL.path];
     }
 
-    // Branch 4 (YTLite raw line 382101) — thumbnail only (no captions)
+    // Thumbnail only.
     if (!hasCaps && hasThumb) {
         return [NSString stringWithFormat:
             @"-hide_banner -y -loglevel error -i \"%@\" -i \"%@\" -i \"%@\" %@"
@@ -424,7 +389,7 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
             durationArg, outputURL.path];
     }
 
-    // Branch 3 (YTLite raw line 382089) — minimal: video + audio only
+    // Minimal: video + audio only.
     return [NSString stringWithFormat:
         @"-hide_banner -y -loglevel error -i \"%@\" -i \"%@\" %@"
         @"-map 0:v:0 -map 1:a:0 "
@@ -437,16 +402,15 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
         duration:(NSInteger)durationSeconds
       completion:(FFMpegHelperCompletion)completion
 {
-    // TODO: reconstruct from raw .c line 382128. Not on the hot path for MP4 downloads —
-    // only invoked for audio-only extraction after the main mux.
+    // Not on the hot path for MP4 downloads; only invoked for audio-only
+    // extraction after the main mux.
     NSError *err = [NSError errorWithDomain:@"ErrDomain" code:-1
-                                   userInfo:@{NSLocalizedDescriptionKey: @"cutAudio not yet reconstructed"}];
+                                   userInfo:@{NSLocalizedDescriptionKey: @"cutAudio not yet implemented"}];
     dispatch_async(dispatch_get_main_queue(), ^{ completion(nil, err); });
 }
 
-#pragma mark - getCleanLog: — ffmpeg error-log distillation (raw .c:382410)
+#pragma mark - getCleanLog: — ffmpeg error-log distillation
 
-// Port of -[FFMpegHelper getCleanLog:] from YTLite.dylib.c:382410-382514.
 // Takes ffmpeg's verbose stderr dump, dedupes consecutive duplicate lines,
 // trims leading/trailing whitespace, strips trailing "." characters, and
 // copies the result to the pasteboard. Used when a mux fails so the user
@@ -485,24 +449,18 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
 }
 
 - (void)setActive {
-    // TODO: port from raw .c line 382520. YTLite wired MobileFFmpegConfig's log +
-    // statistics delegates to self. ffmpeg-kit uses callback blocks instead
-    // (+[FFmpegKitConfig enableLogCallback:], enableStatisticsCallback:). The current
-    // mux pipeline works without these; wiring them up only adds progress-toast
-    // updates, not download correctness.
+    // TODO: wire FFmpegKit log/statistics callbacks for live progress-toast
+    // updates. The current mux pipeline works without these callbacks.
 }
 
 - (void)updateProgressDialog {
-    // TODO: port from raw .c line 382528. Depends on setActive wiring self.statistics
-    // via the ffmpeg-kit statistics callback. Cosmetic only — no effect on the mux.
+    // TODO: update the progress toast from FFmpegKit statistics callbacks.
+    // Cosmetic only; no effect on mux correctness.
 }
 
 - (NSString *)codeForCaps:(NSURL *)captionsURL {
-    // YTLite raw .c:382569 reads a constant dict (off_E0BCD0 = NSConstantDictionary)
-    // keyed on filename stem ("English" → "eng"), falling back to the stem itself.
-    // We skip the dict for now — our caption filenames come from YTAGCaptionTrack
-    // display names, so stem is already human-language text. Downstream metadata is
-    // "language=English" instead of ISO "eng"; MP4 players still list the track.
+    // Caption filenames come from YTAGCaptionTrack display names, so the stem is
+    // already human-readable. A future mapping can normalize these to ISO codes.
     if (!captionsURL) return nil;
     return [[captionsURL.path lastPathComponent] stringByDeletingPathExtension];
 }

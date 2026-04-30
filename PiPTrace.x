@@ -3,12 +3,10 @@
 #import <AVFoundation/AVFoundation.h>
 #import "Utils/YTAGLog.h"
 
-// Diagnostic hooks to trace WHEN and HOW an AVPictureInPictureController gets
-// created and bound into YT's internal MLPIPController.  The YouPiP button
-// path hits `MLPIPController.pictureInPictureController == nil` on YT
-// 21.16.2 / iOS 26, while the swipe-to-miniplayer path succeeds — these
-// hooks are here to reveal which selector fires along the working path so
-// we can replicate it from the button.
+// Diagnostic hooks for PiP setup compatibility. These logs show when an
+// AVPictureInPictureController is created and bound into YouTube's internal
+// MLPIPController so button-driven PiP can follow the same healthy setup path
+// as swipe-to-miniplayer PiP.
 
 @interface MLPIPController : NSObject
 @end

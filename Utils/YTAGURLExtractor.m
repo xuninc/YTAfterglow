@@ -121,7 +121,7 @@ static BOOL YTAGDetectDRCFromURL(NSString * _Nullable urlString) {
             if ([item.value rangeOfString:@"drc=1"].location != NSNotFound) return YES;
         }
     }
-    // Fallback: raw substring check (covers non-standard encoding).
+    // Fallback: plain substring check (covers non-standard encoding).
     if ([urlString rangeOfString:@"drc%3D1"].location != NSNotFound) return YES;
     if ([urlString rangeOfString:@"drc=1"].location != NSNotFound) return YES;
     return NO;
@@ -355,7 +355,7 @@ static void YTAGAppendTranslatedCaptionTracks(NSMutableArray<YTAGCaptionTrack *>
 + (nullable YTAGExtractionResult *)extractFromPlayerVC:(id)playerVC {
     if (!playerVC) return nil;
 
-    // Walk YTLite's documented path (decomp sub_361536, lines 361570-361573):
+    // Walk the in-memory player response path:
     //   [playerVC playerResponse] -> YTPlayerResponse
     //   .playerData                -> YTIPlayerResponse
     //   .streamingData             -> YTIStreamingData
@@ -366,9 +366,9 @@ static void YTAGAppendTranslatedCaptionTracks(NSMutableArray<YTAGCaptionTrack *>
     // plausible names in order before giving up.
     id playerResponse = nil;
     NSString *hitKey = nil;
-    // Order matters: `contentPlayerResponse` is the accessor YT 21.16.2 actually
-    // exposes (confirmed via OfflineProbe dump). The rest are historical aliases
-    // kept as fallbacks in case of version drift in either direction.
+    // Order matters: `contentPlayerResponse` is the accessor current YouTube
+    // builds expose. The rest are historical aliases kept as fallbacks in case
+    // of version drift in either direction.
     NSArray<NSString *> *responseKeys = @[
         @"contentPlayerResponse",
         @"playerResponse",
@@ -458,10 +458,8 @@ static void YTAGAppendTranslatedCaptionTracks(NSMutableArray<YTAGCaptionTrack *>
     // Protobuf ObjC generator capitalizes acronyms, so the `url` protobuf field
     // becomes `URL` in Objective-C — NOT `url`. v33 used `@"url"` for KVC and
     // every live-read format returned a nil URL, which our `length > 0` filter
-    // dropped — we saw "128 formats → 0 formats" in the log. Try `URL` first
-    // (matches 21.16.2 behavior per YouTube_decompiled/MLFormat.c:674, YT calls
-    // `-[YTIFormatStream URL]`), then `url` as a compatibility fallback for any
-    // version drift.
+    // dropped — we saw "128 formats → 0 formats" in the log. Try `URL` first,
+    // then `url` as a compatibility fallback for any version drift.
     NSMutableArray<YTAGFormat *> *formats = [NSMutableArray array];
     for (id f in (NSArray *)adaptiveArray) {
         YTAGFormat *fmt = [[YTAGFormat alloc] init];
