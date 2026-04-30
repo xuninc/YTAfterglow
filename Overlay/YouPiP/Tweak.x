@@ -73,6 +73,10 @@ BOOL NonBackgroundable() {
     return [[NSUserDefaults standardUserDefaults] boolForKey:NonBackgroundableKey];
 }
 
+static BOOL AfterglowPiPShouldForceYouTubeUserSetting() {
+    return TweakEnabled() && (UsePiPButton() || UseTabBarPiPButton() || UseAllPiPMethod());
+}
+
 BOOL isPictureInPictureActive(MLPIPController *pip) {
     return [pip respondsToSelector:@selector(pictureInPictureActive)] ? [pip pictureInPictureActive] : [pip isPictureInPictureActive];
 }
@@ -84,8 +88,12 @@ static void activatePiPBase(YTPlayerPIPController *controller) {
     YTAGLog(@"pip", @"activatePiPBase controller=%@ class=%@", controller, NSStringFromClass([controller class]));
     if (!controller) { YTAGLog(@"pip", @"  controller nil, abort"); return; }
     YTBackgroundabilityPolicy *backgroundabilityPolicy = [controller valueForKey:@"_backgroundabilityPolicy"];
-    BOOL allowed = backgroundabilityPolicy.playableInPiPByUserSettings;
-    YTAGLog(@"pip", @"  backgroundabilityPolicy=%@ playableInPiPByUserSettings=%@", backgroundabilityPolicy, allowed ? @"YES" : @"NO");
+    BOOL allowedByYouTubeSettings = backgroundabilityPolicy.playableInPiPByUserSettings;
+    BOOL allowed = allowedByYouTubeSettings || AfterglowPiPShouldForceYouTubeUserSetting();
+    YTAGLog(@"pip", @"  backgroundabilityPolicy=%@ playableInPiPByUserSettings=%@ forcedByAfterglow=%@",
+            backgroundabilityPolicy,
+            allowedByYouTubeSettings ? @"YES" : @"NO",
+            (!allowedByYouTubeSettings && allowed) ? @"YES" : @"NO");
     if (!allowed) { YTAGLog(@"pip", @"  early-return (user-settings says no)"); return; }
     MLPIPController *pip = [controller valueForKey:@"_pipController"];
     YTAGLog(@"pip", @"  _pipController=%@ class=%@", pip, NSStringFromClass([pip class]));
@@ -448,6 +456,32 @@ static UIImage *pipImage() {
 %end
 
 #pragma mark - Hacks
+
+%hook YTBackgroundabilityPolicy
+
+- (BOOL)isPlayableInPictureInPictureByUserSettings {
+    BOOL value = %orig;
+    if (!value && AfterglowPiPShouldForceYouTubeUserSetting()) {
+        YTAGLog(@"pip", @"forcing YTBackgroundabilityPolicy PiP user setting on for Afterglow PiP");
+        return YES;
+    }
+    return value;
+}
+
+%end
+
+%hook YTBackgroundabilityPolicyImpl
+
+- (BOOL)isPlayableInPictureInPictureByUserSettings {
+    BOOL value = %orig;
+    if (!value && AfterglowPiPShouldForceYouTubeUserSetting()) {
+        YTAGLog(@"pip", @"forcing YTBackgroundabilityPolicyImpl PiP user setting on for Afterglow PiP");
+        return YES;
+    }
+    return value;
+}
+
+%end
 
 BOOL YTSingleVideo_isLivePlayback_override = NO;
 
