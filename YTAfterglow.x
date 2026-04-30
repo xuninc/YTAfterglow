@@ -227,8 +227,8 @@ static void ytagShortsApplyOverlayVisibility(UIView *overlay) {
 
 static void ytagShortsApplyWatchHeaderVisibility(id header) {
     NSDictionary<NSString *, NSArray<NSString *> *> *rules = @{
-        @"hideShortsChannelName": @[@"channelbar", @"channelname", @"username", @"subscribe", @"follow"],
-        @"hideShortsDescription": @[@"headerrenderer", @"shortsvideotitle", @"description", @"title", @"expandabletext"],
+        @"hideShortsChannelName": @[@"channelbar", @"channelname", @"username", @"handle", @"author", @"creator", @"byline", @"subscribe", @"follow", @"reelchannel"],
+        @"hideShortsDescription": @[@"shortsvideotitle", @"videotitle", @"description", @"desc", @"title", @"expandabletext", @"attributedtitle", @"reelwatchtitle"],
         @"hideShortsAudioTrack": @[@"soundmetadata", @"audiotrack", @"audio", @"music", @"sound"],
         @"hideShortsPromoCards": @[@"actionelement", @"promo", @"promotion", @"suggestion", @"product", @"shopping", @"sticker", @"card"],
         @"hideShortsThanks": @[@"badge", @"thanks", @"superthanks"],
@@ -1607,9 +1607,15 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
     ytagShortsApplyWatchHeaderVisibility(self);
 }
 
-- (void)setChannelBarElementRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
+- (void)setChannelBarElementRenderer:(id)renderer {
+    %orig(ytagBool(@"hideShortsChannelName") ? nil : renderer);
+    ytagShortsApplyWatchHeaderVisibility(self);
+}
 - (void)setHeaderRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
-- (void)setShortsVideoTitleElementRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
+- (void)setShortsVideoTitleElementRenderer:(id)renderer {
+    %orig(ytagBool(@"hideShortsDescription") ? nil : renderer);
+    ytagShortsApplyWatchHeaderVisibility(self);
+}
 - (void)setSoundMetadataElementRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
 - (void)setActionElement:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
 - (void)setBadgeRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }

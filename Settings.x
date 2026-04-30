@@ -1447,9 +1447,10 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     }];
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"NoPlayerDownloadButton", @"PlayerShareButton", @"PlayerSaveButton", @"NoPlayerRemixButton", @"NoPlayerClipButton", @"RemoveDownloadMenu", @"RemoveShareMenu"] path:@[playerTitle, buttonsMenusTitle] aliasesByKey:nil];
     if (isAdvanced) {
-        [self ytag_addSearchEntries:entries forSettingKeys:@[@"MuteButton", @"LockButton", @"DownloadButton", @"ControlsSheetButton", @"PauseOnOverlay", @"HideSubs", @"NoHUDMsgs", @"HidePrevNext", @"ReplacePrevNext", @"NoDarkBg", @"NoFullscreenActions", @"StockVolumeHUD", @"NoWatermarks", @"VideoEndTime", @"24hrFormat"] path:@[playerTitle, overlayTitle] aliasesByKey:@{
+        [self ytag_addSearchEntries:entries forSettingKeys:@[@"MuteButton", @"LockButton", @"DownloadButton", @"ControlsSheetButton", @"OverlayDeclutterButton", @"PauseOnOverlay", @"HideSubs", @"NoHUDMsgs", @"HidePrevNext", @"ReplacePrevNext", @"NoDarkBg", @"NoFullscreenActions", @"StockVolumeHUD", @"NoWatermarks", @"VideoEndTime", @"24hrFormat"] path:@[playerTitle, overlayTitle] aliasesByKey:@{
             @"DownloadButton": @[@"overlay download", @"download overlay"],
-            @"ControlsSheetButton": @[@"premium controls", @"speed tile", @"stable volume", @"playback sheet"]
+            @"ControlsSheetButton": @[@"premium controls", @"speed tile", @"stable volume", @"playback sheet"],
+            @"OverlayDeclutterButton": @[@"hide overlay buttons", @"clean overlay", @"declutter overlay"]
         }];
     }
 
@@ -1512,7 +1513,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSArray *interfaceKeys = [[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObjectsFromArray:[@[@"disableRTL"] arrayByAddingObjectsFromArray:legacyKeys]];
     NSArray *playerPlaybackKeys = @[@"backgroundPlayback", @"disableAutoCaptions", @"rememberCaptionState", @"rememberLoop", @"noContentWarning", @"classicQuality", @"hideEndScreenCards", @"noRelatedVids", @"noContinueWatching", @"noContinueWatchingPrompt", @"noRelatedWatchNexts", @"miniplayer", @"playlistOldMinibar", @"autoplayMode"];
     NSArray *playerControlKeys = @[@"portraitFullscreen", @"tapToSeek", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
-    NSArray *playerOverlayKeys = @[@"muteButton", @"lockButton", @"downloadButton", @"controlsSheetButton", @"hideSubs", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"noFullscreenActions", @"pauseOnOverlay", @"stockVolumeHUD", @"noWatermarks", @"videoEndTime", @"24hrFormat"];
+    NSArray *playerOverlayKeys = @[@"muteButton", @"lockButton", @"downloadButton", @"controlsSheetButton", @"overlayDeclutterButton", @"hideSubs", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"noFullscreenActions", @"pauseOnOverlay", @"stockVolumeHUD", @"noWatermarks", @"videoEndTime", @"24hrFormat"];
     NSArray *playerActionBarKeys = @[@"noPlayerDownloadButton", @"noPlayerRemixButton", @"noPlayerClipButton"];
     NSArray *playerMenuKeys = @[@"removeDownloadMenu", @"removeShareMenu"];
     NSArray *playerKeys = [[[[playerPlaybackKeys arrayByAddingObjectsFromArray:playerControlKeys] arrayByAddingObjectsFromArray:playerOverlayKeys] arrayByAddingObjectsFromArray:playerActionBarKeys] arrayByAddingObjectsFromArray:playerMenuKeys];
@@ -2095,6 +2096,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                             [self switchWithTitle:@"LockButton" key:@"lockButton"],
                             [self switchWithTitle:@"DownloadButton" key:@"downloadButton"],
                             [self switchWithTitle:@"ControlsSheetButton" key:@"controlsSheetButton"],
+                            [self switchWithTitle:@"OverlayDeclutterButton" key:@"overlayDeclutterButton"],
                             [self switchWithTitle:@"HideSubs" key:@"hideSubs"],
                             [self switchWithTitle:@"NoHUDMsgs" key:@"noHUDMsgs"],
                             [self switchWithTitle:@"HidePrevNext" key:@"hidePrevNext"],
