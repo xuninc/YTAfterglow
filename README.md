@@ -53,25 +53,36 @@ Tested against recent YouTube releases; older versions may work but are not acti
 
 ---
 
-## Development Team
+## Credits
+
+### Project Stewardship
 
 | Role | Name |
 | --- | --- |
 | Maintainer / Senior Developer | [Corey Hamilton](https://github.com/xuninc) |
-| AI Core Developer | [Claude Opus 4.6](https://claude.com/claude) |
-| AI Contributor | [Codex (forgets things)](https://openai.com/codex) |
+
+### AI Co-Development Team
+
+AI collaborators supporting implementation, review, and release polish.
+
+| Collaborator | Focus |
+| --- | --- |
+| [Claude Opus 4.6 / 4.7](https://claude.com/claude) | Architecture, implementation, and product polish |
+| [OpenAI Codex](https://openai.com/codex) | Code implementation, cleanup, and review support |
 
 ---
 
-## Foundation
+## Acknowledgements
 
-Afterglow is built on the last open-source state of [dayanch96/YTLite](https://github.com/dayanch96/YTLite) before it went closed-source at version 4.0. Everything past that release ships as a prebuilt closed-source dylib on dayanch96's side; Afterglow picks up from the open-source code that remained on the public repo and extends it with its own implementations, UI, and theme engine.
+[YTLite](https://github.com/dayanch96/YTLite) - open-source base, pre-4.0.
 
 ---
 
 ## Bundled Tweaks
 
-Open-source tweaks packaged with Afterglow, with full credit to their authors:
+Special thanks to [PoomSmart](https://github.com/PoomSmart) for keeping widely used YouTube tweak repositories open and maintained for everyone.
+
+Open-source tweaks packaged with Afterglow:
 
 | Author | Project(s) |
 | --- | --- |

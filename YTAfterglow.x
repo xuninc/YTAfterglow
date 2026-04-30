@@ -1961,13 +1961,8 @@ static NSString *ytagPivotId(YTIPivotBarSupportedRenderers *r) {
 }
 
 static NSString *ytagBrowseIdForTabId(NSString *tabId) {
-    if ([tabId isEqualToString:@"FEtrending"]) {
-        NSString *trendingBrowseId = [%c(YTIBrowseRequest) browseIDForTrendingTab];
-        return trendingBrowseId.length > 0 ? trendingBrowseId : @"FEtrending";
-    }
-    if ([tabId isEqualToString:@"FEexplore"]) {
-        NSString *exploreBrowseId = [%c(YTIBrowseRequest) browseIDForExploreTab];
-        return exploreBrowseId.length > 0 ? exploreBrowseId : @"FEexplore";
+    if ([tabId isEqualToString:@"FEtrending"] || [tabId isEqualToString:@"FEexplore"]) {
+        return @"FEhype_leaderboard";
     }
     return tabId;
 }
@@ -1982,18 +1977,17 @@ static NSString *ytagCanonicalPivotId(NSString *pivotId) {
 
     NSString *exploreBrowseId = [%c(YTIBrowseRequest) browseIDForExploreTab];
     if (exploreBrowseId.length > 0 && [pivotId isEqualToString:exploreBrowseId]) {
-        return @"FEtrending";
+        return @"FEexplore";
     }
 
     if ([pivotId isEqualToString:@"FEexplore"]) {
-        return @"FEtrending";
+        return @"FEexplore";
     }
 
     return pivotId;
 }
 
 static int ytagIconTypeForTabId(NSString *tabId) {
-    if ([tabId isEqualToString:@"FEtrending"]) return 67;
     if ([tabId isEqualToString:@"FEhype_leaderboard"]) return 67;
     if ([tabId isEqualToString:@"FEhistory"]) return 876;
     if ([tabId isEqualToString:@"VLWL"]) return 877;
@@ -2062,7 +2056,7 @@ static NSArray *ytagDefaultTabs() {
     [items removeObjectsInArray:toRemove];
 
     // Add optional tabs only when YouTube did not supply them natively.
-    for (NSString *tabId in @[@"FEtrending", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"]) {
+    for (NSString *tabId in @[@"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"]) {
         if ([activeTabs containsObject:tabId] && !ytagItemsContainTab(items, tabId)) {
             YTIPivotBarSupportedRenderers *tab = ytagCreatePivotTab(tabId);
             if (tab) [items addObject:tab];

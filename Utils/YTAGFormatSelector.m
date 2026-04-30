@@ -32,7 +32,7 @@ static BOOL YTAGFormatPassesCodecFilter(YTAGFormat *f, YTAGCodecPreference codec
     return YES;
 }
 
-/// Ordering index for codec, smaller = preferred in YTLite's picker ordering.
+/// Ordering index for codec; smaller ranks appear first in the picker.
 static NSInteger YTAGCodecSortRank(NSString * _Nullable codec) {
     if (YTAGCodecMatchesH264(codec)) return 0; // H.264 first
     if (YTAGCodecMatchesAV1(codec))  return 1;
@@ -322,9 +322,9 @@ static NSComparisonResult YTAGCompareVideoBest(YTAGFormat *a, YTAGFormat *b) {
 
     // v40: reverted the H.264-only filter. That was based on a wrong premise —
     // I thought Photos refused VP9/AV1 due to codec policy. Actual fix is in
-    // YTAGDownloadManager's save path (swap to YTLite's creationRequestForAsset
-    // + addResourceWithType: pattern which bypasses the codec check). So we
-    // can safely offer every resolution × codec combo here again.
+    // YTAGDownloadManager's save path: create an asset, then attach the video
+    // file with addResourceWithType: to avoid the upfront codec check. So we can
+    // safely offer every resolution × codec combo here again.
     //
     // Group by (qualityLabel + codec family). Same-resolution H.264 / VP9 / AV1
     // show up as separate rows so user can pick bitrate/codec tradeoffs freely.

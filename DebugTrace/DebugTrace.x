@@ -1,9 +1,10 @@
-// AfterglowDebugTrace - passive observation tweak.
+// AfterglowDebugTrace - debug logging companion.
 //
-// Ships only YTAGLog + YTAGDebugHUD + passive hooks that log via %orig.
+// Ships only YTAGLog + YTAGDebugHUD + hooks that log via %orig.
 // Adds a "DebugLog" button to the YT player overlay (via YTVideoOverlay) that
 // copies the full log ring buffer to the pasteboard on tap. No settings section.
-// Safe to pair with YTLite/YouTubePlus — doesn't modify behavior, just observes.
+// Does not modify behavior; it only records selected events for compatibility
+// testing.
 
 #import <UIKit/UIKit.h>
 #import <AVKit/AVKit.h>

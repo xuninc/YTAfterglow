@@ -12,7 +12,7 @@ control. `.gitignore` is set to ignore `Frameworks/*.xcframework/`.
 ## ffmpeg-kit (required for HQ download manager mux)
 
 `Utils/FFMpegHelper.m` calls into ffmpeg-kit for the audio/video mux step of the
-HQ download pipeline (YTLite-parity). The build auto-fetches the xcframeworks via
+HQ download pipeline. The build auto-fetches the xcframeworks via
 `scripts/fetch-ffmpegkit.sh`; if that fetch fails, the package should fail loudly
 instead of shipping a download button whose mux path crashes at runtime.
 

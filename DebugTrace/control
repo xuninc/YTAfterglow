@@ -2,7 +2,7 @@ Package: i.am.kain.afterglow.debugtrace
 Name: Afterglow Debug Trace
 Version: 1.0.0
 Architecture: iphoneos-arm
-Description: Passive logging + HUD for tweaked apps. Pair with any closed-source tweak (e.g. YTLite) to observe keychain/SSO/PiP behavior without modifying it.
+Description: Debug logging HUD for compatibility testing. Captures selected keychain/SSO/PiP events without modifying behavior.
 Maintainer: xuninc
 Author: xuninc
 Section: Tweaks

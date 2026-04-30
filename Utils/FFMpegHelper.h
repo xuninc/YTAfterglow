@@ -1,31 +1,28 @@
-// FFMpegHelper — reconstructed from YTLite raw decompilation.
+// FFMpegHelper — FFmpegKit-backed muxing helper for Afterglow downloads.
 //
-// Reconstruction source: /mnt/c/Users/Corey/source/repos/xuninc/YTLite-decompiled/C File/YTLite.dylib.c
-//
-// This header declares the full class surface as it appears in the raw. Only
-// -muxVideo:audio:captions:duration:completion: (== raw -mergeVideo:withAudio:...) is
-// reconstructed in FFMpegHelper.m; the rest are stubbed with TODO pointers to the raw `.c`
-// line ranges so follow-up turns can reconstruct each from the same source without ambiguity.
+// This header declares the conversion surface used by the download manager.
+// Only the MP4 mux path is implemented today; the remaining methods are kept
+// as explicit extension points for future audio-only and progress UI work.
 
 #import <Foundation/Foundation.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// Completion signature matches the raw: success case yields outputURL, failure yields NSError
-/// in domain "ErrDomain" with localized description. Always invoked on the main queue.
+/// Success yields outputURL; failure yields NSError in domain "ErrDomain" with
+/// localized description. Always invoked on the main queue.
 typedef void (^FFMpegHelperCompletion)(NSURL * _Nullable outputURL, NSError * _Nullable error);
 
 @interface FFMpegHelper : NSObject
 
-/// Serial dispatch queue used for every ffmpeg invocation. Matches raw `_ffmpegQueue` ivar.
+/// Serial dispatch queue used for every ffmpeg invocation.
 @property (nonatomic, readonly) dispatch_queue_t ffmpegQueue;
 
 /// YES while a mux is in flight. Set inside the queued work block and cleared in the
-/// completion-on-main block. Matches raw `_isProcessing` ivar.
+/// completion-on-main block.
 @property (nonatomic, readonly) BOOL isProcessing;
 
 /// Expected duration (seconds) of the current mux, so the statistics callback can compute
-/// a progress fraction. Matches raw `_duration` ivar.
+/// a progress fraction.
 @property (nonatomic, readonly) NSInteger duration;
 
 + (instancetype)sharedManager;
@@ -46,7 +43,6 @@ typedef void (^FFMpegHelperCompletion)(NSURL * _Nullable outputURL, NSError * _N
 /// `error` is an NSError in domain "ErrDomain" with localized description — either "Cancelled"
 /// (ffmpeg return code 255) or "Error.Clipboard" (any other non-zero return code).
 ///
-/// Reconstruction: raw `.c` line 381630 (aka address `0x00054BE0`).
 - (void)muxVideo:(NSURL *)videoURL
            audio:(NSURL *)audioURL
         captions:(nullable NSURL *)captionsURL
@@ -57,7 +53,7 @@ typedef void (^FFMpegHelperCompletion)(NSURL * _Nullable outputURL, NSError * _N
 
 /// Build the ffmpeg command string from the four optional inputs. Four variants selected by
 /// which of captions/thumbnail exist on disk.
-/// TODO: reconstruct from raw `.c` line 382007.
+/// TODO: finish audio-only and progress-specific variants.
 - (NSString *)getCommandWithVideoURL:(NSURL *)videoURL
                             audioURL:(NSURL *)audioURL
                          captionsURL:(nullable NSURL *)captionsURL
@@ -65,22 +61,21 @@ typedef void (^FFMpegHelperCompletion)(NSURL * _Nullable outputURL, NSError * _N
                             duration:(NSInteger)durationSeconds
                            outputURL:(NSURL *)outputURL;
 
-/// Audio-only cut/transcode variant. TODO: reconstruct from raw `.c` line 382128.
+/// Audio-only cut/transcode variant.
 - (void)cutAudio:(NSURL *)audioURL
         duration:(NSInteger)durationSeconds
       completion:(FFMpegHelperCompletion)completion;
 
-/// Scrub / format the last ffmpeg log output before surfacing to user. TODO: reconstruct from raw `.c` line 382410.
+/// Scrub / format the last ffmpeg log output before surfacing to user.
 - (void)getCleanLog:(NSString *)lastOutput;
 
-/// Called to mark the mux as active (lifecycle signal). TODO: reconstruct from raw `.c` line 382520.
+/// Called to mark the mux as active (lifecycle signal).
 - (void)setActive;
 
-/// Update the progress toast with current statistics. TODO: reconstruct from raw `.c` line 382528.
+/// Update the progress toast with current statistics.
 - (void)updateProgressDialog;
 
 /// Language-code lookup from captions filename (dict mapping + filename fallback).
-/// TODO: reconstruct from raw `.c` line 382569.
 - (nullable NSString *)codeForCaps:(nullable NSURL *)captionsURL;
 
 @end
