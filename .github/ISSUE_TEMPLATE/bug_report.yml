@@ -6,7 +6,7 @@ body:
   - type: textarea
     attributes:
       label: Describe the bug
-      description: Please provide a clear and concise description of the issue, including any helpful context.
+      description: Provide a clear and concise description of the issue, including any relevant context.
       placeholder: |
         Describe the issue here.
     validations:
@@ -15,7 +15,7 @@ body:
   - type: textarea
     attributes:
       label: Steps to reproduce
-      description: Please list the steps required to reproduce the issue.
+      description: List the steps required to reproduce the issue.
       placeholder: |
         Example:
         1. Go to the Main tab.
@@ -34,7 +34,7 @@ body:
         1. Open **Settings** on your device.
         2. Go to **Privacy & Security** > **Analytics & Improvements** > **Analytics Data**.
         3. Find the log for the app. The file name usually begins with `YouTubeMusic_` followed by the date and time.
-        4. Open the file, tap the **Share** icon, save it to the **Files** app, and then compress it into a `.zip` file.
+        4. Open the file, tap the **Share** icon, save it to the **Files** app, and compress it into a `.zip` file.
         5. Attach the `.zip` file to this report.
       placeholder: |
         Drag and drop your Crashlog.zip file here.
@@ -45,7 +45,7 @@ body:
     attributes:
       label: Submission checklist
       description: |
-        **Important:** Please review each item carefully before submitting.
+        **Important:** Review each item carefully before submitting.
       options:
         - label: I have confirmed that a similar issue has not already been reported.
           required: true
