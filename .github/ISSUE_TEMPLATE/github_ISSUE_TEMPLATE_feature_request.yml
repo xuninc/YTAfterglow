@@ -1,0 +1,30 @@
+name: Feature request
+description: Use this template to suggest improvements or new features for the project.
+labels: enhancement
+
+body:
+  - type: textarea
+    attributes:
+      label: Describe the request
+      description: Provide a clear and detailed description of the feature or improvement you would like to see.
+      placeholder: |
+        Describe your feature request here.
+    validations:
+      required: true
+
+  - type: checkboxes
+    attributes:
+      label: Submission checklist
+      description: |
+        **Important:** Review each item carefully before submitting.
+      options:
+        - label: I have confirmed that a similar feature request has not already been submitted.
+          required: true
+        - label: I have verified that this request is relevant to the project and the version I am using.
+          required: true
+        - label: I have provided a clear and complete description of the request.
+          required: true
+        - label: I did not answer truthfully to all of the above checkboxes.
+          required: false
+        - label: By submitting this request, I confirm that I have completed all required fields and followed the guidelines. I understand that incomplete or inaccurate requests may be closed without review.
+          required: true
