@@ -8,6 +8,12 @@
 "SearchSettingsNoResults" = "No matching settings";
 "SearchSettingsNoResultsDesc" = "Try a broader word like player, overlay, or comments.";
 "SearchSettingsOpenFailed" = "That setting could not be opened right now.";
+"LiteMode" = "Lite Mode";
+"LiteModeDesc" = "Strips YouTube down to a calmer, subscription-first, bare-bones experience.";
+"LiteModeEnabledToast" = "Lite Mode On";
+"LiteModeDisabledToast" = "Lite Mode Off";
+"LiteModeSummaryOn" = "Minimal mode on";
+"LiteModeSummaryOff" = "Normal YouTube";
 "Privacy" = "Privacy";
 
 /* Downloading options */
@@ -171,10 +177,6 @@
 "HideAutoplayDesc" = "Hides Autoplay switch from the overlay.";
 "HideSubs" = "Hide Subtitles button";
 "HideSubsDesc" = "Hides Subtitles button from the overlay.";
-"ShowPlayerShareButton" = "Always show Share button";
-"ShowPlayerShareButtonDesc" = "Keeps the Share button available in the player overlay when YouTube would normally hide it.";
-"ShowPlayerSaveButton" = "Always show Save button";
-"ShowPlayerSaveButtonDesc" = "Keeps the Save/Add To button available in the player overlay when YouTube would normally hide it.";
 "HidePrevNext" = "Hide Previous and Next buttons";
 "HidePrevNextDesc" = "Hides Previous and Next video buttons from overlay.";
 "ReplacePrevNext" = "Fast forward and Rewind buttons";
@@ -717,9 +719,12 @@
 
 "Preferences" = "%@ preferences";
 "ManagePreferences" = "Preferences management";
+"ManagePreferencesDesc" = "Move your YTAfterglow setup between installs.";
 "ImportPreferences" = "Import preferences";
+"ImportPreferencesDesc" = "Replace the current setup with a saved YTAfterglow preferences file.";
 "PreImportMessage" = "This action will replace the current preferences with those from the selected file.\n\nAre you sure you want to continue?";
 "ExportPreferences" = "Export preferences";
+"ExportPreferencesDesc" = "Share a YTAfterglow preferences file you can import later.";
 "Advanced" = "Advanced mode";
 "AdvancedDesc" = "Shows extra power-user settings and advanced UI controls.";
 "AdvancedModePromptTitle" = "Enable Advanced Mode?";
@@ -735,9 +740,9 @@
 "ClearCache" = "Clear cache";
 
 "DebugLogging" = "Debug logging";
-"DebugLoggingDesc" = "Enables selected in-memory and on-disk diagnostic logs. Off by default; no runtime cost when off.";
+"DebugLoggingDesc" = "Master switch for in-memory and on-disk diagnostic logs. Turning it off also turns off Firehose logging and the debug HUD.";
 "DebugLogFirehose" = "Firehose logging";
-"DebugLogFirehoseDesc" = "Turns on every Afterglow log category, including noisy internals and future categories. Use briefly when chasing stubborn bugs.";
+"DebugLogFirehoseDesc" = "Turns on Debug logging and captures every Afterglow log category, including noisy internals and future categories.";
 "DebugLogCategories" = "Logging scope";
 "DebugLogCategoriesDesc" = "Choose which log buckets are captured when Debug logging is enabled. Firehose ignores these filters.";
 "DebugLogDownloads" = "Downloads";
@@ -751,10 +756,11 @@
 "DebugLogProbes" = "Diagnostics";
 "DebugLogProbesDesc" = "Capture startup diagnostics, offline-download routing logs, initialization logs, and detailed compatibility events. Noisy and off by default.";
 "ShowDebugHUD" = "Show debug HUD";
-"ShowDebugHUDDesc" = "Floating on-screen overlay showing the latest log lines. Drag to reposition, double-tap to clear, long-press to hide.";
+"ShowDebugHUDDesc" = "Floating on-screen overlay showing the latest log lines. Turning it on also enables Debug logging.";
 "ShareDebugLog" = "Share debug log";
 "ClearDebugLog" = "Clear debug log";
 "NoDebugLog" = "No log yet — enable Debug Logging first.";
+"LogCopied" = "Log Copied";
 
 "NoDonationReminder" = "Disable donation reminder";
 "NoDonationReminderDesc" = "Turns off the rarely shown donation reminder.";
@@ -830,6 +836,7 @@
 "Error.NoSpace" = "Insufficient space on the device.\n\nAt least %@ additional free space is required. Available free space: %@";
 "Error.Multidownloading" = "Multi-downloading not available yet.";
 "Error.FailedToImport" = "Failed to import preferences";
+"Error.FailedToExport" = "Failed to export preferences";
 "DownloadingVideo" = "Downloading video";
 "DownloadingAudio" = "Downloading audio";
 "ParsingCaptions" = "Parsing captions";
@@ -879,13 +886,6 @@
 "DonationReminder" = "Your support helps to make YTAfterglow even better.\n\nYou can contribute or choose to disable these notifications in the YTAfterglow settings. Thank you💜";
 
 
-"PlayerShareButton" = "Share button";
-"PlayerShareButtonDesc" = "Choose whether the Share button is automatic, always shown, or always hidden.";
-"PlayerSaveButton" = "Save button";
-"PlayerSaveButtonDesc" = "Choose whether the Save button is automatic, always shown, or always hidden.";
-"Auto" = "Auto";
-"AlwaysShow" = "Always show";
-"AlwaysHide" = "Always hide";
 "Pinned" = "Pinned";
 "Hidden" = "Hidden";
 "CommentsHeader" = "Comments header";

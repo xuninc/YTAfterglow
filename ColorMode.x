@@ -1,5 +1,6 @@
 #import "YTAfterglow.h"
 #import <QuartzCore/QuartzCore.h>
+#import <math.h>
 
 // Theme color keys
 static NSString *const kThemeOverlayButtons = @"theme_overlayButtons";
@@ -13,6 +14,15 @@ static NSString *const kThemeAccent         = @"theme_accent";
 static NSString *const kThemeGradientStart  = @"theme_gradientStart";
 static NSString *const kThemeGradientEnd    = @"theme_gradientEnd";
 static NSString *const kThemeGlowEnabled    = @"theme_glowEnabled";
+static NSString *const kThemeGlowStrength   = @"theme_glowStrength";
+static NSString *const kThemeGlowStrengthMode = @"theme_glowStrengthMode";
+static NSString *const kThemeGlowStrengthCustom = @"theme_glowStrengthCustom";
+static NSString *const kThemeGlowOpacity    = @"theme_glowOpacity";
+static NSString *const kThemeGlowRadius     = @"theme_glowRadius";
+static NSString *const kThemeGlowLayers     = @"theme_glowLayers";
+static NSString *const kThemeGlowColor      = @"theme_glowColor";
+static NSString *const kThemeGlowPivot      = @"theme_glowPivot";
+static NSString *const kThemeGlowOverlay    = @"theme_glowOverlay";
 
 // Thread-safe color cache
 static NSMutableDictionary *colorCache = nil;
@@ -62,6 +72,35 @@ static inline UIColor *themed(NSString *key, CGFloat alpha) {
 
 static inline BOOL ytag_themeGlowEnabled(void) {
     return [[YTAGUserDefaults standardUserDefaults] boolForKey:kThemeGlowEnabled];
+}
+
+static NSInteger ytag_themeGlowInteger(NSString *key, NSInteger fallback, NSInteger minValue, NSInteger maxValue) {
+    id raw = [[YTAGUserDefaults standardUserDefaults] objectForKey:key];
+    NSInteger value = [raw respondsToSelector:@selector(integerValue)] ? [raw integerValue] : fallback;
+    return MIN(MAX(value, minValue), maxValue);
+}
+
+static NSInteger ytag_themeGlowStrengthValue(void) {
+    YTAGUserDefaults *defaults = [YTAGUserDefaults standardUserDefaults];
+    id rawMode = [defaults objectForKey:kThemeGlowStrengthMode];
+    NSInteger mode = [rawMode respondsToSelector:@selector(integerValue)] ? [rawMode integerValue] : ytag_themeGlowInteger(kThemeGlowStrength, 1, 0, 2);
+    if (mode == 3) return ytag_themeGlowInteger(kThemeGlowStrengthCustom, 50, 0, 100);
+    if (mode <= 0) return 25;
+    if (mode == 1) return 50;
+    return 80;
+}
+
+static UIColor *ytag_themeGlowColor(UIColor *fallback) {
+    return themeColor(kThemeGlowColor) ?: fallback;
+}
+
+static void ytag_removeExtraGlowLayers(CALayer *layer) {
+    NSArray<CALayer *> *sublayers = [layer.sublayers copy];
+    for (CALayer *sublayer in sublayers) {
+        if ([sublayer.name isEqualToString:@"YTAGGlowLayer"]) {
+            [sublayer removeFromSuperlayer];
+        }
+    }
 }
 
 static inline BOOL ytag_themeGradientEnabled(void) {
@@ -139,6 +178,7 @@ static void ytag_applyThemeInterfaceStyleToWindow(UIWindow *window) {
 
 void ytag_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity, CGFloat radius) {
     if (!layer) return;
+    ytag_removeExtraGlowLayers(layer);
 
     if (!ytag_themeGlowEnabled() || !color) {
         layer.shadowOpacity = 0.0;
@@ -146,13 +186,40 @@ void ytag_applyGlowToLayer(CALayer *layer, UIColor *color, CGFloat opacity, CGFl
         return;
     }
 
+    UIColor *resolvedColor = ytag_themeGlowColor(color);
+    CGFloat strengthMultiplier = (CGFloat)ytag_themeGlowStrengthValue() / 50.0;
+    CGFloat opacityMultiplier = (CGFloat)ytag_themeGlowInteger(kThemeGlowOpacity, 100, 0, 100) / 100.0;
+    CGFloat radiusMultiplier = (CGFloat)ytag_themeGlowInteger(kThemeGlowRadius, 50, 0, 100) / 50.0;
+    CGFloat finalOpacity = MIN(MAX(opacity * strengthMultiplier * opacityMultiplier, 0.0), 1.0);
+    CGFloat finalRadius = MAX(radius * strengthMultiplier * radiusMultiplier, 0.0);
+    NSInteger layerCount = ytag_themeGlowInteger(kThemeGlowLayers, 1, 1, 12);
+
     layer.masksToBounds = NO;
-    layer.shadowColor = color.CGColor;
+    layer.shadowColor = resolvedColor.CGColor;
     layer.shadowOffset = CGSizeZero;
-    layer.shadowOpacity = opacity;
-    layer.shadowRadius = radius;
+    layer.shadowOpacity = finalOpacity;
+    layer.shadowRadius = finalRadius;
     layer.shouldRasterize = YES;
     layer.rasterizationScale = UIScreen.mainScreen.scale;
+
+    for (NSInteger idx = 1; idx < layerCount; idx++) {
+        CALayer *glowLayer = [CALayer layer];
+        glowLayer.name = @"YTAGGlowLayer";
+        glowLayer.frame = layer.bounds;
+        glowLayer.bounds = layer.bounds;
+        glowLayer.position = CGPointMake(CGRectGetMidX(layer.bounds), CGRectGetMidY(layer.bounds));
+        glowLayer.cornerRadius = layer.cornerRadius;
+        glowLayer.backgroundColor = UIColor.clearColor.CGColor;
+        glowLayer.masksToBounds = NO;
+        glowLayer.shadowColor = resolvedColor.CGColor;
+        glowLayer.shadowOffset = CGSizeZero;
+        glowLayer.shadowOpacity = finalOpacity * pow(0.72, (double)idx);
+        glowLayer.shadowRadius = finalRadius * (1.0 + 0.45 * idx);
+        glowLayer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:glowLayer.bounds cornerRadius:glowLayer.cornerRadius].CGPath;
+        glowLayer.shouldRasterize = YES;
+        glowLayer.rasterizationScale = UIScreen.mainScreen.scale;
+        [layer insertSublayer:glowLayer atIndex:0];
+    }
 }
 
 #pragma mark - YTCommonColorPalette
@@ -425,7 +492,7 @@ static void ytag_applyGradient(UIView *view) {
         }
     }
 
-    UIColor *glowColor = themeColor(kThemeAccent) ?: themeColor(kThemeTabBarIcons);
+    UIColor *glowColor = ytagBool(kThemeGlowPivot) ? (themeColor(kThemeAccent) ?: themeColor(kThemeTabBarIcons)) : nil;
     CALayer *targetLayer = self.navigationButton ? self.navigationButton.layer : self.layer;
     CGFloat opacity = self.navigationButton.alpha > 0.9 ? 0.90 : 0.45;
     ytag_applyGlowToLayer(targetLayer, glowColor, opacity, 12.0);
@@ -459,6 +526,7 @@ static void ytag_applyGradient(UIView *view) {
 %end
 
 static void ytag_applyGlowToButtonsInView(UIView *view, UIColor *color) {
+    if (!ytagBool(kThemeGlowOverlay)) color = nil;
     for (UIView *subview in view.subviews) {
         if ([subview isKindOfClass:%c(YTQTMButton)] || [subview isKindOfClass:[UIButton class]]) {
             ytag_applyGlowToLayer(subview.layer, color, 0.32, 6.0);

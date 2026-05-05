@@ -24,9 +24,15 @@ static NSString *accessGroupID() {
         status = SecItemAdd((__bridge CFDictionaryRef)query, (CFTypeRef *)&result);
     }
     if (status != errSecSuccess) {
+        YTAGLogForce(@"keychain", @"accessGroupID failed status=%d", (int)status);
+        if (result) CFRelease(result);
         return nil;
     }
-    NSString *accessGroup = [(__bridge NSDictionary *)result objectForKey:(__bridge NSString *)kSecAttrAccessGroup];
+    NSDictionary *attributes = result ? CFBridgingRelease(result) : nil;
+    NSString *accessGroup = [attributes objectForKey:(__bridge NSString *)kSecAttrAccessGroup];
+    if (!accessGroup.length) {
+        YTAGLogForce(@"keychain", @"accessGroupID missing kSecAttrAccessGroup status=%d", (int)status);
+    }
 
     return accessGroup;
 }

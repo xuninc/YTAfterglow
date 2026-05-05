@@ -131,6 +131,11 @@ static void YTAGDumpClassMethods(NSString *clsName) {
         if ([aid isKindOfClass:[NSString class]] &&
             [(NSString *)aid isEqualToString:@"id.ui.add_to.offline.button"])
         {
+            if ([[YTAGUserDefaults standardUserDefaults] boolForKey:@"noPlayerDownloadButton"]) {
+                YTAGLog(@"offline-route", @"native Download button hidden - suppressing tap");
+                return;
+            }
+
             // Walk: node.closestViewController._metadataPanelStateProvider._watchViewController._playerViewController
             id closestVC = [node performSelector:@selector(closestViewController)];
             id panelProvider = [closestVC valueForKey:@"_metadataPanelStateProvider"];

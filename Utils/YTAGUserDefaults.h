@@ -11,6 +11,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSString *)currentStartupTab;
 
 - (void)reset;
+- (nullable NSData *)exportPreferencesDataWithError:(NSError **)error;
+- (BOOL)importPreferencesData:(NSData *)data error:(NSError **)error;
 
 + (NSArray<NSString *> *)defaultActiveTabs;
 + (void)resetUserDefaults;

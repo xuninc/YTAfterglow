@@ -7,6 +7,10 @@ static NSString *const kThemeSeekBar              = @"theme_seekBar";
 static NSString *const kThemeSeekBarLive          = @"theme_seekBarLive";
 static NSString *const kThemeSeekBarScrubber      = @"theme_seekBarScrubber";
 static NSString *const kThemeSeekBarScrubberLive  = @"theme_seekBarScrubberLive";
+static NSString *const kThemeAccent               = @"theme_accent";
+static NSString *const kThemeGlowStrength         = @"theme_glowStrength";
+static NSString *const kThemeGlowScrubber         = @"theme_glowScrubber";
+static NSString *const kThemeGlowSeekBar          = @"theme_glowSeekBar";
 static NSString *const kSeekBarScrubberImage      = @"seekBarScrubberImage";    // NSData (PNG)
 static NSString *const kSeekBarScrubberSize       = @"seekBarScrubberSize";     // integer 0-100
 static NSString *const kSeekBarAnimated           = @"seekBarAnimated";         // bool
@@ -181,6 +185,52 @@ static UIColor *seekBarScrubberColor(BOOL live) {
     return seekBarSliderColor(live);
 }
 
+static UIColor *seekBarScrubberGlowColor(BOOL live) {
+    if (!ytagBool(kThemeGlowScrubber)) return nil;
+    return seekBarScrubberColor(live) ?: themeColor(kThemeAccent) ?: seekBarSliderColor(live);
+}
+
+static void seekBarApplyScrubberGlow(UIView *scrubberCircle, BOOL live) {
+    if (!scrubberCircle) return;
+    scrubberCircle.layer.masksToBounds = NO;
+    scrubberCircle.superview.clipsToBounds = NO;
+    scrubberCircle.superview.layer.masksToBounds = NO;
+    ytag_applyGlowToLayer(scrubberCircle.layer, seekBarScrubberGlowColor(live), 1.0, 30.0);
+}
+
+static BOOL seekBarViewLooksLikeTrack(UIView *view) {
+    NSString *className = NSStringFromClass(view.class);
+    NSString *identifier = view.accessibilityIdentifier ?: @"";
+    return [className rangeOfString:@"Progress" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+           [className rangeOfString:@"Segment" options:NSCaseInsensitiveSearch].location != NSNotFound ||
+           [identifier rangeOfString:@"progress" options:NSCaseInsensitiveSearch].location != NSNotFound;
+}
+
+static void seekBarApplyTrackGlowInTree(UIView *view, UIColor *color, NSInteger depth) {
+    if (!view || depth > 5) return;
+    if (seekBarViewLooksLikeTrack(view)) {
+        ytag_applyGlowToLayer(view.layer, color, 0.62, 10.0);
+    }
+    for (UIView *subview in view.subviews) {
+        seekBarApplyTrackGlowInTree(subview, color, depth + 1);
+    }
+}
+
+static void seekBarApplyTrackGlow(UIView *view, BOOL live) {
+    if (!view) return;
+    UIColor *color = ytagBool(kThemeGlowSeekBar) ? (seekBarFillColor(live) ?: themeColor(kThemeAccent)) : nil;
+    @try {
+        UIView *playing = [view valueForKey:@"_playingProgress"];
+        if ([playing isKindOfClass:[UIView class]]) ytag_applyGlowToLayer(playing.layer, color, 0.72, 12.0);
+    } @catch (id ex) {}
+    @try {
+        UIView *buffered = [view valueForKey:@"_bufferedProgress"];
+        if ([buffered isKindOfClass:[UIView class]]) ytag_applyGlowToLayer(buffered.layer, color, 0.38, 8.0);
+    } @catch (id ex) {}
+    seekBarApplyTrackGlowInTree(view, color, 0);
+    (void)kThemeGlowStrength;
+}
+
 static BOOL seekBarIsLiveMode(NSInteger mode) {
     return mode == YTAG_PLAYER_BAR_MODE_LIVE || mode == YTAG_PLAYER_BAR_MODE_LIVE_VDR;
 }
@@ -226,17 +276,18 @@ static BOOL seekBarViewIsLive(UIView *view) {
 static void seekBarInitScrubberCircleBase(UIView *scrubberCircle, BOOL setColor) {
     if (scrubberCircle == nil) return;
     CGFloat scale = seekBarBaseScrubberScale();
-    if (scale == -1) return;
-    seekBarUpdateScrubberSize(scrubberCircle, scale);
-    if (!setColor) return;
-    if (seekBarCustomImageEnabled()) {
-        scrubberCircle.backgroundColor = nil;
-    } else {
-        UIColor *color = seekBarScrubberColor(NO);
-        if (color) scrubberCircle.backgroundColor = color;
+    if (scale != -1) {
+        seekBarUpdateScrubberSize(scrubberCircle, scale);
     }
-    UIColor *glowColor = seekBarScrubberColor(NO) ?: themeColor(@"theme_accent");
-    ytag_applyGlowToLayer(scrubberCircle.layer, glowColor, 1.0, 30.0);
+    if (setColor) {
+        if (seekBarCustomImageEnabled()) {
+            scrubberCircle.backgroundColor = nil;
+        } else {
+            UIColor *color = seekBarScrubberColor(NO);
+            if (color) scrubberCircle.backgroundColor = color;
+        }
+    }
+    seekBarApplyScrubberGlow(scrubberCircle, NO);
 }
 
 static void seekBarInitScrubberCircle(UIView *view, BOOL setColor) {
@@ -258,9 +309,10 @@ static void seekBarUpdateScrubberColorAndPosition(UIView *view, BOOL alterScrubb
             UIColor *color = seekBarScrubberColor(seekBarViewIsLive(view));
             if (color) scrubberCircle.backgroundColor = color;
         }
-        UIColor *glowColor = seekBarScrubberColor(seekBarViewIsLive(view)) ?: themeColor(@"theme_accent");
-        ytag_applyGlowToLayer(scrubberCircle.layer, glowColor, 1.0, 30.0);
     }
+    BOOL live = seekBarViewIsLive(view);
+    seekBarApplyScrubberGlow(scrubberCircle, live);
+    seekBarApplyTrackGlow(view, live);
     if (!seekBarAnimationsEnabled() || CGPointEqualToPoint(originalCenter, CGPointZero)) return;
     CGPoint newCenter = scrubberCircle.center;
     scrubberCircle.center = originalCenter;
@@ -376,7 +428,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
 - (void)layoutSubviews {
     CGPoint center = seekBarScrubberCenter(self);
     %orig;
-    seekBarUpdateScrubberColorAndPosition(self, NO, center);
+    seekBarUpdateScrubberColorAndPosition(self, YES, center);
 }
 
 %end
@@ -427,7 +479,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
 - (void)layoutSubviews {
     CGPoint center = seekBarScrubberCenter(self);
     %orig;
-    seekBarUpdateScrubberColorAndPosition(self, NO, center);
+    seekBarUpdateScrubberColorAndPosition(self, YES, center);
 }
 
 %end
@@ -463,7 +515,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
 - (void)layoutSubviews {
     CGPoint center = seekBarScrubberCenter(self);
     %orig;
-    seekBarUpdateScrubberColorAndPosition(self, NO, center);
+    seekBarUpdateScrubberColorAndPosition(self, YES, center);
 }
 
 %end
@@ -612,6 +664,7 @@ static void seekBarFindViewAndSetScrubberIcon(YTMainAppVideoPlayerOverlayViewCon
         UIColor *color = seekBarScrubberColor(NO);
         if (color) scrubberCircle.backgroundColor = color;
     }
+    seekBarApplyScrubberGlow(scrubberCircle, NO);
     return scrubberCircle;
 }
 

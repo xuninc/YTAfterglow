@@ -1,14 +1,21 @@
 #import "YTAfterglow.h"
 #import <objc/runtime.h>
+#import <objc/message.h>
 
 extern void ytag_clearThemeCache(void);
+void YTAGOpenAfterglowSettingsFromView(UIView *sourceView);
 static UIViewController *ytag_viewControllerForResponder(UIResponder *responder);
+static UIViewController *ytag_topPresenterForView(UIView *sourceView);
 static void ytag_reloadSettingsController(UIViewController *controller);
 static void ytag_refreshSettingsHierarchy(UIViewController *controller);
 static void ytag_refreshSettingsFromCell(YTSettingsCell *cell);
 static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString *title, NSString *message);
 static NSString *ytag_localizedStringOrFallback(NSString *key, NSString *fallback);
 static NSString *ytag_settingDescriptionForKey(NSString *key);
+static UIViewController *ytag_presenterForSettingsCell(YTSettingsCell *cell, UIViewController *fallback);
+static void ytag_showToast(NSString *message, id parentResponder);
+static NSURL *ytag_writeTemporaryFile(NSString *filename, NSData *data, NSError **error);
+static BOOL ytag_presentActivityItems(NSArray *items, UIViewController *presenter, UIView *sourceView);
 static NSArray<YTSettingsSectionItem *> *ytag_pickerRowsForController(UIViewController *controller);
 static UICollectionView *ytag_findCollectionViewInView(UIView *view);
 static YTSettingsSectionItem *ytag_firstItemWithTitle(NSArray<YTSettingsSectionItem *> *items, NSString *title);
@@ -21,6 +28,11 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 @interface YTSettingsSectionItemManager (YTAfterglow)
 - (void)updateYTAfterglowSectionWithEntry:(id)entry;
 - (YTSettingsSectionItem *)pageItemWithTitle:(NSString *)title titleDescription:(NSString *)titleDescription summary:(NSString *(^)(void))summaryBlock selectBlock:(BOOL (^)(YTSettingsCell *cell, NSUInteger arg1))selectBlock;
+- (YTSettingsSectionItem *)resetDefaultsItemWithKeys:(NSArray<NSString *> *)keys settingsVC:(YTSettingsViewController *)settingsViewController;
+- (void)addResetDefaultsItemForKeys:(NSArray<NSString *> *)keys toRows:(NSMutableArray<YTSettingsSectionItem *> *)rows settingsVC:(YTSettingsViewController *)settingsViewController;
+- (void)presentPreferencesExportFromCell:(YTSettingsCell *)cell settingsVC:(YTSettingsViewController *)settingsViewController;
+- (void)presentPreferencesImportFromCell:(YTSettingsCell *)cell settingsVC:(YTSettingsViewController *)settingsViewController;
+- (void)presentDebugLogShareFromCell:(YTSettingsCell *)cell body:(NSString *)body settingsVC:(YTSettingsViewController *)settingsViewController;
 - (NSString *)enabledSummaryForKeys:(NSArray<NSString *> *)keys;
 - (NSString *)customizationSummaryForKeys:(NSArray<NSString *> *)keys;
 - (NSArray<NSString *> *)ytag_allTabs;
@@ -37,6 +49,11 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 - (NSString *)themeSeekBarSummary;
 - (NSString *)themeGradientSummary;
 - (NSString *)themeAppearanceSummary;
+- (NSInteger)themeGlowStrengthMode;
+- (NSString *)themeGlowStrengthDetail;
+- (NSString *)themeGlowNumberDetailForKey:(NSString *)key fallback:(NSInteger)fallback suffix:(NSString *)suffix;
+- (void)themePresentGlowNumberInputWithTitle:(NSString *)title titleDescription:(NSString *)titleDescription key:(NSString *)key min:(NSInteger)min max:(NSInteger)max fallback:(NSInteger)fallback suffix:(NSString *)suffix cell:(YTSettingsCell *)cell settingsVC:(YTSettingsViewController *)settingsVC afterSave:(void (^)(NSInteger value))afterSave;
+- (YTSettingsSectionItem *)themeGlowNumberItemWithTitle:(NSString *)title titleDescription:(NSString *)titleDescription key:(NSString *)key min:(NSInteger)min max:(NSInteger)max fallback:(NSInteger)fallback suffix:(NSString *)suffix settingsVC:(YTSettingsViewController *)settingsVC;
 - (UIColor *)themeLoadColorForKey:(NSString *)key;
 - (void)themePresentPickerForKey:(NSString *)themeKey startColor:(UIColor *)startColor settingsVC:(YTSettingsViewController *)settingsVC;
 - (void)themeAddColorRowWithTitle:(NSString *)title titleDescription:(NSString *)titleDescription themeKey:(NSString *)themeKey toRows:(NSMutableArray *)rows settingsVC:(YTSettingsViewController *)settingsVC;
@@ -132,6 +149,41 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 }
 @end
 
+static char kYTAGPreferencesDocumentPickerDelegateAssociationKey;
+
+@interface YTAGPreferencesDocumentPickerDelegate : NSObject <UIDocumentPickerDelegate>
+@property (nonatomic, weak) YTSettingsViewController *settingsVC;
+@property (nonatomic, weak) id parentResponder;
+@end
+
+@implementation YTAGPreferencesDocumentPickerDelegate
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    NSURL *url = urls.firstObject;
+    NSError *readError = nil;
+    BOOL scoped = [url startAccessingSecurityScopedResource];
+    NSData *data = url ? [NSData dataWithContentsOfURL:url options:0 error:&readError] : nil;
+    if (scoped) [url stopAccessingSecurityScopedResource];
+
+    NSError *importError = nil;
+    BOOL imported = data && [[YTAGUserDefaults standardUserDefaults] importPreferencesData:data error:&importError];
+    if (imported) {
+        ytag_clearThemeCache();
+        [[[objc_lookUpClass("YTHeaderContentComboViewController") alloc] init] refreshPivotBar];
+        ytag_refreshSettingsHierarchy(self.settingsVC);
+        ytag_showToast(LOC(@"Done"), self.parentResponder);
+    } else {
+        NSString *message = importError.localizedDescription ?: readError.localizedDescription ?: LOC(@"Error.FailedToImport");
+        ytag_showToast(message, self.parentResponder);
+    }
+
+    objc_setAssociatedObject(controller, &kYTAGPreferencesDocumentPickerDelegateAssociationKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
+    objc_setAssociatedObject(controller, &kYTAGPreferencesDocumentPickerDelegateAssociationKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+@end
+
 static const NSInteger YTAfterglowSection = 789;
 static YTAGColorPickerDelegate *_colorPickerDelegate = nil;
 static YTAGImagePickerDelegate *_imagePickerDelegate = nil;
@@ -148,6 +200,46 @@ static UIViewController *ytag_viewControllerForResponder(UIResponder *responder)
         currentResponder = currentResponder.nextResponder;
     }
     return (UIViewController *)currentResponder;
+}
+
+static UIViewController *ytag_keyWindowRootViewController(void) {
+    UIWindow *keyWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if (scene.activationState != UISceneActivationStateForegroundActive ||
+                ![scene isKindOfClass:[UIWindowScene class]]) {
+                continue;
+            }
+            for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+                if (window.isKeyWindow) {
+                    keyWindow = window;
+                    break;
+                }
+            }
+            if (keyWindow) break;
+        }
+    }
+    if (!keyWindow) {
+        @try {
+            NSArray<UIWindow *> *windows = [UIApplication.sharedApplication valueForKey:@"windows"];
+            for (UIWindow *window in windows) {
+                if (window.isKeyWindow) {
+                    keyWindow = window;
+                    break;
+                }
+            }
+        } @catch (NSException *exception) {}
+    }
+    return keyWindow.rootViewController;
+}
+
+static UIViewController *ytag_topPresenterForView(UIView *sourceView) {
+    UIViewController *presenter = ytag_viewControllerForResponder(sourceView);
+    if (!presenter) presenter = ytag_keyWindowRootViewController();
+    while (presenter.presentedViewController) {
+        presenter = presenter.presentedViewController;
+    }
+    return presenter.navigationController.topViewController ?: presenter;
 }
 
 static void ytag_reloadSettingsController(UIViewController *controller) {
@@ -187,6 +279,43 @@ static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString 
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
+static UIViewController *ytag_presenterForSettingsCell(YTSettingsCell *cell, UIViewController *fallback) {
+    UIViewController *presenter = fallback ?: ytag_viewControllerForResponder(cell);
+    presenter = presenter.navigationController.topViewController ?: presenter;
+    while (presenter.presentedViewController) {
+        presenter = presenter.presentedViewController;
+    }
+    return presenter;
+}
+
+static void ytag_showToast(NSString *message, id parentResponder) {
+    if (message.length == 0) return;
+    Class toastClass = objc_lookUpClass("YTToastResponderEvent");
+    if (!toastClass || ![toastClass respondsToSelector:@selector(eventWithMessage:firstResponder:)]) return;
+    id event = [(id)toastClass eventWithMessage:message firstResponder:parentResponder];
+    if ([event respondsToSelector:@selector(send)]) [event send];
+}
+
+static NSURL *ytag_writeTemporaryFile(NSString *filename, NSData *data, NSError **error) {
+    if (filename.length == 0 || data.length == 0) return nil;
+    NSString *dir = [NSTemporaryDirectory() stringByAppendingPathComponent:@"YTAfterglowExports"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSString *path = [dir stringByAppendingPathComponent:filename];
+    NSURL *url = [NSURL fileURLWithPath:path];
+    [[NSFileManager defaultManager] removeItemAtURL:url error:nil];
+    return [data writeToURL:url options:NSDataWritingAtomic error:error] ? url : nil;
+}
+
+static BOOL ytag_presentActivityItems(NSArray *items, UIViewController *presenter, UIView *sourceView) {
+    if (items.count == 0 || !presenter) return NO;
+    UIActivityViewController *activity = [[UIActivityViewController alloc] initWithActivityItems:items applicationActivities:nil];
+    UIPopoverPresentationController *popover = activity.popoverPresentationController;
+    popover.sourceView = sourceView ?: presenter.view;
+    popover.sourceRect = sourceView ? sourceView.bounds : presenter.view.bounds;
+    [presenter presentViewController:activity animated:YES completion:nil];
+    return YES;
+}
+
 static NSString *ytag_localizedStringOrFallback(NSString *key, NSString *fallback) {
     if (!key.length) return fallback ?: @"";
 
@@ -196,6 +325,56 @@ static NSString *ytag_localizedStringOrFallback(NSString *key, NSString *fallbac
     }
 
     return localized;
+}
+
+void YTAGOpenAfterglowSettingsFromView(UIView *sourceView) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UIViewController *presenter = ytag_topPresenterForView(sourceView);
+        if (!presenter) {
+            ytag_showToast(@"Afterglow settings unavailable", sourceView);
+            return;
+        }
+
+        Class settingsClass = objc_lookUpClass("YTSettingsViewController");
+        if (!settingsClass) {
+            ytag_showToast(@"Afterglow settings unavailable", sourceView ?: presenter);
+            return;
+        }
+
+        id parentResponder = sourceView ?: presenter;
+        id settingsObject = nil;
+        SEL initWithAccount = @selector(initWithAccountID:parentResponder:);
+        SEL initWithParent = @selector(initWithParentResponder:);
+        if ([settingsClass instancesRespondToSelector:initWithAccount]) {
+            settingsObject = ((id (*)(id, SEL, id, id))objc_msgSend)([settingsClass alloc], initWithAccount, nil, parentResponder);
+        } else if ([settingsClass instancesRespondToSelector:initWithParent]) {
+            settingsObject = ((id (*)(id, SEL, id))objc_msgSend)([settingsClass alloc], initWithParent, parentResponder);
+        } else {
+            settingsObject = [[settingsClass alloc] init];
+        }
+
+        if (![settingsObject isKindOfClass:[UIViewController class]]) {
+            ytag_showToast(@"Afterglow settings unavailable", parentResponder);
+            return;
+        }
+
+        UIViewController *settingsVC = (UIViewController *)settingsObject;
+        settingsVC.title = @"YouTube Afterglow";
+        @try {
+            [settingsObject setValue:@(YTAfterglowSection) forKey:@"_categoryToScrollTo"];
+        } @catch (NSException *exception) {}
+
+        [settingsVC loadViewIfNeeded];
+        SEL updateSection = @selector(updateSectionForCategory:withEntry:);
+        if ([settingsObject respondsToSelector:updateSection]) {
+            ((void (*)(id, SEL, NSUInteger, id))objc_msgSend)(settingsObject, updateSection, (NSUInteger)YTAfterglowSection, nil);
+        }
+        ytag_reloadSettingsController(settingsVC);
+
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:settingsVC];
+        nav.modalPresentationStyle = UIModalPresentationFullScreen;
+        [presenter presentViewController:nav animated:YES completion:nil];
+    });
 }
 
 static NSString *ytag_settingDescriptionForKey(NSString *key) {
@@ -772,7 +951,13 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     accessibilityIdentifier:@"YTAfterglowSectionItem"
     switchOn:ytagBool(key)
     switchBlock:^BOOL(YTSettingsCell *cell, BOOL enabled) {
-        if ([key isEqualToString:@"shortsOnlyMode"]) {
+        if ([key isEqualToString:YTAGLiteModeEnabledKey]) {
+            YTAGSetLiteModeEnabled(enabled);
+            ytag_clearThemeCache();
+            [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
+            ytag_refreshSettingsFromCell(cell);
+            ytag_showToast(LOC(enabled ? @"LiteModeEnabledToast" : @"LiteModeDisabledToast"), [self parentResponder]);
+        } else if ([key isEqualToString:@"shortsOnlyMode"]) {
             YTAlertView *alertView = [YTAlertViewClass confirmationDialogWithAction:^{
                 ytagSetBool(enabled, @"shortsOnlyMode");
                 ytag_refreshSettingsFromCell(cell);
@@ -787,6 +972,13 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             [alertView show];
         } else {
             ytagSetBool(enabled, key);
+            if ([key isEqualToString:@"debugLogFirehose"] && enabled) {
+                ytagSetBool(YES, @"debugLogEnabled");
+            } else if ([key isEqualToString:@"debugLogEnabled"] && !enabled) {
+                ytagSetBool(NO, @"debugLogFirehose");
+                ytagSetBool(NO, @"debugHUDEnabled");
+                [[YTAGDebugHUD sharedHUD] hide];
+            }
 
             NSArray *keys = @[@"removeLabels", @"removeIndicators", @"frostedPivot",
                 @"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar",
@@ -794,7 +986,9 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                 @"theme_navBar", @"theme_accent",
                 @"theme_gradientStart", @"theme_gradientEnd", @"theme_glowEnabled",
                 @"theme_glowPivot", @"theme_glowSeekBar", @"theme_glowScrubber",
-                @"theme_glowOverlay", @"theme_glowStrength"];
+                @"theme_glowOverlay", @"theme_glowStrength", @"theme_glowStrengthMode",
+                @"theme_glowStrengthCustom", @"theme_glowOpacity", @"theme_glowRadius",
+                @"theme_glowLayers", @"theme_glowColor"];
             if ([keys containsObject:key]) {
                 [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
             }
@@ -831,6 +1025,79 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             return summaryBlock ? summaryBlock() : @"\u2023";
         }
         selectBlock:selectBlock];
+}
+
+%new
+- (YTSettingsSectionItem *)resetDefaultsItemWithKeys:(NSArray<NSString *> *)keys settingsVC:(YTSettingsViewController *)settingsViewController {
+    NSArray<NSString *> *uniqueKeys = [[NSOrderedSet orderedSetWithArray:keys ?: @[]] array];
+    return [%c(YTSettingsSectionItem) itemWithTitle:@"Reset to Defaults"
+        titleDescription:@"Restore only the settings on this page."
+        accessibilityIdentifier:@"YTAfterglowSectionItem"
+        detailTextBlock:nil
+        selectBlock:^BOOL(YTSettingsCell *cell, NSUInteger arg1) {
+            YTAGUserDefaults *defaults = [YTAGUserDefaults standardUserDefaults];
+            for (NSString *key in uniqueKeys) {
+                [defaults removeObjectForKey:key];
+            }
+            ytag_clearThemeCache();
+            [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
+            ytag_refreshSettingsHierarchy(settingsViewController ?: ytag_viewControllerForResponder(cell));
+            [[%c(YTToastResponderEvent) eventWithMessage:LOC(@"Done") firstResponder:[self parentResponder]] send];
+            return YES;
+        }];
+}
+
+%new
+- (void)addResetDefaultsItemForKeys:(NSArray<NSString *> *)keys toRows:(NSMutableArray<YTSettingsSectionItem *> *)rows settingsVC:(YTSettingsViewController *)settingsViewController {
+    if (keys.count == 0 || !rows) return;
+    [rows addObject:[%c(YTSettingsSectionItem) itemWithTitle:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:nil]];
+    [rows addObject:[self themeSectionHeaderWithTitle:@"Reset" description:@"Restore this page to its default state."]];
+    [rows addObject:[self resetDefaultsItemWithKeys:keys settingsVC:settingsViewController]];
+}
+
+%new
+- (void)presentPreferencesExportFromCell:(YTSettingsCell *)cell settingsVC:(YTSettingsViewController *)settingsViewController {
+    NSError *error = nil;
+    NSData *data = [[YTAGUserDefaults standardUserDefaults] exportPreferencesDataWithError:&error];
+    NSURL *url = data ? ytag_writeTemporaryFile(@"YTAfterglow-preferences.ytagprefs", data, &error) : nil;
+    UIViewController *presenter = ytag_presenterForSettingsCell(cell, settingsViewController);
+    if (url && ytag_presentActivityItems(@[url], presenter, cell)) return;
+
+    NSString *message = error.localizedDescription ?: LOC(@"Error.FailedToExport");
+    ytag_showToast(message, [self parentResponder]);
+}
+
+%new
+- (void)presentPreferencesImportFromCell:(YTSettingsCell *)cell settingsVC:(YTSettingsViewController *)settingsViewController {
+    UIViewController *presenter = ytag_presenterForSettingsCell(cell, settingsViewController);
+    YTAlertView *alertView = [%c(YTAlertView) confirmationDialogWithAction:^{
+        NSArray *types = @[@"public.xml-property-list", @"com.apple.property-list", @"public.data", @"public.item"];
+        UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:types inMode:UIDocumentPickerModeImport];
+        picker.allowsMultipleSelection = NO;
+        YTAGPreferencesDocumentPickerDelegate *delegate = [YTAGPreferencesDocumentPickerDelegate new];
+        delegate.settingsVC = settingsViewController;
+        delegate.parentResponder = [self parentResponder];
+        picker.delegate = delegate;
+        objc_setAssociatedObject(picker, &kYTAGPreferencesDocumentPickerDelegateAssociationKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [presenter presentViewController:picker animated:YES completion:nil];
+    }
+    actionTitle:LOC(@"Yes")
+    cancelTitle:LOC(@"No")];
+    alertView.title = LOC(@"ImportPreferences");
+    alertView.subtitle = LOC(@"PreImportMessage");
+    [alertView show];
+}
+
+%new
+- (void)presentDebugLogShareFromCell:(YTSettingsCell *)cell body:(NSString *)body settingsVC:(YTSettingsViewController *)settingsViewController {
+    NSData *data = [body dataUsingEncoding:NSUTF8StringEncoding];
+    NSError *error = nil;
+    NSURL *url = ytag_writeTemporaryFile(@"YTAfterglow-debug-log.txt", data, &error);
+    UIViewController *presenter = ytag_presenterForSettingsCell(cell, settingsViewController);
+    if (url && ytag_presentActivityItems(@[url], presenter, cell)) return;
+
+    [UIPasteboard generalPasteboard].string = body;
+    ytag_showToast(LOC(@"LogCopied"), [self parentResponder]);
 }
 
 %new
@@ -1142,6 +1409,73 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 }
 
 %new
+- (NSInteger)themeGlowStrengthMode {
+    id raw = [[YTAGUserDefaults standardUserDefaults] objectForKey:@"theme_glowStrengthMode"];
+    if ([raw respondsToSelector:@selector(integerValue)]) return MIN(MAX([raw integerValue], 0), 3);
+    return MIN(MAX(ytagInt(@"theme_glowStrength"), 0), 2);
+}
+
+%new
+- (NSString *)themeGlowStrengthDetail {
+    NSInteger mode = [self themeGlowStrengthMode];
+    if (mode == 3) {
+        NSInteger custom = MIN(MAX(ytagInt(@"theme_glowStrengthCustom"), 0), 100);
+        return [NSString stringWithFormat:@"Custom %ld/100", (long)custom];
+    }
+    NSArray *labels = @[@"Subtle", @"Normal", @"Strong"];
+    return labels[MIN(MAX(mode, 0), (NSInteger)labels.count - 1)];
+}
+
+%new
+- (NSString *)themeGlowNumberDetailForKey:(NSString *)key fallback:(NSInteger)fallback suffix:(NSString *)suffix {
+    id raw = [[YTAGUserDefaults standardUserDefaults] objectForKey:key];
+    NSInteger value = [raw respondsToSelector:@selector(integerValue)] ? [raw integerValue] : fallback;
+    return [NSString stringWithFormat:@"%ld%@", (long)value, suffix ?: @""];
+}
+
+%new
+- (void)themePresentGlowNumberInputWithTitle:(NSString *)title titleDescription:(NSString *)titleDescription key:(NSString *)key min:(NSInteger)min max:(NSInteger)max fallback:(NSInteger)fallback suffix:(NSString *)suffix cell:(YTSettingsCell *)cell settingsVC:(YTSettingsViewController *)settingsVC afterSave:(void (^)(NSInteger value))afterSave {
+    NSInteger current = fallback;
+    id raw = [[YTAGUserDefaults standardUserDefaults] objectForKey:key];
+    if ([raw respondsToSelector:@selector(integerValue)]) current = [raw integerValue];
+    current = MIN(MAX(current, min), max);
+
+    NSString *message = [NSString stringWithFormat:@"%@\nRange: %ld-%ld%@", titleDescription ?: @"", (long)min, (long)max, suffix ?: @""];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.keyboardType = UIKeyboardTypeNumberPad;
+        textField.text = [NSString stringWithFormat:@"%ld", (long)current];
+        textField.placeholder = [NSString stringWithFormat:@"%ld", (long)fallback];
+    }];
+    [alert addAction:[UIAlertAction actionWithTitle:LOC(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:LOC(@"Save") style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        NSString *text = alert.textFields.firstObject.text ?: @"";
+        NSInteger value = MIN(MAX(text.integerValue, min), max);
+        [[YTAGUserDefaults standardUserDefaults] setInteger:value forKey:key];
+        if (afterSave) afterSave(value);
+        ytag_clearThemeCache();
+        ytag_refreshSettingsHierarchy(settingsVC ?: ytag_viewControllerForResponder(cell));
+    }]];
+
+    UIViewController *presenter = ytag_presenterForSettingsCell(cell, settingsVC);
+    [presenter presentViewController:alert animated:YES completion:nil];
+}
+
+%new
+- (YTSettingsSectionItem *)themeGlowNumberItemWithTitle:(NSString *)title titleDescription:(NSString *)titleDescription key:(NSString *)key min:(NSInteger)min max:(NSInteger)max fallback:(NSInteger)fallback suffix:(NSString *)suffix settingsVC:(YTSettingsViewController *)settingsVC {
+    return [%c(YTSettingsSectionItem) itemWithTitle:title
+        titleDescription:titleDescription
+        accessibilityIdentifier:@"YTAfterglowSectionItem"
+        detailTextBlock:^NSString *() {
+            return [self themeGlowNumberDetailForKey:key fallback:fallback suffix:suffix];
+        }
+        selectBlock:^BOOL(YTSettingsCell *cell, NSUInteger arg1) {
+            [self themePresentGlowNumberInputWithTitle:title titleDescription:titleDescription key:key min:min max:max fallback:fallback suffix:suffix cell:cell settingsVC:settingsVC afterSave:nil];
+            return YES;
+        }];
+}
+
+%new
 - (UIColor *)themeLoadColorForKey:(NSString *)key {
     NSData *data = [[YTAGUserDefaults standardUserDefaults] objectForKey:key];
     if (!data) return nil;
@@ -1386,6 +1720,10 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     [entries addObject:[self ytag_searchPageEntryWithTitle:aboutTitle description:@"Maintenance tools, advanced mode, and project credits." path:@[aboutTitle] aliases:@[@"settings info", @"maintenance"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:creditsTitle description:@"Project stewardship, AI co-development, and open-source acknowledgements." path:@[aboutTitle, creditsTitle] aliases:@[@"about", @"acknowledgements"]]];
 
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"LiteMode"] path:@[LOC(@"Main")] aliasesByKey:@{
+        @"LiteMode": @[@"minimal", @"distraction free", @"bare bones", @"monochrome"]
+    }];
+
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"RemoveAds", @"NoPromotionCards", @"NoSearchHistory", @"NoLinkTracking", @"NoShareChunk"] path:@[privacyAdsTitle] aliasesByKey:@{
         @"NoSearchHistory": @[@"search suggestions", @"recent searches"],
         @"NoLinkTracking": @[@"tracking links", @"redirects"],
@@ -1445,7 +1783,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         @"DontSnap2Chapter": @[@"chapter snap"],
         @"NoDoubleTap2Seek": @[@"double tap seek"]
     }];
-    [self ytag_addSearchEntries:entries forSettingKeys:@[@"NoPlayerDownloadButton", @"PlayerShareButton", @"PlayerSaveButton", @"NoPlayerRemixButton", @"NoPlayerClipButton", @"RemoveDownloadMenu", @"RemoveShareMenu"] path:@[playerTitle, buttonsMenusTitle] aliasesByKey:nil];
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"NoPlayerDownloadButton", @"PlayerNoShare", @"PlayerNoSave", @"NoPlayerRemixButton", @"NoPlayerClipButton", @"RemoveDownloadMenu", @"RemoveShareMenu"] path:@[playerTitle, buttonsMenusTitle] aliasesByKey:nil];
     if (isAdvanced) {
         [self ytag_addSearchEntries:entries forSettingKeys:@[@"MuteButton", @"LockButton", @"DownloadButton", @"ControlsSheetButton", @"OverlayDeclutterButton", @"PauseOnOverlay", @"HideSubs", @"NoHUDMsgs", @"HidePrevNext", @"ReplacePrevNext", @"NoDarkBg", @"NoFullscreenActions", @"StockVolumeHUD", @"NoWatermarks", @"VideoEndTime", @"24hrFormat"] path:@[playerTitle, overlayTitle] aliasesByKey:@{
             @"DownloadButton": @[@"overlay download", @"download overlay"],
@@ -1511,15 +1849,20 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSArray *tabbarKeys = @[@"frostedPivot", @"removeLabels", @"removeIndicators"];
     NSArray *legacyKeys = @[@"oldYTUI"];
     NSArray *interfaceKeys = [[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObjectsFromArray:[@[@"disableRTL"] arrayByAddingObjectsFromArray:legacyKeys]];
-    NSArray *playerPlaybackKeys = @[@"backgroundPlayback", @"disableAutoCaptions", @"rememberCaptionState", @"rememberLoop", @"noContentWarning", @"classicQuality", @"hideEndScreenCards", @"noRelatedVids", @"noContinueWatching", @"noContinueWatchingPrompt", @"noRelatedWatchNexts", @"miniplayer", @"playlistOldMinibar", @"autoplayMode"];
+    NSArray *themeCustomColorKeys = @[@"theme_background", @"theme_navBar", @"theme_tabBarIcons", @"theme_overlayButtons", @"theme_seekBar", @"theme_textPrimary", @"theme_textSecondary", @"theme_accent"];
+    NSArray *themeSeekBarKeys = @[@"theme_seekBar", @"theme_seekBarLive", @"theme_seekBarScrubber", @"theme_seekBarScrubberLive", @"seekBarScrubberImage", @"seekBarScrubberSize", @"persistentProgressBar", @"hideHeatwaves"];
+    NSArray *themeEffectKeys = @[@"theme_glowEnabled", @"theme_glowStrength", @"theme_glowStrengthMode", @"theme_glowStrengthCustom", @"theme_glowOpacity", @"theme_glowRadius", @"theme_glowLayers", @"theme_glowColor", @"theme_glowPivot", @"theme_glowOverlay", @"theme_glowScrubber", @"theme_glowSeekBar", @"seekBarAnimated", @"disableAmbientMode", @"seekBarGradient"];
+    NSArray *themeGradientKeys = @[@"theme_gradientStart", @"theme_gradientEnd"];
+    NSArray *themeKeys = [[themeCustomColorKeys arrayByAddingObjectsFromArray:themeSeekBarKeys] arrayByAddingObjectsFromArray:[themeEffectKeys arrayByAddingObjectsFromArray:themeGradientKeys]];
+    NSArray *playerPlaybackKeys = @[@"backgroundPlayback", @"speedIndex", @"autoSpeedIndex", @"wiFiQualityIndex", @"cellQualityIndex", @"disableAutoCaptions", @"rememberCaptionState", @"rememberLoop", @"noContentWarning", @"classicQuality", @"hideEndScreenCards", @"noRelatedVids", @"noContinueWatching", @"noContinueWatchingPrompt", @"noRelatedWatchNexts", @"miniplayer", @"playlistOldMinibar", @"autoplayMode"];
     NSArray *playerControlKeys = @[@"portraitFullscreen", @"tapToSeek", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
     NSArray *playerOverlayKeys = @[@"muteButton", @"lockButton", @"downloadButton", @"controlsSheetButton", @"overlayDeclutterButton", @"hideSubs", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"noFullscreenActions", @"pauseOnOverlay", @"stockVolumeHUD", @"noWatermarks", @"videoEndTime", @"24hrFormat"];
-    NSArray *playerActionBarKeys = @[@"noPlayerDownloadButton", @"noPlayerRemixButton", @"noPlayerClipButton"];
+    NSArray *playerActionBarKeys = @[@"noPlayerDownloadButton", @"noPlayerShareButton", @"noPlayerSaveButton", @"noPlayerRemixButton", @"noPlayerClipButton"];
     NSArray *playerMenuKeys = @[@"removeDownloadMenu", @"removeShareMenu"];
     NSArray *playerKeys = [[[[playerPlaybackKeys arrayByAddingObjectsFromArray:playerControlKeys] arrayByAddingObjectsFromArray:playerOverlayKeys] arrayByAddingObjectsFromArray:playerActionBarKeys] arrayByAddingObjectsFromArray:playerMenuKeys];
     NSArray *shortsBehaviorKeys = @[@"shortsOnlyMode", @"autoSkipShorts", @"hideShorts", @"shortsProgress", @"pinchToFullscreenShorts", @"shortsToRegular", @"resumeShorts"];
     NSArray *shortsUIKeys = @[@"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"];
-    NSArray *downloadKeys = @[@"downloadRefreshMetadata", @"downloadPreferStableAudio", @"downloadIncludeAutoCaptions", @"downloadOfferTranslatedCaptions", @"downloadPickerFontScaleMode", @"downloadPickerFontFaceMode"];
+    NSArray *downloadKeys = @[@"downloadPostActionMode", @"downloadRefreshMetadata", @"downloadAudioTrackMode", @"downloadAudioQualityMode", @"downloadPreferStableAudio", @"downloadIncludeAutoCaptions", @"downloadOfferTranslatedCaptions", @"downloadPickerFontScaleMode", @"downloadPickerFontFaceMode"];
     NSArray *feedKeys = @[@"removePlayNext", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu"];
     NSArray *toolKeys = @[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare", @"copyWithTimestamp"];
 
@@ -1534,6 +1877,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             return YES;
         }];
     [sectionItems addObject:searchSettings];
+    [sectionItems addObject:[self switchWithTitle:@"LiteMode" key:YTAGLiteModeEnabledKey]];
 
     YTSettingsSectionItem *privacyAds = [self pageItemWithTitle:@"Privacy & Ads"
         titleDescription:@"Remove ads and tighten privacy defaults in one place."
@@ -1541,7 +1885,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             return [self enabledSummaryForKeys:privacyAdsKeys];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSArray <YTSettingsSectionItem *> *rows = @[
+            NSMutableArray <YTSettingsSectionItem *> *rows = [@[
                 [self switchWithTitle:@"RemoveAds" key:@"noAds"],
                 [self switchWithTitle:@"NoPromotionCards" key:@"noPromotionCards"],
                 space,
@@ -1549,7 +1893,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                 [self switchWithTitle:@"NoSearchHistory" key:@"noSearchHistory"],
                 [self switchWithTitle:@"NoLinkTracking" key:@"noLinkTracking"],
                 [self switchWithTitle:@"NoShareChunk" key:@"noShareChunk"]
-            ];
+            ] mutableCopy];
+            [self addResetDefaultsItemForKeys:privacyAdsKeys toRows:rows settingsVC:settingsViewController];
 
             YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Privacy & Ads" pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
@@ -1579,16 +1924,18 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                         [self switchWithTitle:@"RemoveVoiceSearch" key:@"noVoiceSearchButton"]
                     ] mutableCopy];
 
-                    if (isAdvanced) {
-                        [navbarRows addObjectsFromArray:@[
-                            [self switchWithTitle:@"StickyNavbar" key:@"stickyNavbar"],
-                            [self switchWithTitle:@"NoSubbar" key:@"noSubbar"],
-                            [self switchWithTitle:@"NoYTLogo" key:@"noYTLogo"],
-                            [self switchWithTitle:@"PremiumYTLogo" key:@"premiumYTLogo"]
-                        ]];
-                    }
+	                    if (isAdvanced) {
+	                        [navbarRows addObjectsFromArray:@[
+	                            [self switchWithTitle:@"StickyNavbar" key:@"stickyNavbar"],
+	                            [self switchWithTitle:@"NoSubbar" key:@"noSubbar"],
+	                            [self switchWithTitle:@"NoYTLogo" key:@"noYTLogo"],
+	                            [self switchWithTitle:@"PremiumYTLogo" key:@"premiumYTLogo"]
+	                        ]];
+	                    }
+	                    NSArray *visibleNavbarKeys = isAdvanced ? navbarKeys : @[@"noCast", @"noNotifsButton", @"noSearchButton", @"noVoiceSearchButton"];
+	                    [self addResetDefaultsItemForKeys:visibleNavbarKeys toRows:navbarRows settingsVC:settingsViewController];
 
-                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Navbar") pickerSectionTitle:nil rows:navbarRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Navbar") pickerSectionTitle:nil rows:navbarRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
                     return YES;
                 }]];
@@ -1603,8 +1950,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     [tabRows addObject:[self switchWithTitle:@"OpaqueBar" key:@"frostedPivot"]];
                     [tabRows addObject:[self switchWithTitle:@"RemoveLabels" key:@"removeLabels"]];
                     [tabRows addObject:[self switchWithTitle:@"RemoveIndicators" key:@"removeIndicators"]];
-                    [tabRows addObject:[self pageItemWithTitle:@"Manage Tabs"
-                        titleDescription:@"Drag tabs between active and inactive sections, or tap a row to toggle it."
+	                    [tabRows addObject:[self pageItemWithTitle:@"Manage Tabs"
+	                        titleDescription:@"Drag tabs between active and inactive sections, or tap a row to toggle it."
                         summary:^NSString *() {
                             return [NSString stringWithFormat:@"%lu active", (unsigned long)[[YTAGUserDefaults standardUserDefaults] currentActiveTabs].count];
                         }
@@ -1614,11 +1961,12 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                                 allTabs:[self ytag_allTabs]
                                 tabNames:[self ytag_tabNames]];
                             [settingsViewController pushViewController:editor];
-                            return YES;
-                        }]];
-                    [tabRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:nil titleDescription:LOC(@"HideLibraryFooter") accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:nil]];
+	                            return YES;
+	                        }]];
+	                    [tabRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:nil titleDescription:LOC(@"HideLibraryFooter") accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:nil]];
+	                    [self addResetDefaultsItemForKeys:[tabbarKeys arrayByAddingObject:@"activeTabs"] toRows:tabRows settingsVC:settingsViewController];
 
-                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Tabbar") pickerSectionTitle:nil rows:tabRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Tabbar") pickerSectionTitle:nil rows:tabRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
                     return YES;
                 }]];
@@ -1637,17 +1985,20 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                         return [self enabledSummaryForKeys:legacyKeys];
                     }
                     selectBlock:^BOOL (YTSettingsCell *legacyCell, NSUInteger legacyArg1) {
-                        NSArray <YTSettingsSectionItem *> *legacyRows = @[
-                            [self switchWithTitle:@"OldYTUI" key:@"oldYTUI"]
-                        ];
+	                        NSMutableArray <YTSettingsSectionItem *> *legacyRows = [@[
+	                            [self switchWithTitle:@"OldYTUI" key:@"oldYTUI"]
+	                        ] mutableCopy];
+	                        [self addResetDefaultsItemForKeys:legacyKeys toRows:legacyRows settingsVC:settingsViewController];
 
-                        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Legacy" pickerSectionTitle:nil rows:legacyRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
-                        [settingsViewController pushViewController:picker];
-                        return YES;
-                    }]];
-            }
+	                        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Legacy" pickerSectionTitle:nil rows:legacyRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                        [settingsViewController pushViewController:picker];
+	                        return YES;
+	                    }]];
+	            }
+	            NSArray *interfacePageKeys = isAdvanced ? @[@"startupTab", @"startupAnimation", @"floatingKeyboard", @"disableRTL"] : @[@"startupTab", @"startupAnimation", @"floatingKeyboard"];
+	            [self addResetDefaultsItemForKeys:interfacePageKeys toRows:rows settingsVC:settingsViewController];
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Interface") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Interface") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
@@ -1688,9 +2039,10 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     [self themeAddPresetRowWithName:@"Afterglow Light 1" titleDescription:@"Candyglass daylight with a real lilac body color and aqua chrome." overlay:[UIColor colorWithRed:0.55 green:0.19 blue:0.54 alpha:1.0] tabIcons:[UIColor colorWithRed:0.03 green:0.72 blue:0.82 alpha:1.0] seekBar:[UIColor colorWithRed:0.98 green:0.33 blue:0.69 alpha:1.0] bg:[UIColor colorWithRed:0.97 green:0.84 blue:1.00 alpha:1.0] textP:[UIColor colorWithRed:0.24 green:0.08 blue:0.33 alpha:1.0] textS:[UIColor colorWithRed:0.46 green:0.27 blue:0.58 alpha:1.0] nav:[UIColor colorWithRed:0.93 green:0.76 blue:1.00 alpha:1.0] accent:[UIColor colorWithRed:0.08 green:0.80 blue:0.84 alpha:1.0] gradientStart:[UIColor colorWithRed:1.00 green:0.84 blue:0.93 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.73 green:0.95 blue:1.00 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Afterglow Light 2" titleDescription:@"Apricot sunset with coral punch, hot pink sparks, and blue contrast." overlay:[UIColor colorWithRed:0.60 green:0.24 blue:0.14 alpha:1.0] tabIcons:[UIColor colorWithRed:0.97 green:0.44 blue:0.12 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.31 blue:0.44 alpha:1.0] bg:[UIColor colorWithRed:1.00 green:0.86 blue:0.72 alpha:1.0] textP:[UIColor colorWithRed:0.30 green:0.12 blue:0.09 alpha:1.0] textS:[UIColor colorWithRed:0.58 green:0.30 blue:0.28 alpha:1.0] nav:[UIColor colorWithRed:1.00 green:0.79 blue:0.64 alpha:1.0] accent:[UIColor colorWithRed:0.28 green:0.67 blue:1.00 alpha:1.0] gradientStart:[UIColor colorWithRed:1.00 green:0.90 blue:0.69 alpha:1.0] gradientEnd:[UIColor colorWithRed:1.00 green:0.68 blue:0.73 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Afterglow Light 3" titleDescription:@"Mint arcade glass with louder teal, berry pink, and violet energy." overlay:[UIColor colorWithRed:0.13 green:0.40 blue:0.40 alpha:1.0] tabIcons:[UIColor colorWithRed:0.00 green:0.68 blue:0.61 alpha:1.0] seekBar:[UIColor colorWithRed:0.98 green:0.37 blue:0.58 alpha:1.0] bg:[UIColor colorWithRed:0.80 green:1.00 blue:0.91 alpha:1.0] textP:[UIColor colorWithRed:0.08 green:0.22 blue:0.24 alpha:1.0] textS:[UIColor colorWithRed:0.28 green:0.47 blue:0.49 alpha:1.0] nav:[UIColor colorWithRed:0.72 green:0.98 blue:0.89 alpha:1.0] accent:[UIColor colorWithRed:0.41 green:0.30 blue:0.95 alpha:1.0] gradientStart:[UIColor colorWithRed:0.82 green:1.00 blue:0.94 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.93 green:0.84 blue:1.00 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
-                    [self themeAddPresetRowWithName:@"Afterglow Light 4" titleDescription:@"Sky chrome with icy blue glass, coral sparks, and violet-pop contrast." overlay:[UIColor colorWithRed:0.21 green:0.31 blue:0.66 alpha:1.0] tabIcons:[UIColor colorWithRed:0.17 green:0.50 blue:1.00 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.40 blue:0.47 alpha:1.0] bg:[UIColor colorWithRed:0.82 green:0.91 blue:1.00 alpha:1.0] textP:[UIColor colorWithRed:0.11 green:0.18 blue:0.39 alpha:1.0] textS:[UIColor colorWithRed:0.29 green:0.39 blue:0.63 alpha:1.0] nav:[UIColor colorWithRed:0.74 green:0.84 blue:1.00 alpha:1.0] accent:[UIColor colorWithRed:0.84 green:0.31 blue:0.68 alpha:1.0] gradientStart:[UIColor colorWithRed:0.82 green:0.93 blue:1.00 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.92 green:0.84 blue:1.00 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+	                    [self themeAddPresetRowWithName:@"Afterglow Light 4" titleDescription:@"Sky chrome with icy blue glass, coral sparks, and violet-pop contrast." overlay:[UIColor colorWithRed:0.21 green:0.31 blue:0.66 alpha:1.0] tabIcons:[UIColor colorWithRed:0.17 green:0.50 blue:1.00 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.40 blue:0.47 alpha:1.0] bg:[UIColor colorWithRed:0.82 green:0.91 blue:1.00 alpha:1.0] textP:[UIColor colorWithRed:0.11 green:0.18 blue:0.39 alpha:1.0] textS:[UIColor colorWithRed:0.29 green:0.39 blue:0.63 alpha:1.0] nav:[UIColor colorWithRed:0.74 green:0.84 blue:1.00 alpha:1.0] accent:[UIColor colorWithRed:0.84 green:0.31 blue:0.68 alpha:1.0] gradientStart:[UIColor colorWithRed:0.82 green:0.93 blue:1.00 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.92 green:0.84 blue:1.00 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
+	                    [self addResetDefaultsItemForKeys:themeKeys toRows:presetRows settingsVC:settingsViewController];
 
-                    YTSettingsPickerViewController *presetPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Presets") pickerSectionTitle:nil rows:presetRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                    YTSettingsPickerViewController *presetPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Presets") pickerSectionTitle:nil rows:presetRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:presetPicker];
                     return YES;
                 }]];
@@ -1711,10 +2063,11 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     [colorRows addObject:space];
                     [colorRows addObject:[self themeSectionHeaderWithTitle:@"Text & Accent" description:@"Titles, supporting copy, links, and primary action color."]];
                     [self themeAddColorRowWithTitle:@"PrimaryText" titleDescription:@"Main titles and prominent labels." themeKey:@"theme_textPrimary" toRows:colorRows settingsVC:settingsViewController];
-                    [self themeAddColorRowWithTitle:@"SecondaryText" titleDescription:@"Supporting text and muted labels." themeKey:@"theme_textSecondary" toRows:colorRows settingsVC:settingsViewController];
-                    [self themeAddColorRowWithTitle:@"AccentColor" titleDescription:@"Highlights, links, and action color." themeKey:@"theme_accent" toRows:colorRows settingsVC:settingsViewController];
+	                    [self themeAddColorRowWithTitle:@"SecondaryText" titleDescription:@"Supporting text and muted labels." themeKey:@"theme_textSecondary" toRows:colorRows settingsVC:settingsViewController];
+	                    [self themeAddColorRowWithTitle:@"AccentColor" titleDescription:@"Highlights, links, and action color." themeKey:@"theme_accent" toRows:colorRows settingsVC:settingsViewController];
+	                    [self addResetDefaultsItemForKeys:themeCustomColorKeys toRows:colorRows settingsVC:settingsViewController];
 
-                    YTSettingsPickerViewController *colorPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"CustomColors") pickerSectionTitle:nil rows:colorRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                    YTSettingsPickerViewController *colorPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"CustomColors") pickerSectionTitle:nil rows:colorRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:colorPicker];
                     return YES;
                 }]];
@@ -1809,23 +2162,9 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     [seekRows addObject:[self switchWithTitle:@"PersistentProgressBar" key:@"persistentProgressBar"]];
                     [seekRows addObject:[self switchWithTitle:@"HideHeatwaves" key:@"hideHeatwaves"]];
 
-                    [seekRows addObject:space];
-                    [seekRows addObject:[self themeSectionHeaderWithTitle:@"Reset" description:@"Clear every seek-bar override and go back to theme defaults."]];
-                    [seekRows addObject:[%c(YTSettingsSectionItem) itemWithTitle:@"Reset Seek Bar"
-                        titleDescription:@"Remove track, live, scrubber, image, size, and seek-bar display overrides."
-                        accessibilityIdentifier:@"YTAfterglowSectionItem"
-                        detailTextBlock:nil
-                        selectBlock:^BOOL(YTSettingsCell *resetCell, NSUInteger resetArg1) {
-                            for (NSString *k in @[@"theme_seekBar", @"theme_seekBarLive", @"theme_seekBarScrubber", @"theme_seekBarScrubberLive", @"seekBarScrubberImage", @"seekBarScrubberSize", @"persistentProgressBar", @"hideHeatwaves"]) {
-                                [[YTAGUserDefaults standardUserDefaults] removeObjectForKey:k];
-                            }
-                            ytag_clearThemeCache();
-                            ytag_refreshSettingsHierarchy(settingsViewController);
-                            [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
-                            return YES;
-                        }]];
+	                    [self addResetDefaultsItemForKeys:themeSeekBarKeys toRows:seekRows settingsVC:settingsViewController];
 
-                    YTSettingsPickerViewController *seekPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Seek Bar" pickerSectionTitle:nil rows:seekRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                    YTSettingsPickerViewController *seekPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Seek Bar" pickerSectionTitle:nil rows:seekRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:seekPicker];
                     return YES;
                 }]];
@@ -1837,23 +2176,39 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                 }
                 selectBlock:^BOOL(YTSettingsCell *effectsCell, NSUInteger effectsArg1) {
                     Class YTSettingsSectionItemClass = %c(YTSettingsSectionItem);
-                    NSArray *glowStrengthLabels = @[@"Subtle", @"Normal", @"Strong"];
-                    NSInteger selectedGlowStrength = MIN(MAX(ytagInt(@"theme_glowStrength"), 0), (NSInteger)glowStrengthLabels.count - 1);
+                    NSArray *glowStrengthLabels = @[@"Subtle", @"Normal", @"Strong", @"Custom..."];
+                    NSInteger selectedGlowStrength = [self themeGlowStrengthMode];
                     NSMutableArray <YTSettingsSectionItem *> *effectRows = [NSMutableArray array];
                     [effectRows addObject:[self switchWithTitle:@"EnableGlow" key:@"theme_glowEnabled"]];
                     [effectRows addObject:[YTSettingsSectionItemClass itemWithTitle:LOC(@"GlowStrength")
                         accessibilityIdentifier:@"YTAfterglowSectionItem"
                         detailTextBlock:^NSString *() {
-                            NSInteger idx = MIN(MAX(ytagInt(@"theme_glowStrength"), 0), (NSInteger)glowStrengthLabels.count - 1);
-                            return glowStrengthLabels[idx];
+                            return [self themeGlowStrengthDetail];
                         }
                         selectBlock:^BOOL (YTSettingsCell *glowCell, NSUInteger glowArg1) {
                             NSMutableArray <YTSettingsSectionItem *> *rows = [NSMutableArray array];
                             for (NSUInteger i = 0; i < glowStrengthLabels.count; i++) {
                                 NSString *title = glowStrengthLabels[i];
                                 [rows addObject:[YTSettingsSectionItemClass checkmarkItemWithTitle:title titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
-                                    ytagSetInt((int)innerArg1, @"theme_glowStrength");
-                                    ytag_refreshSettingsHierarchy(settingsViewController);
+                                    if (innerArg1 == 3) {
+                                        [self themePresentGlowNumberInputWithTitle:@"Custom Glow Strength"
+                                                                 titleDescription:@"Enter an exact glow strength value."
+                                                                               key:@"theme_glowStrengthCustom"
+                                                                               min:0
+                                                                               max:100
+                                                                          fallback:50
+                                                                            suffix:@"/100"
+                                                                              cell:innerCell
+                                                                        settingsVC:settingsViewController
+                                                                         afterSave:^(NSInteger value) {
+                                            ytagSetInt(3, @"theme_glowStrengthMode");
+                                            ytagSetInt((int)value, @"theme_glowStrength");
+                                        }];
+                                    } else {
+                                        ytagSetInt((int)innerArg1, @"theme_glowStrengthMode");
+                                        ytagSetInt((int)innerArg1, @"theme_glowStrength");
+                                        ytag_refreshSettingsHierarchy(settingsViewController);
+                                    }
                                     return YES;
                                 }]];
                             }
@@ -1861,15 +2216,24 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                             [settingsViewController pushViewController:picker];
                             return YES;
                         }]];
+                    [effectRows addObject:space];
+                    [effectRows addObject:[self themeSectionHeaderWithTitle:@"Custom Glow" description:@"Exact values override the preset feel without removing the preset shortcuts."]];
+                    [self themeAddColorRowWithTitle:@"Glow Color" titleDescription:@"Optional global glow color. Default uses the surface color being glowed." themeKey:@"theme_glowColor" toRows:effectRows settingsVC:settingsViewController];
+                    [effectRows addObject:[self themeGlowNumberItemWithTitle:@"Glow Opacity" titleDescription:@"Maximum shadow opacity as a percentage." key:@"theme_glowOpacity" min:0 max:100 fallback:100 suffix:@"%" settingsVC:settingsViewController]];
+                    [effectRows addObject:[self themeGlowNumberItemWithTitle:@"Glow Radius" titleDescription:@"Radius multiplier where 50 is normal and 100 is double." key:@"theme_glowRadius" min:0 max:100 fallback:50 suffix:@"/100" settingsVC:settingsViewController]];
+                    [effectRows addObject:[self themeGlowNumberItemWithTitle:@"Glow Layers" titleDescription:@"Number of stacked glow passes. Higher values are louder and heavier." key:@"theme_glowLayers" min:1 max:12 fallback:1 suffix:@"" settingsVC:settingsViewController]];
+                    [effectRows addObject:space];
+                    [effectRows addObject:[self themeSectionHeaderWithTitle:@"Surfaces" description:@"Choose where glow is allowed to render."]];
                     [effectRows addObject:[self switchWithTitle:@"GlowPivot" key:@"theme_glowPivot"]];
                     [effectRows addObject:[self switchWithTitle:@"GlowOverlay" key:@"theme_glowOverlay"]];
                     [effectRows addObject:[self switchWithTitle:@"GlowScrubber" key:@"theme_glowScrubber"]];
                     [effectRows addObject:[self switchWithTitle:@"GlowSeekBar" key:@"theme_glowSeekBar"]];
-                    [effectRows addObject:[self switchWithTitle:@"AnimateSeek" key:@"seekBarAnimated"]];
-                    [effectRows addObject:[self switchWithTitle:@"DisableAmbientMode" key:@"disableAmbientMode"]];
-                    [effectRows addObject:[self switchWithTitle:@"SeekBarGradient" key:@"seekBarGradient"]];
+	                    [effectRows addObject:[self switchWithTitle:@"AnimateSeek" key:@"seekBarAnimated"]];
+	                    [effectRows addObject:[self switchWithTitle:@"DisableAmbientMode" key:@"disableAmbientMode"]];
+	                    [effectRows addObject:[self switchWithTitle:@"SeekBarGradient" key:@"seekBarGradient"]];
+	                    [self addResetDefaultsItemForKeys:themeEffectKeys toRows:effectRows settingsVC:settingsViewController];
 
-                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Effects" pickerSectionTitle:nil rows:effectRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Effects" pickerSectionTitle:nil rows:effectRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
                     return YES;
                 }]];
@@ -1899,10 +2263,11 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                                 ytag_refreshSettingsHierarchy(settingsViewController);
                                 [(UINavigationController *)settingsViewController.navigationController popViewControllerAnimated:YES];
                                 return YES;
-                            }]];
-                    }
+	                            }]];
+	                    }
+	                    [self addResetDefaultsItemForKeys:themeGradientKeys toRows:gradientRows settingsVC:settingsViewController];
 
-                    YTSettingsPickerViewController *gradientPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Gradient") pickerSectionTitle:nil rows:gradientRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                    YTSettingsPickerViewController *gradientPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Gradient") pickerSectionTitle:nil rows:gradientRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:gradientPicker];
                     return YES;
                 }]];
@@ -1996,11 +2361,12 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
                     [defaultRows addObject:space];
                     [defaultRows addObject:[self switchWithTitle:@"Miniplayer" key:@"miniplayer"]];
-                    if (isAdvanced) {
-                        [defaultRows addObject:[self switchWithTitle:@"PlaylistOldMinibar" key:@"playlistOldMinibar"]];
-                    }
+	                    if (isAdvanced) {
+	                        [defaultRows addObject:[self switchWithTitle:@"PlaylistOldMinibar" key:@"playlistOldMinibar"]];
+	                    }
+	                    [self addResetDefaultsItemForKeys:playerPlaybackKeys toRows:defaultRows settingsVC:settingsViewController];
 
-                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Playback") pickerSectionTitle:nil rows:defaultRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Playback") pickerSectionTitle:nil rows:defaultRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
                     return YES;
                 }]];
@@ -2011,20 +2377,21 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     return [self enabledSummaryForKeys:playerControlKeys];
                 }
                 selectBlock:^BOOL (YTSettingsCell *controlsCell, NSUInteger controlsArg1) {
-                    NSArray <YTSettingsSectionItem *> *controlRows = @[
-                        [self switchWithTitle:@"PortraitFullscreen" key:@"portraitFullscreen"],
-                        [self switchWithTitle:@"AutoFullscreen" key:@"autoFullscreen"],
-                        [self switchWithTitle:@"ExitFullscreen" key:@"exitFullscreen"],
+	                    NSMutableArray <YTSettingsSectionItem *> *controlRows = [@[
+	                        [self switchWithTitle:@"PortraitFullscreen" key:@"portraitFullscreen"],
+	                        [self switchWithTitle:@"AutoFullscreen" key:@"autoFullscreen"],
+	                        [self switchWithTitle:@"ExitFullscreen" key:@"exitFullscreen"],
                         space,
                         [self switchWithTitle:@"TapToSeek" key:@"tapToSeek"],
                         [self switchWithTitle:@"NoDoubleTap2Seek" key:@"noDoubleTapToSeek"],
                         [self switchWithTitle:@"NoTwoFingerSnapToChapter" key:@"noTwoFingerSnapToChapter"],
-                        space,
-                        [self switchWithTitle:@"DontSnap2Chapter" key:@"dontSnapToChapter"],
-                        [self switchWithTitle:@"NoFreeZoom" key:@"noFreeZoom"]
-                    ];
+	                        space,
+	                        [self switchWithTitle:@"DontSnap2Chapter" key:@"dontSnapToChapter"],
+	                        [self switchWithTitle:@"NoFreeZoom" key:@"noFreeZoom"]
+	                    ] mutableCopy];
+	                    [self addResetDefaultsItemForKeys:playerControlKeys toRows:controlRows settingsVC:settingsViewController];
 
-                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Controls") pickerSectionTitle:nil rows:controlRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Controls") pickerSectionTitle:nil rows:controlRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
                     return YES;
                 }]];
@@ -2032,54 +2399,24 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             [rows addObject:[self pageItemWithTitle:@"Buttons & Menus"
                 titleDescription:@"Buttons shown directly under the player and overflow menu actions."
                 summary:^NSString *() {
-                    return [self enabledSummaryForKeys:[[playerActionBarKeys arrayByAddingObjectsFromArray:playerMenuKeys] arrayByAddingObjectsFromArray:@[@"playerShareButtonMode", @"playerSaveButtonMode"]]];
-                }
-                selectBlock:^BOOL (YTSettingsCell *barCell, NSUInteger barArg1) {
-                    NSMutableArray <YTSettingsSectionItem *> *barRows = [@[
-                        [self switchWithTitle:@"NoPlayerDownloadButton" key:@"noPlayerDownloadButton"],
-                        [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"PlayerShareButton") accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:^NSString *() {
-                            NSArray *labels = @[LOC(@"Auto"), LOC(@"AlwaysShow"), LOC(@"AlwaysHide")];
-                            return labels[MIN(MAX(ytagInt(@"playerShareButtonMode"), 0), 2)];
-                        } selectBlock:^BOOL (YTSettingsCell *pickerCell, NSUInteger pickerArg1) {
-                            NSArray *labels = @[LOC(@"Auto"), LOC(@"AlwaysShow"), LOC(@"AlwaysHide")];
-                            NSMutableArray *rows = [NSMutableArray array];
-                            for (NSUInteger i = 0; i < labels.count; i++) {
-                                [rows addObject:[%c(YTSettingsSectionItem) checkmarkItemWithTitle:labels[i] titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
-                                    ytagSetInt((int)innerArg1, @"playerShareButtonMode");
-                                    ytag_refreshSettingsHierarchy(settingsViewController);
-                                    return YES;
-                                }]];
-                            }
-                            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"PlayerShareButton") pickerSectionTitle:nil rows:rows selectedItemIndex:MIN(MAX(ytagInt(@"playerShareButtonMode"), 0), 2) parentResponder:[self parentResponder]];
-                            [settingsViewController pushViewController:picker];
-                            return YES;
-                        }],
-                        [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"PlayerSaveButton") accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:^NSString *() {
-                            NSArray *labels = @[LOC(@"Auto"), LOC(@"AlwaysShow"), LOC(@"AlwaysHide")];
-                            return labels[MIN(MAX(ytagInt(@"playerSaveButtonMode"), 0), 2)];
-                        } selectBlock:^BOOL (YTSettingsCell *pickerCell, NSUInteger pickerArg1) {
-                            NSArray *labels = @[LOC(@"Auto"), LOC(@"AlwaysShow"), LOC(@"AlwaysHide")];
-                            NSMutableArray *rows = [NSMutableArray array];
-                            for (NSUInteger i = 0; i < labels.count; i++) {
-                                [rows addObject:[%c(YTSettingsSectionItem) checkmarkItemWithTitle:labels[i] titleDescription:nil selectBlock:^BOOL (YTSettingsCell *innerCell, NSUInteger innerArg1) {
-                                    ytagSetInt((int)innerArg1, @"playerSaveButtonMode");
-                                    ytag_refreshSettingsHierarchy(settingsViewController);
-                                    return YES;
-                                }]];
-                            }
-                            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"PlayerSaveButton") pickerSectionTitle:nil rows:rows selectedItemIndex:MIN(MAX(ytagInt(@"playerSaveButtonMode"), 0), 2) parentResponder:[self parentResponder]];
-                            [settingsViewController pushViewController:picker];
-                            return YES;
-                        }],
-                        [self switchWithTitle:@"NoPlayerRemixButton" key:@"noPlayerRemixButton"],
-                        [self switchWithTitle:@"NoPlayerClipButton" key:@"noPlayerClipButton"],
-                        space,
-                        [self themeSectionHeaderWithTitle:@"Menus" description:@"Hide player menu actions you never use."],
-                        [self switchWithTitle:@"RemoveDownloadMenu" key:@"removeDownloadMenu"],
-                        [self switchWithTitle:@"RemoveShareMenu" key:@"removeShareMenu"]
-                    ] mutableCopy];
+	                    return [self enabledSummaryForKeys:[playerActionBarKeys arrayByAddingObjectsFromArray:playerMenuKeys]];
+	                }
+	                selectBlock:^BOOL (YTSettingsCell *barCell, NSUInteger barArg1) {
+	                    NSMutableArray <YTSettingsSectionItem *> *barRows = [@[
+	                        [self switchWithTitle:@"NoPlayerDownloadButton" key:@"noPlayerDownloadButton"],
+	                        [self switchWithTitle:@"PlayerNoShare" key:@"noPlayerShareButton"],
+	                        [self switchWithTitle:@"PlayerNoSave" key:@"noPlayerSaveButton"],
+	                        [self switchWithTitle:@"NoPlayerRemixButton" key:@"noPlayerRemixButton"],
+	                        [self switchWithTitle:@"NoPlayerClipButton" key:@"noPlayerClipButton"],
+	                        space,
+	                        [self themeSectionHeaderWithTitle:@"Menus" description:@"Hide player menu actions you never use."],
+	                        [self switchWithTitle:@"RemoveDownloadMenu" key:@"removeDownloadMenu"],
+	                        [self switchWithTitle:@"RemoveShareMenu" key:@"removeShareMenu"]
+	                    ] mutableCopy];
+	                    NSArray *buttonMenuKeys = [playerActionBarKeys arrayByAddingObjectsFromArray:playerMenuKeys];
+	                    [self addResetDefaultsItemForKeys:buttonMenuKeys toRows:barRows settingsVC:settingsViewController];
 
-                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Buttons & Menus" pickerSectionTitle:nil rows:barRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Buttons & Menus" pickerSectionTitle:nil rows:barRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
                     return YES;
                 }]];
@@ -2091,10 +2428,10 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                         return [self enabledSummaryForKeys:playerOverlayKeys];
                     }
                     selectBlock:^BOOL (YTSettingsCell *overlayCell, NSUInteger overlayArg1) {
-                        NSArray <YTSettingsSectionItem *> *overlayRows = @[
-                            [self switchWithTitle:@"MuteButton" key:@"muteButton"],
-                            [self switchWithTitle:@"LockButton" key:@"lockButton"],
-                            [self switchWithTitle:@"DownloadButton" key:@"downloadButton"],
+	                        NSMutableArray <YTSettingsSectionItem *> *overlayRows = [@[
+	                            [self switchWithTitle:@"MuteButton" key:@"muteButton"],
+	                            [self switchWithTitle:@"LockButton" key:@"lockButton"],
+	                            [self switchWithTitle:@"DownloadButton" key:@"downloadButton"],
                             [self switchWithTitle:@"ControlsSheetButton" key:@"controlsSheetButton"],
                             [self switchWithTitle:@"OverlayDeclutterButton" key:@"overlayDeclutterButton"],
                             [self switchWithTitle:@"HideSubs" key:@"hideSubs"],
@@ -2105,18 +2442,20 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                             [self switchWithTitle:@"NoFullscreenActions" key:@"noFullscreenActions"],
                             [self switchWithTitle:@"StockVolumeHUD" key:@"stockVolumeHUD"],
                             [self switchWithTitle:@"NoWatermarks" key:@"noWatermarks"],
-                            [self switchWithTitle:@"VideoEndTime" key:@"videoEndTime"],
-                            [self switchWithTitle:@"24hrFormat" key:@"24hrFormat"],
-                            [self switchWithTitle:@"PauseOnOverlay" key:@"pauseOnOverlay"]
-                        ];
+	                            [self switchWithTitle:@"VideoEndTime" key:@"videoEndTime"],
+	                            [self switchWithTitle:@"24hrFormat" key:@"24hrFormat"],
+	                            [self switchWithTitle:@"PauseOnOverlay" key:@"pauseOnOverlay"]
+	                        ] mutableCopy];
+	                        [self addResetDefaultsItemForKeys:playerOverlayKeys toRows:overlayRows settingsVC:settingsViewController];
 
-                        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Overlay") pickerSectionTitle:nil rows:overlayRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Overlay") pickerSectionTitle:nil rows:overlayRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                         [settingsViewController pushViewController:picker];
                         return YES;
-                    }]];
-            }
+	                    }]];
+	            }
+	            [self addResetDefaultsItemForKeys:playerKeys toRows:rows settingsVC:settingsViewController];
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Player") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Player") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
@@ -2148,8 +2487,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                         return [self enabledSummaryForKeys:shortsUIKeys];
                     }
                     selectBlock:^BOOL (YTSettingsCell *uiCell, NSUInteger uiArg1) {
-                        NSArray <YTSettingsSectionItem *> *uiRows = @[
-                            [self switchWithTitle:@"HideShortsLogo" key:@"hideShortsLogo"],
+	                        NSMutableArray <YTSettingsSectionItem *> *uiRows = [@[
+	                            [self switchWithTitle:@"HideShortsLogo" key:@"hideShortsLogo"],
                             [self switchWithTitle:@"HideShortsSearch" key:@"hideShortsSearch"],
                             [self switchWithTitle:@"HideShortsCamera" key:@"hideShortsCamera"],
                             [self switchWithTitle:@"HideShortsMore" key:@"hideShortsMore"],
@@ -2163,18 +2502,20 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                             [self switchWithTitle:@"HideShortsThanks" key:@"hideShortsThanks"],
                             [self switchWithTitle:@"HideShortsSource" key:@"hideShortsSource"],
                             [self switchWithTitle:@"HideShortsChannelName" key:@"hideShortsChannelName"],
-                            [self switchWithTitle:@"HideShortsDescription" key:@"hideShortsDescription"],
-                            [self switchWithTitle:@"HideShortsAudioTrack" key:@"hideShortsAudioTrack"],
-                            [self switchWithTitle:@"HideShortsPromoCards" key:@"hideShortsPromoCards"]
-                        ];
+	                            [self switchWithTitle:@"HideShortsDescription" key:@"hideShortsDescription"],
+	                            [self switchWithTitle:@"HideShortsAudioTrack" key:@"hideShortsAudioTrack"],
+	                            [self switchWithTitle:@"HideShortsPromoCards" key:@"hideShortsPromoCards"]
+	                        ] mutableCopy];
+	                        [self addResetDefaultsItemForKeys:shortsUIKeys toRows:uiRows settingsVC:settingsViewController];
 
-                        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Shorts Layout" pickerSectionTitle:nil rows:uiRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	                        YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Shorts Layout" pickerSectionTitle:nil rows:uiRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                         [settingsViewController pushViewController:picker];
                         return YES;
-                    }]];
-            }
+	                    }]];
+	            }
+	            [self addResetDefaultsItemForKeys:shortsBehaviorKeys toRows:rows settingsVC:settingsViewController];
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Shorts") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Shorts") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
@@ -2218,13 +2559,14 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                                                        key:@"downloadPickerFontScaleMode"
                                                     labels:@[LOC(@"Compact"), LOC(@"Standard"), LOC(@"Large")]
                                                 settingsVC:settingsViewController]];
-            [rows addObject:[self ytagPickerItemWithTitle:LOC(@"DownloadPickerFont")
-                                               description:LOC(@"DownloadPickerFontDesc")
-                                                       key:@"downloadPickerFontFaceMode"
-                                                    labels:@[LOC(@"SystemFont"), LOC(@"RoundedFont"), LOC(@"SerifFont"), LOC(@"MonoFont")]
-                                                settingsVC:settingsViewController]];
+	            [rows addObject:[self ytagPickerItemWithTitle:LOC(@"DownloadPickerFont")
+	                                               description:LOC(@"DownloadPickerFontDesc")
+	                                                       key:@"downloadPickerFontFaceMode"
+	                                                    labels:@[LOC(@"SystemFont"), LOC(@"RoundedFont"), LOC(@"SerifFont"), LOC(@"MonoFont")]
+	                                                settingsVC:settingsViewController]];
+	            [self addResetDefaultsItemForKeys:downloadKeys toRows:rows settingsVC:settingsViewController];
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Downloads") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Downloads") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
@@ -2236,16 +2578,17 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             return [self enabledSummaryForKeys:feedKeys];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSArray <YTSettingsSectionItem *> *feedRows = @[
-                [self switchWithTitle:@"RemovePlayNext" key:@"removePlayNext"],
-                [self switchWithTitle:@"RemoveWatchLaterMenu" key:@"removeWatchLaterMenu"],
-                [self switchWithTitle:@"RemoveSaveToPlaylistMenu" key:@"removeSaveToPlaylistMenu"],
-                [self switchWithTitle:@"RemoveNotInterestedMenu" key:@"removeNotInterestedMenu"],
-                [self switchWithTitle:@"RemoveDontRecommendMenu" key:@"removeDontRecommendMenu"],
-                [self switchWithTitle:@"RemoveReportMenu" key:@"removeReportMenu"]
-            ];
+	            NSMutableArray <YTSettingsSectionItem *> *feedRows = [@[
+	                [self switchWithTitle:@"RemovePlayNext" key:@"removePlayNext"],
+	                [self switchWithTitle:@"RemoveWatchLaterMenu" key:@"removeWatchLaterMenu"],
+	                [self switchWithTitle:@"RemoveSaveToPlaylistMenu" key:@"removeSaveToPlaylistMenu"],
+	                [self switchWithTitle:@"RemoveNotInterestedMenu" key:@"removeNotInterestedMenu"],
+	                [self switchWithTitle:@"RemoveDontRecommendMenu" key:@"removeDontRecommendMenu"],
+	                [self switchWithTitle:@"RemoveReportMenu" key:@"removeReportMenu"]
+	            ] mutableCopy];
+	            [self addResetDefaultsItemForKeys:feedKeys toRows:feedRows settingsVC:settingsViewController];
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Feed" pickerSectionTitle:nil rows:feedRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Feed" pickerSectionTitle:nil rows:feedRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
@@ -2257,17 +2600,18 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             return [self enabledSummaryForKeys:toolKeys];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-            NSArray <YTSettingsSectionItem *> *rows = @[
-                [self switchWithTitle:@"CopyVideoInfo" key:@"copyVideoInfo"],
-                [self switchWithTitle:@"SaveProfilePhoto" key:@"saveProfilePhoto"],
-                [self switchWithTitle:@"PostManager" key:@"postManager"],
-                [self switchWithTitle:@"CommentManager" key:@"commentManager"],
-                [self switchWithTitle:@"NativeShare" key:@"nativeShare"],
-                [self switchWithTitle:@"FixAlbums" key:@"fixAlbums"],
-                [self switchWithTitle:@"CopyWithTimestamp" key:@"copyWithTimestamp"]
-            ];
+	            NSMutableArray <YTSettingsSectionItem *> *rows = [@[
+	                [self switchWithTitle:@"CopyVideoInfo" key:@"copyVideoInfo"],
+	                [self switchWithTitle:@"SaveProfilePhoto" key:@"saveProfilePhoto"],
+	                [self switchWithTitle:@"PostManager" key:@"postManager"],
+	                [self switchWithTitle:@"CommentManager" key:@"commentManager"],
+	                [self switchWithTitle:@"NativeShare" key:@"nativeShare"],
+	                [self switchWithTitle:@"FixAlbums" key:@"fixAlbums"],
+	                [self switchWithTitle:@"CopyWithTimestamp" key:@"copyWithTimestamp"]
+	            ] mutableCopy];
+	            [self addResetDefaultsItemForKeys:toolKeys toRows:rows settingsVC:settingsViewController];
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Tools" pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+	            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:@"Tools" pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
@@ -2287,10 +2631,11 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     ytagSetInt((int)innerArg1, @"commentsHeaderMode");
                     ytag_refreshSettingsHierarchy(settingsViewController);
                     return YES;
-                }]];
-            }
+	                }]];
+	            }
+	            [self addResetDefaultsItemForKeys:@[@"commentsHeaderMode"] toRows:rows settingsVC:settingsViewController];
 
-            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"CommentsHeader") pickerSectionTitle:nil rows:rows selectedItemIndex:MIN(MAX(ytagInt(@"commentsHeaderMode"), 0), 2) parentResponder:[self parentResponder]];
+	            YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"CommentsHeader") pickerSectionTitle:nil rows:rows selectedItemIndex:MIN(MAX(ytagInt(@"commentsHeaderMode"), 0), 2) parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];
             return YES;
         }];
@@ -2349,6 +2694,17 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     return YES;
                 }],
 
+                [%c(YTSettingsSectionItem) itemWithTitle:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:nil],
+                [self themeSectionHeaderWithTitle:LOC(@"ManagePreferences") description:LOC(@"ManagePreferencesDesc")],
+                [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ExportPreferences") titleDescription:LOC(@"ExportPreferencesDesc") accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+                    [self presentPreferencesExportFromCell:cell settingsVC:settingsViewController];
+                    return YES;
+                }],
+                [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ImportPreferences") titleDescription:LOC(@"ImportPreferencesDesc") accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+                    [self presentPreferencesImportFromCell:cell settingsVC:settingsViewController];
+                    return YES;
+                }],
+
                 [%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ResetSettings") titleDescription:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
                     YTAlertView *alertView = [%c(YTAlertView) confirmationDialogWithAction:^{
                         [YTAGUserDefaults resetUserDefaults];
@@ -2379,8 +2735,13 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             [rows addObject:[self switchWithTitle:@"DebugLogProbes" key:@"debugLogProbes"]];
             [rows addObject:[%c(YTSettingsSectionItem) switchItemWithTitle:LOC(@"ShowDebugHUD") titleDescription:LOC(@"ShowDebugHUDDesc") accessibilityIdentifier:@"YTAfterglowSectionItem" switchOn:ytagBool(@"debugHUDEnabled") switchBlock:^BOOL (YTSettingsCell *cell, BOOL enabled) {
                 ytagSetBool(enabled, @"debugHUDEnabled");
-                if (enabled) [[YTAGDebugHUD sharedHUD] show];
-                else [[YTAGDebugHUD sharedHUD] hide];
+                if (enabled) {
+                    ytagSetBool(YES, @"debugLogEnabled");
+                    [[YTAGDebugHUD sharedHUD] show];
+                } else {
+                    [[YTAGDebugHUD sharedHUD] hide];
+                }
+                ytag_refreshSettingsFromCell(cell);
                 return YES;
             } settingItemId:0]];
             [rows addObject:[%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ShareDebugLog") titleDescription:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
@@ -2401,18 +2762,18 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     [[%c(YTToastResponderEvent) eventWithMessage:LOC(@"NoDebugLog") firstResponder:[self parentResponder]] send];
                     return YES;
                 }
-                [UIPasteboard generalPasteboard].string = body;
-                [[%c(YTToastResponderEvent) eventWithMessage:@"Log copied to clipboard" firstResponder:[self parentResponder]] send];
+                [self presentDebugLogShareFromCell:cell body:body settingsVC:settingsViewController];
                 return YES;
             }]];
-            [rows addObject:[%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ClearDebugLog") titleDescription:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
-                YTAGLogClear();
-                [[%c(YTToastResponderEvent) eventWithMessage:LOC(@"Done") firstResponder:[self parentResponder]] send];
-                return YES;
-            }]];
+	            [rows addObject:[%c(YTSettingsSectionItem) itemWithTitle:LOC(@"ClearDebugLog") titleDescription:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
+	                YTAGLogClear();
+	                [[%c(YTToastResponderEvent) eventWithMessage:LOC(@"Done") firstResponder:[self parentResponder]] send];
+	                return YES;
+	            }]];
+	            [self addResetDefaultsItemForKeys:@[@"advancedMode", @"debugLogEnabled", @"debugLogFirehose", @"debugLogDownloads", @"debugLogPlayerUI", @"debugLogPremiumControls", @"debugLogPiP", @"debugLogProbes", @"debugHUDEnabled"] toRows:rows settingsVC:settingsViewController];
 
-            [rows addObject:space];
-            [rows addObject:credits];
+	            [rows addObject:space];
+	            [rows addObject:credits];
 
             YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"About") pickerSectionTitle:nil rows:rows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
             [settingsViewController pushViewController:picker];

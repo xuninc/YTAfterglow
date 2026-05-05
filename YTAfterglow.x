@@ -238,6 +238,17 @@ static void ytagShortsApplyWatchHeaderVisibility(id header) {
     ytagShortsApplySignatureRulesRecursively(header, rules);
 }
 
+static void ytagShortsScrubHeaderRenderer(id renderer) {
+    if (!renderer || !ytagBool(@"hideShortsChannelName")) return;
+    @try {
+        if ([renderer respondsToSelector:@selector(setChannelTitleText:)]) {
+            ((void (*)(id, SEL, id))objc_msgSend)(renderer, @selector(setChannelTitleText:), nil);
+        } else {
+            [renderer setValue:nil forKey:@"channelTitleText"];
+        }
+    } @catch (__unused id ex) {}
+}
+
 static BOOL ytag_commentsPinned(void) {
     return ytagInt(@"commentsHeaderMode") == 1;
 }
@@ -521,6 +532,11 @@ static BOOL canRememberLoopMode = NO;
 
     if (ytagBool(@"noNotifsButton")) self.notificationButton.hidden = YES;
     if (ytagBool(@"noSearchButton")) self.searchButton.hidden = YES;
+    if (YTAGLiteModeEnabled() && self.searchButton) {
+        self.searchButton.hidden = NO;
+        self.searchButton.alpha = 1.0;
+        self.searchButton.userInteractionEnabled = YES;
+    }
 
     for (UIView *subview in self.subviews) {
         if (ytagBool(@"noVoiceSearchButton") && [subview.accessibilityLabel isEqualToString:NSLocalizedString(@"search.voice.access", nil)]) subview.hidden = YES;
@@ -611,9 +627,9 @@ static BOOL canRememberLoopMode = NO;
 // Hide Subs Button
 - (void)setClosedCaptionsOrSubtitlesButtonAvailable:(BOOL)arg1 { ytagBool(@"hideSubs") ? %orig(NO) : %orig; }
 
-// Force Share / Save buttons to stay available in the overlay.
-- (void)setShareButtonAvailable:(BOOL)arg1 { %orig(ytagInt(@"playerShareButtonMode") == 1 ? YES : arg1); }
-- (void)setAddToButtonAvailable:(BOOL)arg1 { %orig(ytagInt(@"playerSaveButtonMode") == 1 ? YES : arg1); }
+// Hide Share / Save buttons under the player when requested.
+- (void)setShareButtonAvailable:(BOOL)arg1 { ytagBool(@"noPlayerShareButton") ? %orig(NO) : %orig; }
+- (void)setAddToButtonAvailable:(BOOL)arg1 { ytagBool(@"noPlayerSaveButton") ? %orig(NO) : %orig; }
 
 // Pause On Overlay
 - (void)setOverlayVisible:(BOOL)visible {
@@ -725,13 +741,20 @@ static BOOL canRememberLoopMode = NO;
 %hook YTFullscreenActionsView
 - (BOOL)enabled {
     BOOL on = ytagBool(@"noFullscreenActions");
-    YTAGLog(@"fullscreen", @"YTFullscreenActionsView.enabled read, toggle=%@", on ? @"ON" : @"OFF");
-    return on ? NO : YES;
+    if (!on) return %orig;
+
+    YTAGLog(@"fullscreen", @"YTFullscreenActionsView.enabled forced:NO toggle=ON");
+    return NO;
 }
 - (void)setEnabled:(BOOL)arg1 {
     BOOL on = ytagBool(@"noFullscreenActions");
-    YTAGLog(@"fullscreen", @"YTFullscreenActionsView.setEnabled:%@ toggle=%@", arg1 ? @"YES" : @"NO", on ? @"ON" : @"OFF");
-    on ? %orig(NO) : %orig;
+    if (!on) {
+        %orig;
+        return;
+    }
+
+    YTAGLog(@"fullscreen", @"YTFullscreenActionsView.setEnabled:%@ forced:NO toggle=ON", arg1 ? @"YES" : @"NO");
+    %orig(NO);
 }
 %end
 
@@ -1326,27 +1349,54 @@ void autoSkipShorts(YTPlayerViewController *self, YTSingleVideoController *video
 %end
 
 // Hide buttons under the video player (@PoomSmart)
-static BOOL findCell(ASNodeController *nodeController, NSArray <NSString *> *identifiers) {
+static BOOL ytagObjectContainsActionBarMarkers(id object, NSArray<NSString *> *includeMarkers, NSArray<NSString *> *excludeMarkers) {
+    if (!object || includeMarkers.count == 0) return NO;
+
+    NSMutableArray<NSString *> *haystacks = [NSMutableArray array];
+    if ([object isKindOfClass:[NSString class]]) {
+        [haystacks addObject:(NSString *)object];
+    } else {
+        NSString *desc = [object description];
+        if (desc.length > 0) [haystacks addObject:desc];
+        for (NSString *key in @[@"accessibilityIdentifier", @"_accessibilityIdentifier", @"accessibilityLabel", @"title", @"text"]) {
+            @try {
+                id value = [object valueForKey:key];
+                if ([value isKindOfClass:[NSString class]] && [(NSString *)value length] > 0) {
+                    [haystacks addObject:value];
+                }
+            } @catch (__unused id ex) {}
+        }
+    }
+
+    NSString *combined = [[haystacks componentsJoinedByString:@" "] lowercaseString];
+    if (combined.length == 0) return NO;
+    for (NSString *excluded in excludeMarkers ?: @[]) {
+        if ([combined containsString:excluded.lowercaseString]) return NO;
+    }
+    for (NSString *marker in includeMarkers) {
+        if ([combined containsString:marker.lowercaseString]) return YES;
+    }
+    return NO;
+}
+
+static BOOL ytagPlayerActionBarMatches(ASNodeController *nodeController, NSArray<NSString *> *includeMarkers, NSArray<NSString *> *excludeMarkers) {
     for (id child in [nodeController children]) {
         if ([child isKindOfClass:%c(ELMNodeController)]) {
             NSArray <ELMComponent *> *elmChildren = [(ELMNodeController *)child children];
             for (ELMComponent *elmChild in elmChildren) {
-                for (NSString *identifier in identifiers) {
-                    if ([[elmChild description] containsString:identifier])
-                        return YES;
-                }
+                if (ytagObjectContainsActionBarMarkers(elmChild, includeMarkers, excludeMarkers)) return YES;
             }
         }
 
         if ([child isKindOfClass:%c(ASNodeController)]) {
             ASDisplayNode *childNode = ((ASNodeController *)child).node; // ELMContainerNode
+            if (ytagObjectContainsActionBarMarkers(childNode, includeMarkers, excludeMarkers)) return YES;
             NSArray *yogaChildren = childNode.yogaChildren;
             for (ASDisplayNode *displayNode in yogaChildren) {
-                if ([identifiers containsObject:displayNode.accessibilityIdentifier])
-                    return YES;
+                if (ytagObjectContainsActionBarMarkers(displayNode, includeMarkers, excludeMarkers)) return YES;
             }
 
-            if (findCell((ASNodeController *)child, identifiers))
+            if (ytagPlayerActionBarMatches((ASNodeController *)child, includeMarkers, excludeMarkers))
                 return YES;
         }
     }
@@ -1402,23 +1452,23 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
         ASCellNode *node = [element node];
         ASNodeController *nodeController = [node controller];
 
-        if (ytagBool(@"noPlayerRemixButton") && findCell(nodeController, @[@"id.video.remix.button"])) {
+        if (ytagBool(@"noPlayerRemixButton") && ytagPlayerActionBarMatches(nodeController, @[@"id.video.remix.button", @"remix"], nil)) {
             return CGSizeZero;
         }
 
-        if (ytagInt(@"playerShareButtonMode") == 2 && findCell(nodeController, @[@"id.video.share.button"])) {
+        if (ytagBool(@"noPlayerShareButton") && ytagPlayerActionBarMatches(nodeController, @[@"id.video.share.button", @"share"], nil)) {
             return CGSizeZero;
         }
 
-        if (ytagBool(@"noPlayerClipButton") && findCell(nodeController, @[@"clip_button.eml"])) {
+        if (ytagBool(@"noPlayerClipButton") && ytagPlayerActionBarMatches(nodeController, @[@"clip_button.eml", @"clip"], nil)) {
             return CGSizeZero;
         }
 
-        if (ytagBool(@"noPlayerDownloadButton") && findCell(nodeController, @[@"id.ui.add_to.offline.button"])) {
+        if (ytagBool(@"noPlayerDownloadButton") && ytagPlayerActionBarMatches(nodeController, @[@"id.ui.add_to.offline.button", @"offline.button", @"download"], nil)) {
             return CGSizeZero;
         }
 
-        if (ytagInt(@"playerSaveButtonMode") == 2 && findCell(nodeController, @[@"id.video.add_to.button"])) {
+        if (ytagBool(@"noPlayerSaveButton") && ytagPlayerActionBarMatches(nodeController, @[@"id.video.add_to.button", @"save", @"add_to.button", @"add to"], @[@"offline", @"download"])) {
             return CGSizeZero;
         }
     }
@@ -1426,6 +1476,14 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
     return %orig;
 }
 %end
+
+static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
+    if (!YTAGLiteModeEnabled() || !cell) return;
+    YTAGLiteModeApplyViewCleanup(cell);
+    if (YTAGLiteModeShouldStyleCommentView(cell)) {
+        YTAGLiteModeApplyCommentChrome(cell);
+    }
+}
 
 // Remove Premium Pop-up, Horizontal Video Carousel and Shorts (https://github.com/MiRO92/YTNoShorts)
 %hook YTAsyncCollectionView
@@ -1448,7 +1506,25 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
     } else if ([cell isKindOfClass:objc_lookUpClass("YTReelShelfCell")] && ytagBool(@"hideShorts")) {
         [self removeCellsAtIndexPath:indexPath];
     }
+
+    if (YTAGLiteModeShouldCleanCollectionView(self)) {
+        if (YTAGLiteModeShouldRemoveFeedView(cell)) {
+            [self removeCellsAtIndexPath:indexPath];
+        } else {
+            ytagLiteModeCleanupCollectionCell(cell);
+        }
+    }
     return cell;
+}
+
+- (void)layoutSubviews {
+    %orig;
+
+    if (!YTAGLiteModeShouldCleanCollectionView(self)) return;
+    for (UICollectionViewCell *cell in [self.visibleCells copy]) {
+        if (YTAGLiteModeShouldRemoveFeedView(cell)) continue;
+        ytagLiteModeCleanupCollectionCell(cell);
+    }
 }
 
 %new
@@ -1611,7 +1687,11 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
     %orig(ytagBool(@"hideShortsChannelName") ? nil : renderer);
     ytagShortsApplyWatchHeaderVisibility(self);
 }
-- (void)setHeaderRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
+- (void)setHeaderRenderer:(id)renderer {
+    ytagShortsScrubHeaderRenderer(renderer);
+    %orig(renderer);
+    ytagShortsApplyWatchHeaderVisibility(self);
+}
 - (void)setShortsVideoTitleElementRenderer:(id)renderer {
     %orig(ytagBool(@"hideShortsDescription") ? nil : renderer);
     ytagShortsApplyWatchHeaderVisibility(self);
@@ -1620,6 +1700,12 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
 - (void)setActionElement:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
 - (void)setBadgeRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
 - (void)setMultiFormatLinkElementRenderer:(id)renderer { %orig; ytagShortsApplyWatchHeaderVisibility(self); }
+%end
+
+%hook YTIReelPlayerHeaderRenderer
+- (void)setChannelTitleText:(id)text {
+    %orig(ytagBool(@"hideShortsChannelName") ? nil : text);
+}
 %end
 
 static BOOL isOverlayShown = YES;

@@ -28,6 +28,7 @@
 // Exposed from ColorMode.x. Returns the decoded UIColor for one of the
 // `theme_*` user-default keys, or nil if unset. Used for overlay-button tint.
 extern UIColor *themeColor(NSString *key);
+extern void YTAGOpenAfterglowSettingsFromView(UIView *sourceView);
 
 // --- YT classes we touch, forward-declared so this file compiles without full headers ---
 
@@ -84,6 +85,7 @@ extern UIColor *themeColor(NSString *key);
 + (void)handleLockTap:(UIButton *)sender;
 + (void)handleControlsTap:(UIButton *)sender;
 + (void)handleDeclutterTap:(UIButton *)sender;
++ (void)handleSettingsTap:(UIButton *)sender;
 // Entry point for OfflineProbe.x's native Download-button routing. Resolves
 // formats via live-read off playerVC and presents our action sheet.
 + (void)routeFromPlayerVC:(id)playerVC fromView:(UIView *)sourceView;
@@ -105,9 +107,13 @@ static NSString *YTAGCurrentVideoID(void) {
 
 static const NSInteger kYTAGButtonStackTag = 998877;  // stack view tag
 static void *kYTAGStackKey = &kYTAGStackKey;           // assoc object key
+static void *kYTAGTopOverlayLastVisibleKey = &kYTAGTopOverlayLastVisibleKey;
+static void *kYTAGTopOverlayLastCanceledKey = &kYTAGTopOverlayLastCanceledKey;
+static void *kYTAGTopOverlayLastStackKey = &kYTAGTopOverlayLastStackKey;
 static const NSInteger kYTAGShortsButtonStackTag = 998878;
 static void *kYTAGShortsStackKey = &kYTAGShortsStackKey;
 static const NSInteger kYTAGOverlayDeclutterButtonTag = 998879;
+static const NSInteger kYTAGOverlaySettingsButtonTag = 998880;
 static void *kYTAGOverlayDeclutterActiveKey = &kYTAGOverlayDeclutterActiveKey;
 static void *kYTAGOverlayDeclutterOriginalHiddenKey = &kYTAGOverlayDeclutterOriginalHiddenKey;
 static void *kYTAGOverlayDeclutterOriginalAlphaKey = &kYTAGOverlayDeclutterOriginalAlphaKey;
@@ -300,7 +306,7 @@ static UIImage *YTAGSymbol(NSString *name, CGFloat pointSize) {
 }
 
 static BOOL YTAGOverlayDeclutterButtonLike(UIView *view) {
-    if (!view || view.tag == kYTAGOverlayDeclutterButtonTag) return NO;
+    if (!view || view.tag == kYTAGOverlayDeclutterButtonTag || view.tag == kYTAGOverlaySettingsButtonTag) return NO;
     NSString *className = NSStringFromClass(view.class);
     BOOL classLooksLikeButton = [className rangeOfString:@"Button" options:NSCaseInsensitiveSearch].location != NSNotFound ||
                                 [className rangeOfString:@"Control" options:NSCaseInsensitiveSearch].location != NSNotFound;
@@ -436,7 +442,6 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
     // cleared it. Default ON via YTAGUserDefaults.
     BOOL showControls = [prefs boolForKey:@"controlsSheetButton"];
     BOOL showDeclutter = [prefs boolForKey:@"overlayDeclutterButton"];
-    if (!showMute && !showLock && !showDownload && !showControls && !showDeclutter) return;
 
     UIView *topContainer = nil;
     if ([self respondsToSelector:@selector(topControlsAccessibilityContainerView)]) {
@@ -530,6 +535,14 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
         if (declutter) [stack addArrangedSubview:declutter];
         YTAGOverlayDeclutterUpdateButton(declutter, [objc_getAssociatedObject(self, kYTAGOverlayDeclutterActiveKey) boolValue]);
     }
+    UIButton *settings = YTAGMakeOverlayButton(
+        @"Afterglow Settings",
+        0,
+        YTAGSymbol(@"gearshape.fill", 22.0),
+        [YTAGDownloadTrigger class],
+        @selector(handleSettingsTap:));
+    settings.tag = kYTAGOverlaySettingsButtonTag;
+    if (settings) [stack addArrangedSubview:settings];
 
     // Position the stack as a second row immediately below topContainer's own
     // layout, right-aligned. topContainer has clipsToBounds=NO so the overflow
@@ -558,8 +571,21 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
     if (stack) {
         stack.alpha = (canceledState || !visible) ? 0.0 : 1.0;
     }
-    YTAGLog(@"overlay", @"setTopOverlayVisible:%d canceled:%d stack=%d",
-            visible, canceledState, stack != nil);
+    BOOL hasStack = stack != nil;
+    NSNumber *lastVisible = objc_getAssociatedObject(self, kYTAGTopOverlayLastVisibleKey);
+    NSNumber *lastCanceled = objc_getAssociatedObject(self, kYTAGTopOverlayLastCanceledKey);
+    NSNumber *lastStack = objc_getAssociatedObject(self, kYTAGTopOverlayLastStackKey);
+    BOOL changed = !lastVisible || !lastCanceled || !lastStack ||
+                   lastVisible.boolValue != visible ||
+                   lastCanceled.boolValue != canceledState ||
+                   lastStack.boolValue != hasStack;
+    if (changed) {
+        objc_setAssociatedObject(self, kYTAGTopOverlayLastVisibleKey, @(visible), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self, kYTAGTopOverlayLastCanceledKey, @(canceledState), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(self, kYTAGTopOverlayLastStackKey, @(hasStack), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        YTAGLog(@"overlay", @"setTopOverlayVisible:%d canceled:%d stack=%d",
+                visible, canceledState, hasStack);
+    }
     %orig;
 }
 
@@ -579,7 +605,6 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
     BOOL showDownload = [prefs boolForKey:@"downloadButton"];
     BOOL showControls = [prefs boolForKey:@"controlsSheetButton"];
     BOOL showDeclutter = [prefs boolForKey:@"overlayDeclutterButton"];
-    if (!showDownload && !showControls && !showDeclutter) return;
 
     UIStackView *stack = [[UIStackView alloc] init];
     stack.axis = UILayoutConstraintAxisHorizontal;
@@ -621,6 +646,14 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
         if (declutter) [stack addArrangedSubview:declutter];
         YTAGOverlayDeclutterUpdateButton(declutter, [objc_getAssociatedObject(self, kYTAGOverlayDeclutterActiveKey) boolValue]);
     }
+    UIButton *settings = YTAGMakeOverlayButton(
+        @"Afterglow Settings",
+        0,
+        YTAGSymbol(@"gearshape.fill", 21.0),
+        [YTAGDownloadTrigger class],
+        @selector(handleSettingsTap:));
+    settings.tag = kYTAGOverlaySettingsButtonTag;
+    if (settings) [stack addArrangedSubview:settings];
 
     UILayoutGuide *guide = self.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
@@ -963,6 +996,11 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
     UIView *root = YTAGOverlayDeclutterRootForView(sender);
     BOOL active = ![objc_getAssociatedObject(root, kYTAGOverlayDeclutterActiveKey) boolValue];
     YTAGOverlayDeclutterApply(root, sender, active);
+}
+
++ (void)handleSettingsTap:(UIButton *)sender {
+    YTAGLog(@"overlay", @"Afterglow Settings tapped");
+    YTAGOpenAfterglowSettingsFromView(sender);
 }
 
 + (void)handleDownloadTap:(UIButton *)sender {

@@ -9,14 +9,16 @@
 //   - "🅿 Premium controls" pill + close X
 //   - Large video title + channel name
 //   - Playback row: restart / back-10 / play-pause / forward-10 / next
-//   - Utility tiles: Download / Speed / Stable volume / Mute / Copy link / Lock
+//   - Utility tiles: Download / Speed / Stable volume / Mute / Lite / Lock
 
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import "../Utils/YTAGLog.h"
+#import "../Utils/YTAGLiteMode.h"
 #import "../Utils/YTAGUserDefaults.h"
 
 extern UIColor *themeColor(NSString *key);
+extern void ytag_clearThemeCache(void);
 
 // --- YT classes we touch ---
 
@@ -56,10 +58,14 @@ extern UIColor *themeColor(NSString *key);
 @property (nonatomic, strong) UIButton *speedTile;
 @property (nonatomic, strong) UIButton *stableVolumeTile;
 @property (nonatomic, strong) UIButton *muteTile;
+@property (nonatomic, strong) UIButton *liteTile;
 @property (nonatomic, strong) UIButton *lockTile;
 @property (nonatomic, assign) BOOL muted;
 @property (nonatomic, assign) BOOL locked;
+@property (nonatomic, assign) BOOL lockActivatedBySheet;
+@property (nonatomic, weak) id lockOwnerOverlayVC;
 - (instancetype)initWithPlayerVC:(id)playerVC anchorView:(UIView *)anchorView;
+- (void)releaseSheetOwnedLockIfNeededWithReason:(NSString *)reason;
 @end
 
 // --- Helpers ---
@@ -180,6 +186,46 @@ static id YTAGPCOverlayVCFromAnchor(UIView *anchor) {
     return nil;
 }
 
+static id YTAGPCLockControllerFromOverlayVC(id overlayVC) {
+    if (![overlayVC respondsToSelector:@selector(lockModeStateEntityController)]) return nil;
+    @try {
+        return ((id (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeStateEntityController));
+    } @catch (id ex) {
+        YTAGLog(@"premium-ctrl", @"lock controller read threw: %@", ex);
+        return nil;
+    }
+}
+
+static BOOL YTAGPCLockControllerActive(id lockCtl, BOOL fallback) {
+    if (!lockCtl) return fallback;
+    @try {
+        if ([lockCtl respondsToSelector:@selector(isLockModeActive)]) {
+            return ((BOOL (*)(id, SEL))objc_msgSend)(lockCtl, @selector(isLockModeActive));
+        }
+        NSNumber *v = [lockCtl valueForKey:@"lockModeActive"];
+        if ([v respondsToSelector:@selector(boolValue)]) return v.boolValue;
+    } @catch (id ex) {
+        YTAGLog(@"premium-ctrl", @"lock state read threw: %@", ex);
+    }
+    return fallback;
+}
+
+static BOOL YTAGPCSetLockControllerActive(id lockCtl, BOOL active) {
+    if (![lockCtl respondsToSelector:@selector(setLockModeActive:)]) return NO;
+    @try {
+        ((void (*)(id, SEL, BOOL))objc_msgSend)(lockCtl, @selector(setLockModeActive:), active);
+        return YES;
+    } @catch (id ex) {
+        YTAGLog(@"premium-ctrl", @"lock state write threw: %@", ex);
+        return NO;
+    }
+}
+
+static void YTAGPCSetModalInPresentation(UIViewController *controller, BOOL modalInPresentation) {
+    if (![controller respondsToSelector:@selector(setModalInPresentation:)]) return;
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(controller, @selector(setModalInPresentation:), modalInPresentation);
+}
+
 static UIViewController *YTAGPCTopPresenter(void) {
     UIWindow *keyWindow = nil;
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
@@ -241,6 +287,11 @@ static UIViewController *YTAGPCTopPresenter(void) {
     } @catch (id ex) {}
 
     [self buildUI];
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    [super viewDidDisappear:animated];
+    [self releaseSheetOwnedLockIfNeededWithReason:@"viewDidDisappear"];
 }
 
 - (void)buildUI {
@@ -345,11 +396,12 @@ static UIViewController *YTAGPCTopPresenter(void) {
     UIButton *stableTile = YTAGPCMakeTile(@"waveform",      @"Stable volume", self, @selector(stableVolumeTapped));
     UIButton *downloadTile = YTAGPCMakeTile(@"arrow.down.to.line", @"Download", self, @selector(downloadTapped));
     UIButton *muteTile = YTAGPCMakeTile(@"speaker.wave.2", @"Mute", self, @selector(muteTapped));
-    UIButton *copyTile = YTAGPCMakeTile(@"link", @"Copy link", self, @selector(copyLinkTapped));
+    UIButton *liteTile = YTAGPCMakeTile(@"circle", @"Lite", self, @selector(liteModeTapped));
     UIButton *lockTile = YTAGPCMakeTile(@"lock.open", @"Lock", self, @selector(lockTapped));
     self.speedTile = speedTile;
     self.stableVolumeTile = stableTile;
     self.muteTile = muteTile;
+    self.liteTile = liteTile;
     self.lockTile = lockTile;
 
     @try {
@@ -361,17 +413,8 @@ static UIViewController *YTAGPCTopPresenter(void) {
         }
     } @catch (id ex) {}
     id overlayVC = YTAGPCOverlayVCFromAnchor(self.anchorView);
-    @try {
-        if ([overlayVC respondsToSelector:@selector(lockModeStateEntityController)]) {
-            id lc = ((id (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeStateEntityController));
-            if ([lc respondsToSelector:@selector(isLockModeActive)]) {
-                self.locked = ((BOOL (*)(id, SEL))objc_msgSend)(lc, @selector(isLockModeActive));
-            } else {
-                NSNumber *v = [lc valueForKey:@"lockModeActive"];
-                if ([v respondsToSelector:@selector(boolValue)]) self.locked = v.boolValue;
-            }
-        }
-    } @catch (id ex) {}
+    id lockCtl = YTAGPCLockControllerFromOverlayVC(overlayVC);
+    self.locked = YTAGPCLockControllerActive(lockCtl, NO);
     YTAGPCUpdateTile(self.muteTile,
                      self.muted ? @"speaker.slash" : @"speaker.wave.2",
                      self.muted ? @"Unmute" : @"Mute",
@@ -380,6 +423,7 @@ static UIViewController *YTAGPCTopPresenter(void) {
                      self.locked ? @"lock.fill" : @"lock.open",
                      self.locked ? @"Unlock" : @"Lock",
                      self.locked);
+    [self refreshLiteTile];
 
     UIStackView *tileRow1 = [[UIStackView alloc] initWithArrangedSubviews:@[downloadTile, speedTile, stableTile]];
     tileRow1.axis = UILayoutConstraintAxisHorizontal;
@@ -387,7 +431,7 @@ static UIViewController *YTAGPCTopPresenter(void) {
     tileRow1.alignment = UIStackViewAlignmentTop;
     tileRow1.spacing = 12.0;
 
-    UIStackView *tileRow2 = [[UIStackView alloc] initWithArrangedSubviews:@[muteTile, copyTile, lockTile]];
+    UIStackView *tileRow2 = [[UIStackView alloc] initWithArrangedSubviews:@[muteTile, liteTile, lockTile]];
     tileRow2.axis = UILayoutConstraintAxisHorizontal;
     tileRow2.distribution = UIStackViewDistributionFillEqually;
     tileRow2.alignment = UIStackViewAlignmentTop;
@@ -486,9 +530,18 @@ static UIViewController *YTAGPCTopPresenter(void) {
     }
 }
 
+- (void)refreshLiteTile {
+    BOOL enabled = YTAGLiteModeEnabled();
+    YTAGPCUpdateTile(self.liteTile,
+                     enabled ? @"circle.fill" : @"circle",
+                     enabled ? @"Lite on" : @"Lite",
+                     enabled);
+}
+
 // --- Handlers ---
 
 - (void)closeTapped {
+    [self releaseSheetOwnedLockIfNeededWithReason:@"close"];
     [self dismissViewControllerAnimated:YES completion:nil];
 }
 
@@ -605,6 +658,15 @@ static UIViewController *YTAGPCTopPresenter(void) {
     YTAGLog(@"premium-ctrl", @"mute -> %@", newMuted ? @"ON" : @"OFF");
 }
 
+- (void)liteModeTapped {
+    BOOL enabled = !YTAGLiteModeEnabled();
+    YTAGSetLiteModeEnabled(enabled);
+    ytag_clearThemeCache();
+    [self refreshLiteTile];
+    [self showHUD:enabled ? @"Lite Mode On" : @"Lite Mode Off"];
+    YTAGLog(@"premium-ctrl", @"lite mode -> %@", enabled ? @"ON" : @"OFF");
+}
+
 - (void)copyLinkTapped {
     NSString *videoID = nil;
     id pvc = self.playerVC;
@@ -622,30 +684,51 @@ static UIViewController *YTAGPCTopPresenter(void) {
 
 - (void)lockTapped {
     id overlayVC = YTAGPCOverlayVCFromAnchor(self.anchorView);
-    if (![overlayVC respondsToSelector:@selector(lockModeStateEntityController)]) {
-        [self showHUD:@"Lock is unavailable right now"];
-        return;
-    }
-    id lockCtl = ((id (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeStateEntityController));
+    id lockCtl = YTAGPCLockControllerFromOverlayVC(overlayVC);
     if (!lockCtl || ![lockCtl respondsToSelector:@selector(setLockModeActive:)]) {
         [self showHUD:@"Lock is unavailable right now"];
         return;
     }
 
-    BOOL newLocked = !self.locked;
+    BOOL currentlyLocked = YTAGPCLockControllerActive(lockCtl, self.locked);
+    BOOL newLocked = !currentlyLocked;
     if (newLocked && [overlayVC respondsToSelector:@selector(lockModeDidRequestShowFullscreen)]) {
         ((void (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeDidRequestShowFullscreen));
-        lockCtl = ((id (*)(id, SEL))objc_msgSend)(overlayVC, @selector(lockModeStateEntityController));
+        lockCtl = YTAGPCLockControllerFromOverlayVC(overlayVC);
     }
-    if ([lockCtl respondsToSelector:@selector(setLockModeActive:)]) {
-        ((void (*)(id, SEL, BOOL))objc_msgSend)(lockCtl, @selector(setLockModeActive:), newLocked);
+    if (!YTAGPCSetLockControllerActive(lockCtl, newLocked)) {
+        [self showHUD:@"Lock is unavailable right now"];
+        return;
     }
+
     self.locked = newLocked;
+    self.lockActivatedBySheet = newLocked;
+    self.lockOwnerOverlayVC = newLocked ? overlayVC : nil;
+    YTAGPCSetModalInPresentation(self, newLocked);
     YTAGPCUpdateTile(self.lockTile,
                      newLocked ? @"lock.fill" : @"lock.open",
                      newLocked ? @"Unlock" : @"Lock",
                      newLocked);
     YTAGLog(@"premium-ctrl", @"lock -> %@", newLocked ? @"ON" : @"OFF");
+}
+
+- (void)releaseSheetOwnedLockIfNeededWithReason:(NSString *)reason {
+    if (!self.lockActivatedBySheet) return;
+
+    id overlayVC = self.lockOwnerOverlayVC ?: YTAGPCOverlayVCFromAnchor(self.anchorView);
+    id lockCtl = YTAGPCLockControllerFromOverlayVC(overlayVC);
+    if (lockCtl) {
+        YTAGPCSetLockControllerActive(lockCtl, NO);
+        YTAGLog(@"premium-ctrl", @"lock auto-unlock reason=%@", reason ?: @"(nil)");
+    } else {
+        YTAGLog(@"premium-ctrl", @"lock auto-unlock skipped: controller unavailable reason=%@", reason ?: @"(nil)");
+    }
+
+    self.lockActivatedBySheet = NO;
+    self.lockOwnerOverlayVC = nil;
+    self.locked = NO;
+    YTAGPCSetModalInPresentation(self, NO);
+    YTAGPCUpdateTile(self.lockTile, @"lock.open", @"Lock", NO);
 }
 
 - (void)showHUD:(NSString *)message {

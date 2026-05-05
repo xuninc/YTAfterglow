@@ -3,6 +3,7 @@
 
 static NSString *const kSuiteName = @"afterglow.vault";
 static NSString *const kHUDEnabledKey = @"debugHUDEnabled";
+static NSString *const kLogEnabledKey = @"debugLogEnabled";
 
 @interface YTAGDebugHUDView : UIView
 @property (nonatomic, strong) UITextView *textView;
@@ -173,6 +174,7 @@ static NSString *const kHUDEnabledKey = @"debugHUDEnabled";
 + (void)applyPreferenceOnLaunch {
     NSUserDefaults *d = [[NSUserDefaults alloc] initWithSuiteName:kSuiteName];
     if ([d boolForKey:kHUDEnabledKey]) {
+        [d setBool:YES forKey:kLogEnabledKey];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [[YTAGDebugHUD sharedHUD] show];
         });

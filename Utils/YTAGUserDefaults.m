@@ -1,4 +1,5 @@
 #import "YTAGUserDefaults.h"
+#import "YTAGLiteMode.h"
 #import <UIKit/UIKit.h>
 
 @implementation YTAGUserDefaults
@@ -8,10 +9,13 @@ static NSString *const kActiveTabsKey = @"activeTabs";
 static NSString *const kStartupTabKey = @"startupTab";
 static NSString *const kThemeMigrationVersionKey = @"themePresetMigrationVersion";
 static NSString *const kSettingsMigrationVersionKey = @"settingsMigrationVersion";
+static NSString *const kPreferencesExportFormat = @"YTAfterglowPreferences";
+static NSString *const kPreferencesExportErrorDomain = @"YTAfterglowPreferencesError";
 static const NSUInteger kMinimumActiveTabsCount = 2;
 static const NSUInteger kMaximumActiveTabsCount = 6;
 static const NSInteger kCurrentThemeMigrationVersion = 2;
-static const NSInteger kCurrentSettingsMigrationVersion = 3;
+static const NSInteger kCurrentSettingsMigrationVersion = 4;
+static const NSInteger kPreferencesExportVersion = 1;
 
 static NSData *YTAGArchiveColor(UIColor *color) {
     return [NSKeyedArchiver archivedDataWithRootObject:color requiringSecureCoding:NO error:nil];
@@ -67,6 +71,49 @@ static BOOL YTAGHasStoredThemePreset(NSUserDefaults *defaults) {
         if ([defaults objectForKey:key] != nil) return YES;
     }
     return NO;
+}
+
+static NSError *YTAGPreferencesError(NSInteger code, NSString *message) {
+    return [NSError errorWithDomain:kPreferencesExportErrorDomain
+                               code:code
+                           userInfo:@{NSLocalizedDescriptionKey: message ?: @"Preference import/export failed."}];
+}
+
+static BOOL YTAGValueIsPropertyListSafe(id value) {
+    if (!value) return NO;
+    if ([value isKindOfClass:[NSString class]] ||
+        [value isKindOfClass:[NSNumber class]] ||
+        [value isKindOfClass:[NSData class]] ||
+        [value isKindOfClass:[NSDate class]]) {
+        return YES;
+    }
+
+    if ([value isKindOfClass:[NSArray class]]) {
+        for (id item in (NSArray *)value) {
+            if (!YTAGValueIsPropertyListSafe(item)) return NO;
+        }
+        return YES;
+    }
+
+    if ([value isKindOfClass:[NSDictionary class]]) {
+        for (id key in (NSDictionary *)value) {
+            if (![key isKindOfClass:[NSString class]]) return NO;
+            if (!YTAGValueIsPropertyListSafe([(NSDictionary *)value objectForKey:key])) return NO;
+        }
+        return YES;
+    }
+
+    return NO;
+}
+
+static NSDictionary *YTAGSanitizedPreferencesDictionary(NSDictionary *preferences) {
+    NSMutableDictionary *sanitized = [NSMutableDictionary dictionary];
+    for (id key in preferences) {
+        id value = preferences[key];
+        if (![key isKindOfClass:[NSString class]] || !YTAGValueIsPropertyListSafe(value)) continue;
+        sanitized[key] = value;
+    }
+    return [sanitized copy];
 }
 
 static void YTAGApplyAfterglow2ThemePreset(NSUserDefaults *defaults) {
@@ -173,6 +220,56 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
     [self registerDefaults];
 }
 
+- (NSData *)exportPreferencesDataWithError:(NSError **)error {
+    NSDictionary *domain = [self persistentDomainForName:kDefaultsSuiteName] ?: @{};
+    NSDictionary *payload = @{
+        @"format": kPreferencesExportFormat,
+        @"version": @(kPreferencesExportVersion),
+        @"exportedAt": @([[NSDate date] timeIntervalSince1970]),
+        @"preferences": YTAGSanitizedPreferencesDictionary(domain)
+    };
+
+    return [NSPropertyListSerialization dataWithPropertyList:payload
+                                                      format:NSPropertyListXMLFormat_v1_0
+                                                     options:0
+                                                       error:error];
+}
+
+- (BOOL)importPreferencesData:(NSData *)data error:(NSError **)error {
+    if (data.length == 0) {
+        if (error) *error = YTAGPreferencesError(1, @"The selected preferences file is empty.");
+        return NO;
+    }
+
+    NSPropertyListFormat format = NSPropertyListXMLFormat_v1_0;
+    id plist = [NSPropertyListSerialization propertyListWithData:data
+                                                         options:NSPropertyListImmutable
+                                                          format:&format
+                                                           error:error];
+    if (![plist isKindOfClass:[NSDictionary class]]) {
+        if (error && !*error) *error = YTAGPreferencesError(2, @"The selected file is not a preferences plist.");
+        return NO;
+    }
+
+    NSDictionary *root = (NSDictionary *)plist;
+    id preferences = root[@"preferences"];
+    if (!preferences && root[@"format"] == nil) preferences = root;
+
+    if (![preferences isKindOfClass:[NSDictionary class]]) {
+        if (error) *error = YTAGPreferencesError(3, @"The selected file does not contain YTAfterglow preferences.");
+        return NO;
+    }
+
+    NSDictionary *sanitized = YTAGSanitizedPreferencesDictionary((NSDictionary *)preferences);
+    [self removePersistentDomainForName:kDefaultsSuiteName];
+    [self setPersistentDomain:sanitized forName:kDefaultsSuiteName];
+    [self registerDefaults];
+    [self migrateThemePresetsIfNeeded];
+    [self migrateSettingsIfNeeded];
+    [self synchronize];
+    return YES;
+}
+
 - (void)registerDefaults {
     [self registerDefaults:@{
         @"noAds": @YES,
@@ -189,9 +286,17 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         @"theme_glowScrubber": @YES,
         @"theme_glowSeekBar": @NO,
         @"theme_glowStrength": @1,
+        @"theme_glowStrengthMode": @1,
+        @"theme_glowStrengthCustom": @50,
+        @"theme_glowOpacity": @100,
+        @"theme_glowRadius": @50,
+        @"theme_glowLayers": @1,
         @"autoplayMode": @0,
-        @"playerShareButtonMode": @0,
-        @"playerSaveButtonMode": @0,
+        @"noPlayerShareButton": @NO,
+        @"noPlayerSaveButton": @NO,
+        YTAGLiteModeEnabledKey: @NO,
+        YTAGLiteModeDefaultThemeAppliedKey: @NO,
+        YTAGLiteModeDefaultThemeVersionKey: @0,
         @"commentsHeaderMode": @0,
         @"muteButton": @YES,
         @"lockButton": @YES,
@@ -237,21 +342,24 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
     NSInteger recordedVersion = [self integerForKey:kSettingsMigrationVersionKey];
     if (recordedVersion >= kCurrentSettingsMigrationVersion) return;
 
-    if ([self objectForKey:@"playerShareButtonMode"] == nil) {
-        BOOL alwaysShow = [self boolForKey:@"showPlayerShareButton"];
-        BOOL alwaysHide = [self boolForKey:@"playerNoShare"];
-        NSInteger mode = alwaysHide ? 2 : (alwaysShow ? 1 : 0);
-        [self setInteger:mode forKey:@"playerShareButtonMode"];
+    NSDictionary *storedSettings = [self persistentDomainForName:kDefaultsSuiteName] ?: @{};
+    if (recordedVersion < 4 && storedSettings[@"noPlayerShareButton"] == nil) {
+        id mode = storedSettings[@"playerShareButtonMode"];
+        BOOL alwaysHide = [storedSettings[@"playerNoShare"] boolValue] ||
+                          ([mode respondsToSelector:@selector(integerValue)] && [mode integerValue] == 2);
+        [self setBool:alwaysHide forKey:@"noPlayerShareButton"];
     }
+    [self removeObjectForKey:@"playerShareButtonMode"];
     [self removeObjectForKey:@"showPlayerShareButton"];
     [self removeObjectForKey:@"playerNoShare"];
 
-    if ([self objectForKey:@"playerSaveButtonMode"] == nil) {
-        BOOL alwaysShow = [self boolForKey:@"showPlayerSaveButton"];
-        BOOL alwaysHide = [self boolForKey:@"playerNoSave"];
-        NSInteger mode = alwaysHide ? 2 : (alwaysShow ? 1 : 0);
-        [self setInteger:mode forKey:@"playerSaveButtonMode"];
+    if (recordedVersion < 4 && storedSettings[@"noPlayerSaveButton"] == nil) {
+        id mode = storedSettings[@"playerSaveButtonMode"];
+        BOOL alwaysHide = [storedSettings[@"playerNoSave"] boolValue] ||
+                          ([mode respondsToSelector:@selector(integerValue)] && [mode integerValue] == 2);
+        [self setBool:alwaysHide forKey:@"noPlayerSaveButton"];
     }
+    [self removeObjectForKey:@"playerSaveButtonMode"];
     [self removeObjectForKey:@"showPlayerSaveButton"];
     [self removeObjectForKey:@"playerNoSave"];
 

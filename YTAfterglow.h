@@ -3,6 +3,7 @@
 #import <Photos/Photos.h>
 #import "Utils/NSBundle+YTAfterglow.h"
 #import "Utils/YTAGUserDefaults.h"
+#import "Utils/YTAGLiteMode.h"
 #import "Utils/YTAGLog.h"
 #import "Utils/YTAGDebugHUD.h"
 #import "Utils/Reachability.h"
@@ -10,7 +11,7 @@
 
 #define LOC(key) [NSBundle.ytag_defaultBundle localizedStringForKey:key value:nil table:nil]
 
-#define ytagBool(key) [[YTAGUserDefaults standardUserDefaults] boolForKey:key]
+#define ytagBool(key) YTAGEffectiveBool(key)
 #define ytagInt(key) [[YTAGUserDefaults standardUserDefaults] integerForKey:key]
 
 // Exposed from ColorMode.x so SeekBar.x (and future files) can read theme colors
