@@ -242,6 +242,14 @@ static UIViewController *ytag_topPresenterForView(UIView *sourceView) {
     return presenter.navigationController.topViewController ?: presenter;
 }
 
+static id ytag_parentResponderForSettingsOpen(UIView *sourceView, UIViewController *presenter) {
+    UIViewController *sourceController = ytag_viewControllerForResponder(sourceView);
+    if (sourceController) {
+        return sourceController.navigationController.topViewController ?: sourceController;
+    }
+    return presenter.navigationController.topViewController ?: presenter;
+}
+
 static void ytag_reloadSettingsController(UIViewController *controller) {
     if (!controller || ![controller respondsToSelector:@selector(reloadData)]) return;
 #pragma clang diagnostic push
@@ -335,45 +343,50 @@ void YTAGOpenAfterglowSettingsFromView(UIView *sourceView) {
             return;
         }
 
-        Class settingsClass = objc_lookUpClass("YTSettingsViewController");
-        if (!settingsClass) {
-            ytag_showToast(@"Afterglow settings unavailable", sourceView ?: presenter);
-            return;
-        }
-
-        id parentResponder = sourceView ?: presenter;
-        id settingsObject = nil;
-        SEL initWithAccount = @selector(initWithAccountID:parentResponder:);
-        SEL initWithParent = @selector(initWithParentResponder:);
-        if ([settingsClass instancesRespondToSelector:initWithAccount]) {
-            settingsObject = ((id (*)(id, SEL, id, id))objc_msgSend)([settingsClass alloc], initWithAccount, nil, parentResponder);
-        } else if ([settingsClass instancesRespondToSelector:initWithParent]) {
-            settingsObject = ((id (*)(id, SEL, id))objc_msgSend)([settingsClass alloc], initWithParent, parentResponder);
-        } else {
-            settingsObject = [[settingsClass alloc] init];
-        }
-
-        if (![settingsObject isKindOfClass:[UIViewController class]]) {
-            ytag_showToast(@"Afterglow settings unavailable", parentResponder);
-            return;
-        }
-
-        UIViewController *settingsVC = (UIViewController *)settingsObject;
-        settingsVC.title = @"YouTube Afterglow";
+        id parentResponder = ytag_parentResponderForSettingsOpen(sourceView, presenter);
         @try {
-            [settingsObject setValue:@(YTAfterglowSection) forKey:@"_categoryToScrollTo"];
-        } @catch (NSException *exception) {}
+            Class settingsClass = objc_lookUpClass("YTSettingsViewController");
+            if (!settingsClass) {
+                ytag_showToast(@"Afterglow settings unavailable", parentResponder ?: presenter);
+                return;
+            }
 
-        [settingsVC loadViewIfNeeded];
-        SEL updateSection = @selector(updateSectionForCategory:withEntry:);
-        if ([settingsObject respondsToSelector:updateSection]) {
-            ((void (*)(id, SEL, NSUInteger, id))objc_msgSend)(settingsObject, updateSection, (NSUInteger)YTAfterglowSection, nil);
+            id settingsObject = nil;
+            SEL initWithAccount = @selector(initWithAccountID:parentResponder:);
+            SEL initWithParent = @selector(initWithParentResponder:);
+            if ([settingsClass instancesRespondToSelector:initWithAccount]) {
+                settingsObject = ((id (*)(id, SEL, id, id))objc_msgSend)([settingsClass alloc], initWithAccount, nil, parentResponder);
+            } else if ([settingsClass instancesRespondToSelector:initWithParent]) {
+                settingsObject = ((id (*)(id, SEL, id))objc_msgSend)([settingsClass alloc], initWithParent, parentResponder);
+            } else {
+                settingsObject = [[settingsClass alloc] init];
+            }
+
+            if (![settingsObject isKindOfClass:[UIViewController class]]) {
+                ytag_showToast(@"Afterglow settings unavailable", parentResponder);
+                return;
+            }
+
+            UIViewController *settingsVC = (UIViewController *)settingsObject;
+            settingsVC.title = @"YouTube Afterglow";
+            @try {
+                [settingsObject setValue:@(YTAfterglowSection) forKey:@"_categoryToScrollTo"];
+            } @catch (NSException *exception) {}
+
+            [settingsVC loadViewIfNeeded];
+            SEL updateSection = @selector(updateSectionForCategory:withEntry:);
+            if ([settingsObject respondsToSelector:updateSection]) {
+                ((void (*)(id, SEL, NSUInteger, id))objc_msgSend)(settingsObject, updateSection, (NSUInteger)YTAfterglowSection, nil);
+            }
+            ytag_reloadSettingsController(settingsVC);
+
+            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:settingsVC];
+            nav.modalPresentationStyle = UIModalPresentationFullScreen;
+            [presenter presentViewController:nav animated:YES completion:nil];
+        } @catch (NSException *exception) {
+            YTAGLog(@"overlay", @"Afterglow Settings open failed: %@ %@", exception.name ?: @"<unknown>", exception.reason ?: @"<none>");
+            ytag_showToast(@"Afterglow settings unavailable", parentResponder ?: presenter ?: sourceView);
         }
-        ytag_reloadSettingsController(settingsVC);
-
-        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:settingsVC];
-        nav.modalPresentationStyle = UIModalPresentationFullScreen;
-        [presenter presentViewController:nav animated:YES completion:nil];
     });
 }
 

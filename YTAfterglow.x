@@ -1479,8 +1479,11 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
 
 static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
     if (!YTAGLiteModeEnabled() || !cell) return;
-    YTAGLiteModeApplyViewCleanup(cell);
-    if (YTAGLiteModeShouldStyleCommentView(cell)) {
+    BOOL isCommentSurface = YTAGLiteModeShouldStyleCommentView(cell);
+    if (!isCommentSurface) {
+        YTAGLiteModeApplyViewCleanup(cell);
+    }
+    if (isCommentSurface) {
         YTAGLiteModeApplyCommentChrome(cell);
     }
 }

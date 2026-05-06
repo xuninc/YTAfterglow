@@ -15,8 +15,28 @@ require_pattern() {
   fi
 }
 
+reject_pattern() {
+  local file="$1"
+  local pattern="$2"
+  local message="$3"
+
+  if rg -q "$pattern" "$ROOT/$file"; then
+    printf 'FAIL: %s\n' "$message" >&2
+    printf '  rejected %s in %s\n' "$pattern" "$file" >&2
+    exit 1
+  fi
+}
+
 require_pattern "Settings.x" "void YTAGOpenAfterglowSettingsFromView\\(UIView \\*sourceView\\)" \
   "Settings.x must export a direct Afterglow settings opener."
+require_pattern "Settings.x" "ytag_parentResponderForSettingsOpen\\(UIView \\*sourceView, UIViewController \\*presenter\\)" \
+  "Direct settings opener must derive a controller responder instead of passing the overlay button."
+require_pattern "Settings.x" "ytag_parentResponderForSettingsOpen\\(sourceView, presenter\\)" \
+  "Direct settings opener must use the derived settings parent responder."
+require_pattern "Settings.x" "Afterglow Settings open failed" \
+  "Direct settings opener must log exceptions instead of silently crashing."
+reject_pattern "Settings.x" "id parentResponder = sourceView \\?: presenter;" \
+  "Direct settings opener must not pass the tapped overlay button as YouTube's parentResponder."
 require_pattern "YTAGDownload.x" "extern void YTAGOpenAfterglowSettingsFromView\\(UIView \\*sourceView\\)" \
   "Overlay code must link to the direct settings opener."
 require_pattern "YTAGDownload.x" "handleSettingsTap:" \

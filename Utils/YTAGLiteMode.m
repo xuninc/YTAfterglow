@@ -226,6 +226,10 @@ static BOOL YTAGLiteShouldHideSubview(UIView *view) {
     NSString *signature = YTAGLiteViewSignature(view);
     if (signature.length == 0) return NO;
     if (YTAGLiteSignatureContainsAny(signature, @[@"search", @"download", @"pip", @"caption", @"quality", @"fullscreen"])) return NO;
+    if (YTAGLiteSignatureContainsAny(signature, @[
+        @"commententrypoint", @"commentsentrypoint", @"commentsection", @"commentssection",
+        @"viewcomments", @"showcomments", @"opencomments"
+    ])) return NO;
     return YTAGLiteSignatureContainsAny(signature, @[
         @"like", @"dislike", @"share", @"save", @"remix", @"clip",
         @"badge", @"menu", @"more", @"overflow",
@@ -249,7 +253,11 @@ void YTAGLiteModeApplyViewCleanup(UIView *root) {
 }
 
 static BOOL YTAGLiteCommentShouldKeepControl(NSString *signature) {
-    return YTAGLiteSignatureContainsAny(signature, @[@"reply", @"send", @"composer", @"commentbox", @"textfield", @"textview"]);
+    return YTAGLiteSignatureContainsAny(signature, @[
+        @"reply", @"send", @"composer", @"commentbox", @"textfield", @"textview",
+        @"commententrypoint", @"commentsentrypoint", @"commentsection", @"commentssection",
+        @"viewcomments", @"showcomments", @"opencomments"
+    ]);
 }
 
 void YTAGLiteModeApplyCommentChrome(UIView *root) {
@@ -269,10 +277,17 @@ void YTAGLiteModeApplyCommentChrome(UIView *root) {
             label.numberOfLines = 0;
         }
 
+        BOOL keepControl = YTAGLiteCommentShouldKeepControl(signature);
+        if (keepControl) {
+            subview.hidden = NO;
+            subview.alpha = 1.0;
+            subview.userInteractionEnabled = YES;
+        }
+
         BOOL hide = YTAGLiteSignatureContainsAny(signature, @[
             @"avatar", @"like", @"dislike", @"heart", @"vote", @"badge", @"sponsor",
             @"thanks", @"guideline", @"sort", @"chip", @"menu", @"more", @"overflow"
-        ]) && !YTAGLiteCommentShouldKeepControl(signature);
+        ]) && !keepControl;
 
         if (hide) {
             subview.hidden = YES;

@@ -25,6 +25,14 @@ require 'YTAGLiteModeApplyViewCleanup' 'YTAfterglow.x' 'main tweak must apply Li
 require 'YTAGLiteModeApplyCommentChrome' 'YTAfterglow.x' 'main tweak must apply Lite comment cleanup'
 require 'LiteMode' 'layout/Library/Application Support/YTAfterglow.bundle/en.lproj/Localizable.strings' 'Lite Mode strings must be localized'
 require '#define ytagBool\(key\) YTAGEffectiveBool\(key\)' 'YTAfterglow.h' 'ytagBool must route through effective helper'
+for marker in commententrypoint commentsentrypoint viewcomments showcomments opencomments; do
+  require "$marker" 'Utils/YTAGLiteMode.m' "Lite comment cleanup must preserve $marker controls"
+done
+
+if ! perl -0ne 'exit(/BOOL isCommentSurface = YTAGLiteModeShouldStyleCommentView\(cell\);\s*if \(!isCommentSurface\) \{\s*YTAGLiteModeApplyViewCleanup\(cell\);\s*\}\s*if \(isCommentSurface\) \{\s*YTAGLiteModeApplyCommentChrome\(cell\);/ ? 0 : 1)' "$ROOT/YTAfterglow.x"; then
+  echo "FAIL: Lite comment cells must skip generic cleanup before comment-specific styling" >&2
+  exit 1
+fi
 
 if rg -q '@"metadata"|@"viewcount"' "$ROOT/Utils/YTAGLiteMode.m"; then
   echo "FAIL: Lite cleanup must not hide video metadata containers or view-count text under videos" >&2
