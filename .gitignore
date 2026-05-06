@@ -5,6 +5,7 @@ packages/
 
 # Internal docs — not for public repo
 docs/
+.superpowers/
 
 # Third-party xcframeworks (see Frameworks/README.md for drop-in instructions)
 Frameworks/*.xcframework/
