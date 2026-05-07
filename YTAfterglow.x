@@ -447,6 +447,9 @@ static BOOL canRememberLoopMode = NO;
     if (self.hasCompatibilityOptions && self.compatibilityOptions.hasAdLoggingData && ytagBool(@"noAds")) return nil;
 
     NSString *description = [self description];
+    if (YTAGLiteModeShouldPruneFeedObject(self) || YTAGLiteModeShouldPruneFeedObject(description)) {
+        return nil;
+    }
 
     NSArray *ads = @[@"brand_promo", @"product_carousel", @"product_engagement_panel", @"product_item", @"text_search_ad", @"text_image_button_layout", @"carousel_headered_layout", @"carousel_footered_layout", @"square_image_layout", @"landscape_image_wide_button_layout", @"feed_ad_metadata"];
     if (ytagBool(@"noAds") && [ads containsObject:description]) {
@@ -466,12 +469,13 @@ static BOOL canRememberLoopMode = NO;
 
 %hook YTSectionListViewController
 - (void)loadWithModel:(YTISectionListRenderer *)model {
-    if (ytagBool(@"noAds")) {
+    if (ytagBool(@"noAds") || YTAGLiteModeEnabled()) {
         NSMutableArray <YTISectionListSupportedRenderers *> *contentsArray = model.contentsArray;
         NSIndexSet *removeIndexes = [contentsArray indexesOfObjectsPassingTest:^BOOL(YTISectionListSupportedRenderers *renderers, NSUInteger idx, BOOL *stop) {
             YTIItemSectionRenderer *sectionRenderer = renderers.itemSectionRenderer;
             YTIItemSectionSupportedRenderers *firstObject = [sectionRenderer.contentsArray firstObject];
-            return firstObject.hasPromotedVideoRenderer || firstObject.hasCompactPromotedVideoRenderer || firstObject.hasPromotedVideoInlineMutedRenderer;
+            BOOL promoted = firstObject.hasPromotedVideoRenderer || firstObject.hasCompactPromotedVideoRenderer || firstObject.hasPromotedVideoInlineMutedRenderer;
+            return promoted || YTAGLiteModeShouldPruneFeedObject(renderers) || YTAGLiteModeShouldPruneFeedObject(sectionRenderer) || YTAGLiteModeShouldPruneFeedObject(firstObject);
         }];
         [contentsArray removeObjectsAtIndexes:removeIndexes];
     } %orig;
@@ -1473,6 +1477,15 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
         }
     }
 
+    if (YTAGLiteModeShouldCleanCollectionView(self)) {
+        ASCellNode *node = [element node];
+        if (YTAGLiteModeShouldPruneFeedObject(element) ||
+            YTAGLiteModeShouldPruneFeedObject(node) ||
+            YTAGLiteModeShouldPruneFeedObject([node controller])) {
+            return CGSizeZero;
+        }
+    }
+
     return %orig;
 }
 %end
@@ -1501,6 +1514,10 @@ static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
                 (([idToRemove isEqualToString:@"eml.shorts-grid"] || [idToRemove isEqualToString:@"eml.shorts-shelf"]) && ytagBool(@"hideShorts"))) {
                 [self removeCellsAtIndexPath:indexPath];
             }
+
+            if (YTAGLiteModeShouldPruneFeedObject([asCell node])) {
+                [self removeCellsAtIndexPath:indexPath];
+            }
         }
     }
 
@@ -1511,7 +1528,7 @@ static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
     }
 
     if (YTAGLiteModeShouldCleanCollectionView(self)) {
-        if (YTAGLiteModeShouldRemoveFeedView(cell)) {
+        if (YTAGLiteModeShouldRemoveFeedView(cell) || YTAGLiteModeShouldPruneFeedObject(cell)) {
             [self removeCellsAtIndexPath:indexPath];
         } else {
             ytagLiteModeCleanupCollectionCell(cell);
@@ -2137,7 +2154,7 @@ static NSArray *ytagDefaultTabs() {
 %hook YTPivotBarView
 - (void)setRenderer:(YTIPivotBarRenderer *)renderer {
     NSMutableArray <YTIPivotBarSupportedRenderers *> *items = [renderer itemsArray];
-    NSArray *activeTabs = [[YTAGUserDefaults standardUserDefaults] currentActiveTabs];
+    NSArray *activeTabs = YTAGLiteModeEnabled() ? YTAGLiteModeActiveTabs() : [[YTAGUserDefaults standardUserDefaults] currentActiveTabs];
     if (!activeTabs) activeTabs = ytagDefaultTabs();
 
     // Remove tabs not in activeTabs
@@ -2231,7 +2248,7 @@ BOOL isTabSelected = NO;
     %orig;
 
     if (!isTabSelected && !ytagBool(@"shortsOnlyMode")) {
-        NSString *startupTab = [[YTAGUserDefaults standardUserDefaults] currentStartupTab];
+        NSString *startupTab = YTAGLiteModeEnabled() ? YTAGLiteModeStartupTab() : [[YTAGUserDefaults standardUserDefaults] currentStartupTab];
         [self selectItemWithPivotIdentifier:startupTab];
         isTabSelected = YES;
     }

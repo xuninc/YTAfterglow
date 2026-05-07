@@ -56,7 +56,9 @@ static NSSet<NSString *> *YTAGLiteForcedFalseKeys(void) {
     static NSSet<NSString *> *keys = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        keys = [NSSet setWithArray:@[@"noSearchButton"]];
+        keys = [NSSet setWithArray:@[
+            @"noSearchButton", @"shortsOnlyMode", @"noPlayerDownloadButton", @"removeDownloadMenu"
+        ]];
     });
     return keys;
 }
@@ -122,6 +124,29 @@ void YTAGSetLiteModeEnabled(BOOL enabled) {
     [defaults synchronize];
 }
 
+NSArray<NSString *> *YTAGLiteModeActiveTabs(void) {
+    return @[@"FEwhat_to_watch", @"FEsubscriptions", @"FElibrary"];
+}
+
+NSString *YTAGLiteModeStartupTab(void) {
+    return @"FEwhat_to_watch";
+}
+
+UIFont *YTAGLiteModeFont(CGFloat size, UIFontWeight weight) {
+    CGFloat pointSize = MAX(9.0, size);
+    UIFont *font = [UIFont fontWithName:@"CourierNewPSMT" size:pointSize];
+    if (!font) font = [UIFont fontWithName:@"Courier" size:pointSize];
+    if (!font) font = [UIFont monospacedSystemFontOfSize:pointSize weight:weight];
+    return font;
+}
+
+void YTAGLiteModeStyleLabel(UILabel *label) {
+    if (!label) return;
+    CGFloat pointSize = label.font.pointSize > 0 ? label.font.pointSize : 13.0;
+    label.font = YTAGLiteModeFont(MAX(10.0, MIN(pointSize, 15.0)), UIFontWeightRegular);
+    label.numberOfLines = 0;
+}
+
 static NSString *YTAGLiteNormalizedString(NSString *string) {
     if (string.length == 0) return @"";
     NSMutableString *normalized = [NSMutableString stringWithCapacity:string.length];
@@ -164,10 +189,61 @@ static BOOL YTAGLiteSignatureContainsAny(NSString *signature, NSArray<NSString *
     return NO;
 }
 
+static NSString *YTAGLiteObjectSignature(id object) {
+    if (!object) return @"";
+    NSMutableArray<NSString *> *parts = [NSMutableArray arrayWithObject:NSStringFromClass([object class])];
+    NSString *description = [object description];
+    if (description.length > 0) [parts addObject:description];
+
+    NSArray<NSString *> *keys = @[
+        @"accessibilityIdentifier", @"_accessibilityIdentifier", @"accessibilityLabel",
+        @"accessibilityValue", @"title", @"text", @"name", @"identifier",
+        @"rendererIdentifier", @"pivotIdentifier", @"targetId", @"browseId"
+    ];
+    for (NSString *key in keys) {
+        @try {
+            id value = [object valueForKey:key];
+            if ([value isKindOfClass:[NSString class]] && [(NSString *)value length] > 0) {
+                [parts addObject:value];
+            } else if ([value respondsToSelector:@selector(description)]) {
+                NSString *valueDescription = [value description];
+                if (valueDescription.length > 0 && valueDescription.length < 300) [parts addObject:valueDescription];
+            }
+        } @catch (__unused id ex) {}
+    }
+
+    return YTAGLiteNormalizedString([parts componentsJoinedByString:@" "]);
+}
+
+BOOL YTAGLiteModeShouldPruneFeedObject(id object) {
+    if (!YTAGLiteModeEnabled() || !object) return NO;
+    NSString *signature = YTAGLiteObjectSignature(object);
+    if (signature.length == 0) return NO;
+
+    if (YTAGLiteSignatureContainsAny(signature, @[
+        @"settings", @"setting", @"accountmenu", @"accountswitcher", @"signin", @"login",
+        @"toast", @"alert", @"dialog", @"comment", @"comments", @"reply", @"composer",
+        @"search", @"download", @"pip", @"caption", @"quality", @"fullscreen"
+    ])) {
+        return NO;
+    }
+
+    return YTAGLiteSignatureContainsAny(signature, @[
+        @"shorts", @"reel", @"emlshortsgrid", @"emlshortsshelf", @"shortsshelf",
+        @"promoted", @"promotion", @"sponsor", @"sponsored", @"commerce", @"shopping",
+        @"product", @"merch", @"brandpromo", @"feedad", @"adrenderer", @"adslot",
+        @"community", @"backstage", @"post", @"poll", @"story",
+        @"breakingnews", @"news", @"trending", @"hype",
+        @"mixplaylist", @"mix", @"radio", @"playlistmix",
+        @"chipcloud", @"filterchip", @"chipbar", @"filterbar",
+        @"carousel", @"shelf", @"richshelf", @"horizontal", @"sparkles"
+    ]);
+}
+
 BOOL YTAGLiteModeShouldRemoveFeedView(UIView *view) {
     if (!YTAGLiteModeEnabled() || !view) return NO;
     NSString *signature = YTAGLiteViewSignature(view);
-    return YTAGLiteSignatureContainsAny(signature, @[
+    return YTAGLiteModeShouldPruneFeedObject(view) || YTAGLiteSignatureContainsAny(signature, @[
         @"shorts", @"reel", @"promoted", @"sparkles", @"adrenderer", @"advert",
         @"post", @"backstage", @"community", @"poll", @"story",
         @"carousel", @"shelf", @"chipcloud", @"filterchip", @"product", @"shopping",
@@ -271,10 +347,8 @@ void YTAGLiteModeApplyCommentChrome(UIView *root) {
 
         if ([subview isKindOfClass:[UILabel class]]) {
             UILabel *label = (UILabel *)subview;
-            CGFloat size = MAX(11.0, MIN(label.font.pointSize, 14.0));
-            label.font = [UIFont monospacedSystemFontOfSize:size weight:UIFontWeightRegular];
+            YTAGLiteModeStyleLabel(label);
             label.textColor = label.textColor ?: [UIColor labelColor];
-            label.numberOfLines = 0;
         }
 
         BOOL keepControl = YTAGLiteCommentShouldKeepControl(signature);

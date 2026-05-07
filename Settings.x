@@ -287,6 +287,25 @@ static void ytag_presentThemeRefreshAlert(UIViewController *presenter, NSString 
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
+static void ytag_presentLiteModeRestartAlert(YTSettingsCell *cell, BOOL enabled) {
+    UIViewController *presenter = ytag_presenterForSettingsCell(cell, nil);
+    if (!presenter) {
+        ytag_showToast(@"Lite Mode needs a restart", cell);
+        return;
+    }
+
+    NSString *title = enabled ? @"Lite Mode Enabled" : @"Lite Mode Disabled";
+    NSString *message = @"Lite Mode needs a restart before the startup debloat profile fully applies.";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+        message:message
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Restart Now" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+        exit(0);
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Later" style:UIAlertActionStyleCancel handler:nil]];
+    [presenter presentViewController:alert animated:YES completion:nil];
+}
+
 static UIViewController *ytag_presenterForSettingsCell(YTSettingsCell *cell, UIViewController *fallback) {
     UIViewController *presenter = fallback ?: ytag_viewControllerForResponder(cell);
     presenter = presenter.navigationController.topViewController ?: presenter;
@@ -967,9 +986,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         if ([key isEqualToString:YTAGLiteModeEnabledKey]) {
             YTAGSetLiteModeEnabled(enabled);
             ytag_clearThemeCache();
-            [[[%c(YTHeaderContentComboViewController) alloc] init] refreshPivotBar];
             ytag_refreshSettingsFromCell(cell);
-            ytag_showToast(LOC(enabled ? @"LiteModeEnabledToast" : @"LiteModeDisabledToast"), [self parentResponder]);
+            ytag_presentLiteModeRestartAlert(cell, enabled);
         } else if ([key isEqualToString:@"shortsOnlyMode"]) {
             YTAlertView *alertView = [YTAlertViewClass confirmationDialogWithAction:^{
                 ytagSetBool(enabled, @"shortsOnlyMode");
