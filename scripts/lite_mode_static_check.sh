@@ -41,9 +41,31 @@ require '#define ytagBool\(key\) YTAGEffectiveBool\(key\)' 'YTAfterglow.h' 'ytag
 for marker in commententrypoint commentsentrypoint viewcomments showcomments opencomments; do
   require "$marker" 'Utils/YTAGLiteMode.m' "Lite comment cleanup must preserve $marker controls"
 done
-for marker in community shopping breakingnews mixplaylist radio chipcloud filterchip promoted sponsor commerce reel shelf carousel; do
+for marker in community shopping breakingnews mixplaylist radio chipcloud filterchip promoted sponsor commerce reel shortsshelf richshelf suggestedvideo watchnext; do
   require "$marker" 'Utils/YTAGLiteMode.m' "Lite feed pruning must include $marker surfaces"
 done
+
+for broad_marker in '@"post"' '@"news"' '@"mix"' '@"shelf"' '@"horizontal"' '@"carousel"' '@"sparkles"'; do
+  if rg -q "$broad_marker" "$ROOT/Utils/YTAGLiteMode.m"; then
+    echo "FAIL: Lite feed pruning must not use broad marker $broad_marker because it can remove normal video/comment internals" >&2
+    exit 1
+  fi
+done
+
+if perl -0ne 'exit(/%hook ASCollectionView.*YTAGLiteModeShouldPruneFeedObject.*CGSizeZero/s ? 0 : 1)' "$ROOT/YTAfterglow.x"; then
+  echo "FAIL: Lite Mode must not hide already-created ASCollectionView items with CGSizeZero; prune upstream before layout" >&2
+  exit 1
+fi
+
+if perl -0ne 'exit(/cellForItemAtIndexPath:.*YTAGLiteModeShouldPruneFeedObject.*removeCellsAtIndexPath/s ? 0 : 1)' "$ROOT/YTAfterglow.x"; then
+  echo "FAIL: Lite Mode must not delete cells from cellForItemAtIndexPath; prune upstream before cells exist" >&2
+  exit 1
+fi
+
+if perl -0ne 'exit(/%hook YTIElementRenderer(?:(?!%end).)*YTAGLiteModeShouldPruneFeedObject/s ? 0 : 1)' "$ROOT/YTAfterglow.x"; then
+  echo "FAIL: Lite Mode must not nil low-level YTIElementRenderer data; prune whole feed sections instead" >&2
+  exit 1
+fi
 
 if ! perl -0ne 'exit(/BOOL isCommentSurface = YTAGLiteModeShouldStyleCommentView\(cell\);\s*if \(!isCommentSurface\) \{\s*YTAGLiteModeApplyViewCleanup\(cell\);\s*\}\s*if \(isCommentSurface\) \{\s*YTAGLiteModeApplyCommentChrome\(cell\);/ ? 0 : 1)' "$ROOT/YTAfterglow.x"; then
   echo "FAIL: Lite comment cells must skip generic cleanup before comment-specific styling" >&2

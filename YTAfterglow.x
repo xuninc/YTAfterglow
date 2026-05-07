@@ -447,10 +447,6 @@ static BOOL canRememberLoopMode = NO;
     if (self.hasCompatibilityOptions && self.compatibilityOptions.hasAdLoggingData && ytagBool(@"noAds")) return nil;
 
     NSString *description = [self description];
-    if (YTAGLiteModeShouldPruneFeedObject(self) || YTAGLiteModeShouldPruneFeedObject(description)) {
-        return nil;
-    }
-
     NSArray *ads = @[@"brand_promo", @"product_carousel", @"product_engagement_panel", @"product_item", @"text_search_ad", @"text_image_button_layout", @"carousel_headered_layout", @"carousel_footered_layout", @"square_image_layout", @"landscape_image_wide_button_layout", @"feed_ad_metadata"];
     if (ytagBool(@"noAds") && [ads containsObject:description]) {
         return [NSData data];
@@ -1477,15 +1473,6 @@ static BOOL ytagCellLooksLikeContinueWatching(UICollectionViewCell *cell) {
         }
     }
 
-    if (YTAGLiteModeShouldCleanCollectionView(self)) {
-        ASCellNode *node = [element node];
-        if (YTAGLiteModeShouldPruneFeedObject(element) ||
-            YTAGLiteModeShouldPruneFeedObject(node) ||
-            YTAGLiteModeShouldPruneFeedObject([node controller])) {
-            return CGSizeZero;
-        }
-    }
-
     return %orig;
 }
 %end
@@ -1515,9 +1502,6 @@ static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
                 [self removeCellsAtIndexPath:indexPath];
             }
 
-            if (YTAGLiteModeShouldPruneFeedObject([asCell node])) {
-                [self removeCellsAtIndexPath:indexPath];
-            }
         }
     }
 
@@ -1528,11 +1512,7 @@ static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
     }
 
     if (YTAGLiteModeShouldCleanCollectionView(self)) {
-        if (YTAGLiteModeShouldRemoveFeedView(cell) || YTAGLiteModeShouldPruneFeedObject(cell)) {
-            [self removeCellsAtIndexPath:indexPath];
-        } else {
-            ytagLiteModeCleanupCollectionCell(cell);
-        }
+        ytagLiteModeCleanupCollectionCell(cell);
     }
     return cell;
 }

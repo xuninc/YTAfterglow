@@ -223,6 +223,8 @@ BOOL YTAGLiteModeShouldPruneFeedObject(id object) {
     if (YTAGLiteSignatureContainsAny(signature, @[
         @"settings", @"setting", @"accountmenu", @"accountswitcher", @"signin", @"login",
         @"toast", @"alert", @"dialog", @"comment", @"comments", @"reply", @"composer",
+        @"commententrypoint", @"commentsentrypoint", @"commentsection", @"commentssection",
+        @"viewcomments", @"showcomments", @"opencomments", @"engagementpanelcomment",
         @"search", @"download", @"pip", @"caption", @"quality", @"fullscreen"
     ])) {
         return NO;
@@ -230,13 +232,15 @@ BOOL YTAGLiteModeShouldPruneFeedObject(id object) {
 
     return YTAGLiteSignatureContainsAny(signature, @[
         @"shorts", @"reel", @"emlshortsgrid", @"emlshortsshelf", @"shortsshelf",
-        @"promoted", @"promotion", @"sponsor", @"sponsored", @"commerce", @"shopping",
-        @"product", @"merch", @"brandpromo", @"feedad", @"adrenderer", @"adslot",
-        @"community", @"backstage", @"post", @"poll", @"story",
-        @"breakingnews", @"news", @"trending", @"hype",
-        @"mixplaylist", @"mix", @"radio", @"playlistmix",
+        @"promoted", @"promotion", @"sponsor", @"sponsored", @"commerce", @"shoppingrenderer",
+        @"shoppingpanel", @"productcarousel", @"productengagementpanel", @"productitem",
+        @"merch", @"brandpromo", @"feedad", @"adrenderer", @"adslot",
+        @"community", @"backstage", @"backstagepost", @"postrenderer", @"pollrenderer", @"storyrenderer",
+        @"breakingnews", @"breakingnewsshelf", @"newsshelf", @"trendingrenderer", @"hype",
+        @"suggestedvideo", @"watchnext", @"upnext", @"autoplayrenderer", @"relatedvideo",
+        @"mixplaylist", @"radio", @"playlistmix",
         @"chipcloud", @"filterchip", @"chipbar", @"filterbar",
-        @"carousel", @"shelf", @"richshelf", @"horizontal", @"sparkles"
+        @"shortsshelf", @"richshelf", @"horizontalcardlist"
     ]);
 }
 
@@ -244,10 +248,10 @@ BOOL YTAGLiteModeShouldRemoveFeedView(UIView *view) {
     if (!YTAGLiteModeEnabled() || !view) return NO;
     NSString *signature = YTAGLiteViewSignature(view);
     return YTAGLiteModeShouldPruneFeedObject(view) || YTAGLiteSignatureContainsAny(signature, @[
-        @"shorts", @"reel", @"promoted", @"sparkles", @"adrenderer", @"advert",
-        @"post", @"backstage", @"community", @"poll", @"story",
-        @"carousel", @"shelf", @"chipcloud", @"filterchip", @"product", @"shopping",
-        @"breakingnews", @"trending", @"mixplaylist", @"radio"
+        @"shorts", @"reel", @"promoted", @"adrenderer", @"advert",
+        @"backstagepost", @"postrenderer", @"community", @"pollrenderer", @"storyrenderer",
+        @"chipcloud", @"filterchip", @"productcarousel", @"shoppingrenderer",
+        @"breakingnews", @"trendingrenderer", @"mixplaylist", @"radio"
     ]);
 }
 
@@ -309,7 +313,7 @@ static BOOL YTAGLiteShouldHideSubview(UIView *view) {
     return YTAGLiteSignatureContainsAny(signature, @[
         @"like", @"dislike", @"share", @"save", @"remix", @"clip",
         @"badge", @"menu", @"more", @"overflow",
-        @"chip", @"shelf", @"carousel", @"promo", @"product", @"shopping"
+        @"chip", @"richshelf", @"shortsshelf", @"promo", @"productcarousel", @"shoppingrenderer"
     ]);
 }
 
