@@ -1,13 +1,13 @@
 // YTAGDownload.x — overlay action-row integration for YouTube's player.
 //
 // Captures the currently-playing videoID via a hook on YTIPlayerResponse, and
-// adds a horizontal stack of small YTQTMButtons (download / mute / lock) just
+// adds a horizontal stack of small overlay buttons (download / mute / lock) just
 // below YouTube's own top controls (cast / CC / settings). The stack is a child
 // of YTMainAppVideoPlayerOverlayView so it inherits the overlay's fade-in/out
 // with all the other player controls.
 //
-// Each button is a `[YTQTMButton iconButton]` sized 24×36 with circular touch
-// feedback so the row feels native beside YouTube's own controls.
+// Each button is a plain UIButton with a compact circular backdrop so the row
+// stays readable without covering as much video.
 //
 // Download tap -> presents YTAGDownloadActionSheetViewController (tile grid).
 // Mute tap   -> toggles YTSingleVideoController.setMuted: on the player's active video.
@@ -118,6 +118,10 @@ static void *kYTAGOverlayDeclutterActiveKey = &kYTAGOverlayDeclutterActiveKey;
 static void *kYTAGOverlayDeclutterOriginalHiddenKey = &kYTAGOverlayDeclutterOriginalHiddenKey;
 static void *kYTAGOverlayDeclutterOriginalAlphaKey = &kYTAGOverlayDeclutterOriginalAlphaKey;
 static void *kYTAGOverlayDeclutterOriginalInteractionKey = &kYTAGOverlayDeclutterOriginalInteractionKey;
+static const CGFloat kYTAGOverlayButtonSide = 30.0;
+static const CGFloat kYTAGOverlayButtonCornerRadius = kYTAGOverlayButtonSide / 2.0;
+static const CGFloat kYTAGOverlayButtonSymbolPointSize = 18.0;
+static const CGFloat kYTAGOverlayButtonStackSpacing = 8.0;
 
 // --- File-scope helper: format a byte count for the chip ("2.4 MB" / "780 KB") ---
 
@@ -250,7 +254,7 @@ static NSString *YTAGDownloadThumbnailURLString(YTAGExtractionResult *result) {
     return [NSString stringWithFormat:@"https://i.ytimg.com/vi/%@/hqdefault.jpg", result.videoID];
 }
 
-// Factory: 36×36 plain UIButton with circular 70%-black backdrop and white icon.
+// Factory: compact plain UIButton with circular 70%-black backdrop and white icon.
 //
 // v38: abandoned YTQTMButton (YT's private button class) after v37 shipped with
 // circle + white tint and Corey reported "icons are still shit and cannot be seen
@@ -280,7 +284,7 @@ static UIButton *YTAGMakeOverlayButton(NSString *accessibilityLabel,
     // would be safe, but we don't need it — layer background is enough).
     btn.tintColor = [UIColor whiteColor];
     btn.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.70];
-    btn.layer.cornerRadius = 18.0;
+    btn.layer.cornerRadius = kYTAGOverlayButtonCornerRadius;
 
     if (fallbackImage) {
         [btn setImage:[fallbackImage imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
@@ -289,8 +293,8 @@ static UIButton *YTAGMakeOverlayButton(NSString *accessibilityLabel,
 
     [btn addTarget:target action:selector forControlEvents:UIControlEventTouchUpInside];
     [NSLayoutConstraint activateConstraints:@[
-        [btn.widthAnchor  constraintEqualToConstant:36.0],
-        [btn.heightAnchor constraintEqualToConstant:36.0],
+        [btn.widthAnchor  constraintEqualToConstant:kYTAGOverlayButtonSide],
+        [btn.heightAnchor constraintEqualToConstant:kYTAGOverlayButtonSide],
     ]];
     (void)iconType;  // no longer used — see comment above
     return btn;
@@ -355,7 +359,7 @@ static void YTAGOverlayDeclutterUpdateButton(UIButton *button, BOOL active) {
     button.alpha = active ? 0.16 : 1.0;
     button.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:active ? 0.24 : 0.70];
     button.accessibilityLabel = active ? @"Show overlay buttons" : @"Hide overlay buttons";
-    UIImage *image = YTAGSymbol(active ? @"eye.fill" : @"eye.slash.fill", 21.0);
+    UIImage *image = YTAGSymbol(active ? @"eye.fill" : @"eye.slash.fill", kYTAGOverlayButtonSymbolPointSize);
     if (image) {
         [button setImage:[image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
                 forState:UIControlStateNormal];
@@ -462,7 +466,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
     stack.axis = UILayoutConstraintAxisHorizontal;
     stack.distribution = UIStackViewDistributionFillEqually;
     stack.alignment = UIStackViewAlignmentCenter;
-    stack.spacing = 10.0;
+    stack.spacing = kYTAGOverlayButtonStackSpacing;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.tag = kYTAGButtonStackTag;
     [self addSubview:stack];
@@ -489,7 +493,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
         UIButton *mute = YTAGMakeOverlayButton(
             startMuted ? @"Unmute" : @"Mute",
             572,  // YT iconType 572 — native mute/volume icon
-            YTAGSymbol(startMuted ? @"speaker.slash.fill" : @"speaker.wave.2.fill", 22.0),
+            YTAGSymbol(startMuted ? @"speaker.slash.fill" : @"speaker.wave.2.fill", kYTAGOverlayButtonSymbolPointSize),
             [YTAGDownloadTrigger class],
             @selector(handleMuteTap:));
         if (mute) [stack addArrangedSubview:mute];
@@ -498,7 +502,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
         UIButton *lock = YTAGMakeOverlayButton(
             startLocked ? @"Unlock controls" : @"Lock controls",
             81,  // YT iconType 81 — native lock icon
-            YTAGSymbol(startLocked ? @"lock.fill" : @"lock.open.fill", 22.0),
+            YTAGSymbol(startLocked ? @"lock.fill" : @"lock.open.fill", kYTAGOverlayButtonSymbolPointSize),
             [YTAGDownloadTrigger class],
             @selector(handleLockTap:));
         if (lock) [stack addArrangedSubview:lock];
@@ -507,7 +511,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
         UIButton *download = YTAGMakeOverlayButton(
             @"Download",
             594,  // YT iconType 594 — native download icon
-            YTAGSymbol(@"arrow.down.to.line", 22.0),
+            YTAGSymbol(@"arrow.down.to.line", kYTAGOverlayButtonSymbolPointSize),
             [YTAGDownloadTrigger class],
             @selector(handleDownloadTap:));
         if (download) [stack addArrangedSubview:download];
@@ -519,7 +523,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
         UIButton *controls = YTAGMakeOverlayButton(
             @"Controls",
             0,
-            YTAGSymbol(@"slider.horizontal.3", 22.0),
+            YTAGSymbol(@"slider.horizontal.3", kYTAGOverlayButtonSymbolPointSize),
             [YTAGDownloadTrigger class],
             @selector(handleControlsTap:));
         if (controls) [stack addArrangedSubview:controls];
@@ -528,7 +532,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
         UIButton *declutter = YTAGMakeOverlayButton(
             @"Hide overlay buttons",
             0,
-            YTAGSymbol(@"eye.slash.fill", 21.0),
+            YTAGSymbol(@"eye.slash.fill", kYTAGOverlayButtonSymbolPointSize),
             [YTAGDownloadTrigger class],
             @selector(handleDeclutterTap:));
         declutter.tag = kYTAGOverlayDeclutterButtonTag;
@@ -538,7 +542,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
     UIButton *settings = YTAGMakeOverlayButton(
         @"Afterglow Settings",
         0,
-        YTAGSymbol(@"gearshape.fill", 22.0),
+        YTAGSymbol(@"gearshape.fill", kYTAGOverlayButtonSymbolPointSize),
         [YTAGDownloadTrigger class],
         @selector(handleSettingsTap:));
     settings.tag = kYTAGOverlaySettingsButtonTag;
@@ -610,7 +614,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
     stack.axis = UILayoutConstraintAxisHorizontal;
     stack.distribution = UIStackViewDistributionFillEqually;
     stack.alignment = UIStackViewAlignmentCenter;
-    stack.spacing = 10.0;
+    stack.spacing = kYTAGOverlayButtonStackSpacing;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.tag = kYTAGShortsButtonStackTag;
     [self addSubview:stack];
@@ -619,7 +623,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
         UIButton *download = YTAGMakeOverlayButton(
             @"Download",
             594,
-            YTAGSymbol(@"arrow.down.to.line", 21.0),
+            YTAGSymbol(@"arrow.down.to.line", kYTAGOverlayButtonSymbolPointSize),
             [YTAGDownloadTrigger class],
             @selector(handleDownloadTap:));
         if (download) [stack addArrangedSubview:download];
@@ -629,7 +633,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
         UIButton *controls = YTAGMakeOverlayButton(
             @"Controls",
             0,
-            YTAGSymbol(@"slider.horizontal.3", 21.0),
+            YTAGSymbol(@"slider.horizontal.3", kYTAGOverlayButtonSymbolPointSize),
             [YTAGDownloadTrigger class],
             @selector(handleControlsTap:));
         if (controls) [stack addArrangedSubview:controls];
@@ -639,7 +643,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
         UIButton *declutter = YTAGMakeOverlayButton(
             @"Hide overlay buttons",
             0,
-            YTAGSymbol(@"eye.slash.fill", 21.0),
+            YTAGSymbol(@"eye.slash.fill", kYTAGOverlayButtonSymbolPointSize),
             [YTAGDownloadTrigger class],
             @selector(handleDeclutterTap:));
         declutter.tag = kYTAGOverlayDeclutterButtonTag;
@@ -649,7 +653,7 @@ static void YTAGOverlayDeclutterReapplyIfNeeded(UIView *root) {
     UIButton *settings = YTAGMakeOverlayButton(
         @"Afterglow Settings",
         0,
-        YTAGSymbol(@"gearshape.fill", 21.0),
+        YTAGSymbol(@"gearshape.fill", kYTAGOverlayButtonSymbolPointSize),
         [YTAGDownloadTrigger class],
         @selector(handleSettingsTap:));
     settings.tag = kYTAGOverlaySettingsButtonTag;
@@ -890,7 +894,7 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
     [[NSUserDefaults standardUserDefaults] setBool:newMuted forKey:@"YouMuteKeepMuted"];
     ((void (*)(id, SEL, BOOL))objc_msgSend)(video, @selector(setMuted:), newMuted);
 
-    UIImage *icon = YTAGSymbol(newMuted ? @"speaker.slash.fill" : @"speaker.wave.2.fill", 22.0);
+    UIImage *icon = YTAGSymbol(newMuted ? @"speaker.slash.fill" : @"speaker.wave.2.fill", kYTAGOverlayButtonSymbolPointSize);
     if (icon) {
         [sender setImage:[icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
                 forState:UIControlStateNormal];
@@ -944,7 +948,7 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
         if ([lockCtl respondsToSelector:@selector(setLockModeActive:)]) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(lockCtl, @selector(setLockModeActive:), NO);
         }
-        UIImage *icon = YTAGSymbol(@"lock.open.fill", 22.0);
+        UIImage *icon = YTAGSymbol(@"lock.open.fill", kYTAGOverlayButtonSymbolPointSize);
         if (icon) {
             [sender setImage:[icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
                     forState:UIControlStateNormal];
@@ -961,7 +965,7 @@ static UIViewController *YTAGPresenterForView(UIView *view) {
         if (lockCtl && [lockCtl respondsToSelector:@selector(setLockModeActive:)]) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(lockCtl, @selector(setLockModeActive:), YES);
         }
-        UIImage *icon = YTAGSymbol(@"lock.fill", 22.0);
+        UIImage *icon = YTAGSymbol(@"lock.fill", kYTAGOverlayButtonSymbolPointSize);
         if (icon) {
             [sender setImage:[icon imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
                     forState:UIControlStateNormal];

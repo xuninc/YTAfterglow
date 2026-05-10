@@ -1817,6 +1817,71 @@ static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
 %end
 
 static BOOL isOverlayShown = YES;
+static const NSTimeInterval kYTAGShortsOverlayIdleHideDelay = 3.0;
+
+static BOOL ytagShortsContentViewIsPresentingEngagementPanel(YTReelContentView *contentView) {
+    if (![contentView respondsToSelector:@selector(isPresentingEngagementPanel)]) return NO;
+    @try {
+        return ((BOOL (*)(id, SEL))objc_msgSend)(contentView, @selector(isPresentingEngagementPanel));
+    } @catch (__unused id ex) {
+        return NO;
+    }
+}
+
+static void ytagShortsCancelOverlayAutoHide(YTReelContentView *contentView) {
+    [NSObject cancelPreviousPerformRequestsWithTarget:contentView
+                                             selector:@selector(ytagAfterglowAutoHideShortsOverlay)
+                                               object:nil];
+}
+
+static BOOL ytagShortsCanAutoHideOverlay(YTReelContentView *contentView) {
+    if (!contentView.window || !contentView.playbackOverlay) return NO;
+    if (ytagShortsContentViewIsPresentingEngagementPanel(contentView)) return NO;
+    return YES;
+}
+
+static void ytagShortsSetPlaybackOverlayVisible(YTReelContentView *contentView, BOOL visible, BOOL animated) {
+    UIView *overlay = contentView.playbackOverlay;
+    if (!overlay) return;
+
+    isOverlayShown = visible;
+    if (visible) {
+        overlay.hidden = NO;
+        overlay.userInteractionEnabled = YES;
+    }
+
+    void (^changes)(void) = ^{
+        overlay.alpha = visible ? 1.0 : 0.0;
+    };
+    void (^completion)(BOOL) = ^(BOOL finished) {
+        if (!visible && finished) {
+            overlay.userInteractionEnabled = NO;
+        }
+    };
+
+    if (animated) {
+        [UIView animateWithDuration:0.22 animations:changes completion:completion];
+    } else {
+        changes();
+        completion(YES);
+    }
+}
+
+static void ytagShortsScheduleOverlayAutoHide(YTReelContentView *contentView) {
+    ytagShortsCancelOverlayAutoHide(contentView);
+    if (!ytagShortsCanAutoHideOverlay(contentView)) return;
+    if (contentView.playbackOverlay.alpha <= 0.01 || contentView.playbackOverlay.hidden) return;
+
+    [contentView performSelector:@selector(ytagAfterglowAutoHideShortsOverlay)
+                      withObject:nil
+                      afterDelay:kYTAGShortsOverlayIdleHideDelay];
+}
+
+static void ytagShortsShowOverlayAndScheduleAutoHide(YTReelContentView *contentView, BOOL animated) {
+    if (!contentView.playbackOverlay) return;
+    ytagShortsSetPlaybackOverlayVisible(contentView, YES, animated);
+    ytagShortsScheduleOverlayAutoHide(contentView);
+}
 
 %hook YTPlayerView
 - (void)didPinch:(UIPinchGestureRecognizer *)gesture {
@@ -1831,17 +1896,12 @@ static BOOL isOverlayShown = YES;
         if (gesture.scale > 1) {
             if (!ytagBool(@"shortsOnlyMode")) [appVC hidePivotBar];
 
-            [UIView animateWithDuration:0.3 animations:^{
-                contentView.playbackOverlay.alpha = 0;
-                isOverlayShown = contentView.playbackOverlay.alpha;
-            }];
+            ytagShortsCancelOverlayAutoHide(contentView);
+            ytagShortsSetPlaybackOverlayVisible(contentView, NO, YES);
         } else {
             if (!ytagBool(@"shortsOnlyMode")) [appVC showPivotBar];
 
-            [UIView animateWithDuration:0.3 animations:^{
-                contentView.playbackOverlay.alpha = 1;
-                isOverlayShown = contentView.playbackOverlay.alpha;
-            }];
+            ytagShortsShowOverlayAndScheduleAutoHide(contentView, YES);
         }
     }
 }
@@ -1851,7 +1911,11 @@ static BOOL isOverlayShown = YES;
 - (void)setPlaybackView:(id)arg1 {
     %orig;
 
-    self.playbackOverlay.alpha = isOverlayShown;
+    if (isOverlayShown) {
+        ytagShortsShowOverlayAndScheduleAutoHide(self, NO);
+    } else {
+        ytagShortsSetPlaybackOverlayVisible(self, NO, NO);
+    }
 
     if (ytagBool(@"shortsOnlyMode")) {
         UILongPressGestureRecognizer *longPressGesture = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(turnShortsOnlyModeOff:)];
@@ -1860,6 +1924,72 @@ static BOOL isOverlayShown = YES;
 
         [self addGestureRecognizer:longPressGesture];
     }
+}
+
+- (void)didMoveToWindow {
+    %orig;
+
+    if (self.window) {
+        if (isOverlayShown) {
+            ytagShortsShowOverlayAndScheduleAutoHide(self, NO);
+        } else {
+            ytagShortsSetPlaybackOverlayVisible(self, NO, NO);
+        }
+    } else {
+        ytagShortsCancelOverlayAutoHide(self);
+    }
+}
+
+- (void)didTap:(id)gesture {
+    %orig;
+
+    UIGestureRecognizerState state = UIGestureRecognizerStateEnded;
+    if ([gesture respondsToSelector:@selector(state)]) {
+        state = ((UIGestureRecognizer *)gesture).state;
+    }
+    if (state == UIGestureRecognizerStateEnded) {
+        ytagShortsShowOverlayAndScheduleAutoHide(self, YES);
+    }
+}
+
+- (void)didLongPress:(id)gesture {
+    %orig;
+
+    UIGestureRecognizerState state = UIGestureRecognizerStatePossible;
+    if ([gesture respondsToSelector:@selector(state)]) {
+        state = ((UIGestureRecognizer *)gesture).state;
+    }
+    if (state == UIGestureRecognizerStateBegan) {
+        ytagShortsCancelOverlayAutoHide(self);
+    } else if (state == UIGestureRecognizerStateEnded ||
+               state == UIGestureRecognizerStateCancelled ||
+               state == UIGestureRecognizerStateFailed) {
+        ytagShortsShowOverlayAndScheduleAutoHide(self, YES);
+    }
+}
+
+- (void)setOverlayRenderer:(id)renderer isFullOverlayResponse:(BOOL)isFullOverlayResponse {
+    %orig;
+    ytagShortsScheduleOverlayAutoHide(self);
+}
+
+- (void)setOverlaysVisible:(BOOL)visible {
+    %orig;
+    if (visible) {
+        ytagShortsShowOverlayAndScheduleAutoHide(self, NO);
+    } else {
+        ytagShortsCancelOverlayAutoHide(self);
+        isOverlayShown = NO;
+    }
+}
+
+%new
+- (void)ytagAfterglowAutoHideShortsOverlay {
+    if (!ytagShortsCanAutoHideOverlay(self)) return;
+    if (self.playbackOverlay.alpha <= 0.01 || self.playbackOverlay.hidden) return;
+
+    ytagShortsSetPlaybackOverlayVisible(self, NO, YES);
+    YTAGLog(@"overlay", @"auto-hid Shorts playback overlay after %.1fs idle", kYTAGShortsOverlayIdleHideDelay);
 }
 
 %new
