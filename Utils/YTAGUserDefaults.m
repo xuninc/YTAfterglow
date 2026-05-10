@@ -12,7 +12,7 @@ static NSString *const kSettingsMigrationVersionKey = @"settingsMigrationVersion
 static NSString *const kPreferencesExportFormat = @"YTAfterglowPreferences";
 static NSString *const kPreferencesExportErrorDomain = @"YTAfterglowPreferencesError";
 static const NSUInteger kMinimumActiveTabsCount = 2;
-static const NSUInteger kMaximumActiveTabsCount = 6;
+static const NSUInteger kSingleRowMaximumActiveTabsCount = 6;
 static const NSInteger kCurrentThemeMigrationVersion = 2;
 static const NSInteger kCurrentSettingsMigrationVersion = 4;
 static const NSInteger kPreferencesExportVersion = 1;
@@ -143,6 +143,10 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
     return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
 }
 
+static NSUInteger YTAGMaximumActiveTabsCount(NSUserDefaults *defaults) {
+    return [defaults boolForKey:@"twoRowTabBar"] ? YTAGAllowedTabs().count : kSingleRowMaximumActiveTabsCount;
+}
+
 + (YTAGUserDefaults *)standardUserDefaults {
     static dispatch_once_t onceToken;
     static YTAGUserDefaults *defaults = nil;
@@ -172,7 +176,7 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         if (![allowedTabs containsObject:tabId] || [sanitizedTabs containsObject:tabId]) continue;
 
         [sanitizedTabs addObject:tabId];
-        if (sanitizedTabs.count >= kMaximumActiveTabsCount) break;
+        if (sanitizedTabs.count >= YTAGMaximumActiveTabsCount(self)) break;
     }
 
     if (sanitizedTabs.count < kMinimumActiveTabsCount) {
@@ -281,6 +285,7 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         kActiveTabsKey: [YTAGUserDefaults defaultActiveTabs],
         kStartupTabKey: @"FEwhat_to_watch",
         @"frostedPivot": @YES,
+        @"twoRowTabBar": @YES,
         @"theme_glowPivot": @YES,
         @"theme_glowOverlay": @YES,
         @"theme_glowScrubber": @YES,
@@ -291,12 +296,14 @@ static NSArray<NSString *> *YTAGAllowedTabs(void) {
         @"theme_glowOpacity": @100,
         @"theme_glowRadius": @50,
         @"theme_glowLayers": @1,
+        YTAGThemeFontModeKey: @0,
         @"autoplayMode": @0,
         @"noPlayerShareButton": @NO,
         @"noPlayerSaveButton": @NO,
         YTAGLiteModeEnabledKey: @NO,
         YTAGLiteModeDefaultThemeAppliedKey: @NO,
         YTAGLiteModeDefaultThemeVersionKey: @0,
+        YTAGLiteModeCompactFeedVideoWidthKey: @33,
         @"commentsHeaderMode": @0,
         @"muteButton": @YES,
         @"lockButton": @YES,

@@ -551,7 +551,7 @@
 "FollowMe" = "𝕏 (旧 Twitter) でフォロー";
 "SupportDevelopment" = "開発を支援";
 "DonateDesc" = "あなたの支援は私にとってとても励みになります！";
-"SupportDevelopmentDesc" = "もし YTPlus を気に入って頂き、開発を支援したい場合は、以下のいずれかの便利な方法でサポートできます。 \nご支援ありがとうございます❤";
+"SupportDevelopmentDesc" = "もし YouTube Afterglow を気に入って頂き、開発を支援したい場合は、以下のいずれかの便利な方法でサポートできます。 \nご支援ありがとうございます❤";
 "VisitGithub" = "GitHub リポジトリ";
 "VisitGithubDesc" = "リポジトリにスターを付けたり、機能リクエストや問題報告を行えます";
 "VisitTelegram" = "Telegram チャンネル";
@@ -586,8 +586,8 @@
 "ImportPreferences" = "設定をインポート";
 "PreImportMessage" = "この操作により現在の設定が選択したファイルの設定に上書きされます。\n\n続行しますか？";
 "ExportPreferences" = "設定のエクスポート";
-"ResetSettings" = "YTPlus の設定をリセット";
-"ResetMessage" = "この操作により YTPlus の設定がデフォルトにリセットされ、YouTube が終了します。\n\n続行しますか？";
+"ResetSettings" = "YouTube Afterglow の設定をリセット";
+"ResetMessage" = "この操作により YouTube Afterglow の設定がデフォルトにリセットされ、YouTube が終了します。\n\n続行しますか？";
 
 "ManageCache" = "キャッシュ管理";
 "ClearCacheAtStart" = "起動時にキャッシュを消去";

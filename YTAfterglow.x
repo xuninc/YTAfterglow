@@ -478,6 +478,88 @@ static BOOL canRememberLoopMode = NO;
 }
 %end
 
+%hook UILabel
+- (void)setFont:(UIFont *)font {
+    if (YTAGThemeFontOverrideEnabled() && font) {
+        font = YTAGLiteModeFontMatchingFont(font);
+    }
+    %orig(font);
+}
+
+- (void)setAttributedText:(NSAttributedString *)attributedText {
+    if (YTAGThemeFontOverrideEnabled() && attributedText.length > 0) {
+        attributedText = YTAGLiteModeStyleAttributedString(attributedText);
+    }
+    %orig(attributedText);
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    if (YTAGThemeFontOverrideEnabled()) YTAGLiteModeStyleLabel(self);
+}
+%end
+
+%hook ASTextNode
+- (void)setAttributedText:(NSAttributedString *)attributedText {
+    if (YTAGThemeFontOverrideEnabled() && attributedText.length > 0) {
+        attributedText = YTAGLiteModeStyleAttributedString(attributedText);
+    }
+    %orig(attributedText);
+}
+%end
+
+static void ytagStylePossibleLiteLabel(id label) {
+    if (!YTAGThemeFontOverrideEnabled() || !label) return;
+
+    @try {
+        if ([label isKindOfClass:[UILabel class]]) {
+            YTAGLiteModeStyleLabel((UILabel *)label);
+            return;
+        }
+
+        if ([label respondsToSelector:@selector(font)] && [label respondsToSelector:@selector(setFont:)]) {
+            UIFont *font = ((UIFont *(*)(id, SEL))objc_msgSend)(label, @selector(font));
+            if (font) {
+                ((void (*)(id, SEL, UIFont *))objc_msgSend)(label, @selector(setFont:), YTAGLiteModeFontMatchingFont(font));
+            }
+        }
+    } @catch (__unused id exception) {}
+}
+
+static void ytagStyleEngagementPanelHeaderForLiteMode(UIView *headerView) {
+    if (!YTAGThemeFontOverrideEnabled() || !headerView) return;
+
+    NSArray<NSString *> *labelSelectors = @[@"titleLabel", @"subtitleLabel"];
+    for (NSString *selectorName in labelSelectors) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if (![headerView respondsToSelector:selector]) continue;
+        @try {
+            id label = ((id (*)(id, SEL))objc_msgSend)(headerView, selector);
+            ytagStylePossibleLiteLabel(label);
+        } @catch (__unused id exception) {}
+    }
+}
+
+%hook YTEngagementPanelHeaderView
+- (void)layoutSubviews {
+    %orig;
+    YTAGLiteModeApplyBackgroundColor((UIView *)self);
+    ytagStyleEngagementPanelHeaderForLiteMode((UIView *)self);
+}
+
+- (void)setTitle:(id)title {
+    %orig;
+    YTAGLiteModeApplyBackgroundColor((UIView *)self);
+    ytagStyleEngagementPanelHeaderForLiteMode((UIView *)self);
+}
+
+- (void)setTitle:(id)title fontAttributes:(id)fontAttributes {
+    %orig;
+    YTAGLiteModeApplyBackgroundColor((UIView *)self);
+    ytagStyleEngagementPanelHeaderForLiteMode((UIView *)self);
+}
+%end
+
 // NOYTPremium (https://github.com/PoomSmart/NoYTPremium)
 // Alert
 %hook YTCommerceEventGroupHandler
@@ -653,6 +735,10 @@ static BOOL canRememberLoopMode = NO;
 - (id)initWithMessage:(id)arg1 dismissHandler:(id)arg2 { return ytagBool(@"noHUDMsgs") ? nil : %orig; }
 %end
 
+static BOOL ytagStartupAnimationEnabled(void) {
+    return ytagBool(@"startupAnimation");
+}
+
 %hook YTColdConfig
 // Hide Next & Previous buttons
 - (BOOL)removeNextPaddleForSingletonVideos { return ytagBool(@"hidePrevNext") ? YES : %orig; }
@@ -685,7 +771,13 @@ static BOOL canRememberLoopMode = NO;
 - (BOOL)mainAppCoreClientEnableClientCinematicTablets { return ytagBool(@"disableAmbientMode") ? NO : %orig; }
 - (BOOL)iosEnableFullScreenAmbientMode { return ytagBool(@"disableAmbientMode") ? NO : %orig; }
 // Startup Animation
-- (BOOL)mainAppCoreClientIosEnableStartupAnimation { return ytagBool(@"startupAnimation") ? YES : %orig; }
+- (BOOL)mainAppCoreClientIosEnableStartupAnimation { return ytagStartupAnimationEnabled() ? YES : %orig; }
+- (BOOL)mainAppCoreClientIosEnableShortsFirstStartupAnimation { return ytagStartupAnimationEnabled() ? YES : %orig; }
+- (BOOL)mainAppCoreClientEnableStartupAnimationForAllStartupTypes { return ytagStartupAnimationEnabled() ? YES : %orig; }
+- (BOOL)mainAppCoreClientEnableStartupAnimationForWarmStartups { return ytagStartupAnimationEnabled() ? YES : %orig; }
+- (BOOL)mainAppCoreClientEnableStartupAnimationForShortsStartups { return ytagStartupAnimationEnabled() ? YES : %orig; }
+- (long long)mainAppCoreClientEnableStartupAnimationForStartupTypes { return ytagStartupAnimationEnabled() ? 0x7fffffff : %orig; }
+- (BOOL)mainAppCoreClientIosInvalidateStartupAnimation { return ytagStartupAnimationEnabled() ? NO : %orig; }
 // Experimental Old UI fallback.
 - (BOOL)creatorClientConfigEnableStudioModernizedMdeThumbnailPickerForClient { return ytagBool(@"oldYTUI") ? NO : %orig; }
 - (BOOL)cxClientEnableModernizedActionSheet { return ytagBool(@"oldYTUI") ? NO : %orig; }
@@ -720,6 +812,12 @@ static BOOL canRememberLoopMode = NO;
 - (BOOL)enableSwipeToRemoveInPlaylistWatchEp { return YES; }
 // Enable Old-style Minibar For Playlist Panel
 - (BOOL)queueClientGlobalConfigEnableFloatingPlaylistMinibar { return ytagBool(@"playlistOldMinibar") ? NO : %orig; }
+%end
+
+%hook YTStartupAnimationViewController
++ (BOOL)evaluateStartupAnimationEligibility:(NSDictionary *)launchOptions didLaunchIntoShorts:(BOOL)didLaunchIntoShorts {
+    return ytagStartupAnimationEnabled() ? YES : %orig;
+}
 %end
 
 // Remove Dark Background in Overlay
@@ -797,6 +895,15 @@ static BOOL canRememberLoopMode = NO;
 // Portrait Fullscreen
 %hook YTWatchViewController
 - (unsigned long long)allowedFullScreenOrientations { return ytagBool(@"portraitFullscreen") ? UIInterfaceOrientationMaskAllButUpsideDown : %orig; }
+- (void)viewDidAppear:(BOOL)animated {
+    %orig;
+    YTAGLiteModeApplyBackgroundColor(self.view);
+}
+
+- (void)viewDidLayoutSubviews {
+    %orig;
+    YTAGLiteModeApplyBackgroundColor(self.view);
+}
 %end
 
 // Disable Autoplay
@@ -1481,6 +1588,8 @@ static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
     if (!YTAGLiteModeEnabled() || !cell) return;
     BOOL isCommentSurface = YTAGLiteModeShouldStyleCommentView(cell);
     if (!isCommentSurface) {
+        YTAGLiteModeApplyBackgroundColor(cell);
+        YTAGLiteModeApplyCompactFeedLayout(cell);
         YTAGLiteModeApplyViewCleanup(cell);
     }
     if (isCommentSurface) {
@@ -1521,8 +1630,8 @@ static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
     %orig;
 
     if (!YTAGLiteModeShouldCleanCollectionView(self)) return;
+    YTAGLiteModeApplyBackgroundColor(self);
     for (UICollectionViewCell *cell in [self.visibleCells copy]) {
-        if (YTAGLiteModeShouldRemoveFeedView(cell)) continue;
         ytagLiteModeCleanupCollectionCell(cell);
     }
 }
@@ -1537,6 +1646,57 @@ static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
             [self deleteItemsAtIndexPaths:@[indexPath]];
         } completion:nil];
     });
+}
+%end
+
+%hook YTElementsInlineMutedPlaybackView
+- (void)layoutSubviews {
+    %orig;
+    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
+}
+
+- (void)setInlineMutedPlaybackEnabled:(BOOL)enabled {
+    %orig;
+    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
+}
+
+- (void)setPlayerViewContainer:(id)container {
+    %orig;
+    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
+}
+%end
+
+%hook YTInlineMutedPlaybackWatchView
+- (void)setPlayerView:(id)playerView {
+    %orig;
+    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
+}
+
+- (void)restoreActivePlayerView:(id)playerView {
+    %orig;
+    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
+}
+
+- (void)setPlayerVisible:(BOOL)visible animated:(BOOL)animated {
+    %orig;
+    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
+}
+%end
+
+%hook YTInlineMutedPlaybackPlayerOverlayView
+- (void)layoutSubviews {
+    %orig;
+    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
+}
+
+- (void)playbackWillStart {
+    %orig;
+    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
+}
+
+- (void)playbackDidStart {
+    %orig;
+    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
 }
 %end
 
@@ -2130,18 +2290,323 @@ static NSArray *ytagDefaultTabs() {
     return [YTAGUserDefaults defaultActiveTabs];
 }
 
+static const NSUInteger YTAGTwoRowNativeTabLimit = 6;
+static char kYTAGTwoRowOverflowIdsKey;
+static char kYTAGTwoRowOverflowViewsKey;
+static char kYTAGTwoRowOverflowContainerKey;
+static char kYTAGTwoRowOverflowRendererKey;
+static char kYTAGTwoRowOverflowTabIdKey;
+
+static CGFloat YTAGTwoRowPivotExtraHeight(void) {
+    return 20.0;
+}
+
+static BOOL ytagTwoRowTabBarEnabled(void) {
+    return ytagBool(@"twoRowTabBar") && !YTAGLiteModeEnabled();
+}
+
+static NSArray<NSString *> *ytagTwoRowOverflowTabIds(NSArray<NSString *> *activeTabs) {
+    if (!ytagTwoRowTabBarEnabled() || activeTabs.count <= YTAGTwoRowNativeTabLimit) return @[];
+    return [activeTabs subarrayWithRange:NSMakeRange(YTAGTwoRowNativeTabLimit, activeTabs.count - YTAGTwoRowNativeTabLimit)];
+}
+
+static BOOL ytagTwoRowShouldReserveHeight(void) {
+    NSArray *activeTabs = [[YTAGUserDefaults standardUserDefaults] currentActiveTabs] ?: ytagDefaultTabs();
+    return ytagTwoRowOverflowTabIds(activeTabs).count > 0;
+}
+
+static NSArray<NSString *> *ytagStoredTwoRowOverflowTabIds(YTPivotBarView *pivotBar) {
+    NSArray *overflowIds = objc_getAssociatedObject(pivotBar, &kYTAGTwoRowOverflowIdsKey);
+    return [overflowIds isKindOfClass:[NSArray class]] ? overflowIds : @[];
+}
+
+static id ytagPivotBarDelegate(YTPivotBarView *pivotBar) {
+    if ([pivotBar respondsToSelector:@selector(delegate)]) {
+        return ((id (*)(id, SEL))objc_msgSend)(pivotBar, @selector(delegate));
+    }
+
+    @try {
+        return [pivotBar valueForKey:@"delegate"];
+    } @catch (__unused id exception) {
+        return nil;
+    }
+}
+
+static NSArray<UIView *> *ytagNativePivotItemViews(YTPivotBarView *pivotBar) {
+    id itemViews = nil;
+    if ([pivotBar respondsToSelector:@selector(itemViews)]) {
+        itemViews = ((id (*)(id, SEL))objc_msgSend)(pivotBar, @selector(itemViews));
+    }
+    if (!itemViews) {
+        @try {
+            itemViews = [pivotBar valueForKey:@"itemViews"];
+        } @catch (__unused id exception) {}
+    }
+    return [itemViews isKindOfClass:[NSArray class]] ? itemViews : @[];
+}
+
+static UIView *ytagPivotBarContentView(YTPivotBarView *pivotBar) {
+    if ([pivotBar respondsToSelector:@selector(contentView)]) {
+        return ((UIView *(*)(id, SEL))objc_msgSend)(pivotBar, @selector(contentView));
+    }
+
+    @try {
+        id contentView = [pivotBar valueForKey:@"contentView"];
+        return [contentView isKindOfClass:[UIView class]] ? contentView : nil;
+    } @catch (__unused id exception) {
+        return nil;
+    }
+}
+
+static UIView *ytagTwoRowOverflowContainer(YTPivotBarView *pivotBar) {
+    UIView *container = objc_getAssociatedObject(pivotBar, &kYTAGTwoRowOverflowContainerKey);
+    if (!container) {
+        container = [[UIView alloc] initWithFrame:CGRectZero];
+        container.backgroundColor = UIColor.clearColor;
+        container.clipsToBounds = NO;
+        container.userInteractionEnabled = YES;
+        container.hidden = YES;
+        [pivotBar addSubview:container];
+        objc_setAssociatedObject(pivotBar, &kYTAGTwoRowOverflowContainerKey, container, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return container;
+}
+
+static CGRect ytagRaisedTwoRowPivotFrame(YTPivotBarView *pivotBar, CGRect frame) {
+    if (!ytagTwoRowShouldReserveHeight()) return frame;
+
+    CGFloat targetHeight = ((CGFloat (*)(id, SEL))objc_msgSend)([pivotBar class], @selector(pivotBarHeight));
+    CGFloat currentHeight = CGRectGetHeight(frame);
+    if (currentHeight > 0.0 && currentHeight < targetHeight) {
+        CGFloat delta = targetHeight - currentHeight;
+        frame.origin.y -= delta;
+        frame.size.height = targetHeight;
+    }
+    return frame;
+}
+
+static NSString *ytagTwoRowSymbolNameForTabId(NSString *tabId) {
+    if ([tabId isEqualToString:@"FEwhat_to_watch"]) return @"house.fill";
+    if ([tabId isEqualToString:@"FEshorts"]) return @"play.square.fill";
+    if ([tabId isEqualToString:@"FEsubscriptions"]) return @"play.rectangle.on.rectangle.fill";
+    if ([tabId isEqualToString:@"FElibrary"]) return @"books.vertical.fill";
+    if ([tabId isEqualToString:@"FEhype_leaderboard"]) return @"flame.fill";
+    if ([tabId isEqualToString:@"FEhistory"]) return @"clock.fill";
+    if ([tabId isEqualToString:@"VLWL"]) return @"bookmark.fill";
+    if ([tabId isEqualToString:@"FEpost_home"]) return @"text.bubble.fill";
+    if ([tabId isEqualToString:@"FEuploads"]) return @"plus.app.fill";
+    return @"circle.fill";
+}
+
+static UIImage *ytagTwoRowImageForTabId(NSString *tabId, BOOL selected) {
+    NSString *assetName = nil;
+    if ([tabId isEqualToString:@"FEhistory"]) assetName = selected ? @"FEhistory_selected" : @"FEhistory";
+    else if ([tabId isEqualToString:@"VLWL"]) assetName = selected ? @"VLWL_selected" : @"VLWL";
+    else if ([tabId isEqualToString:@"FEpost_home"]) assetName = selected ? @"FEpost_home_selected" : @"FEpost_home";
+
+    if (assetName) {
+        NSBundle *bundle = [NSBundle ytag_defaultBundle];
+        NSString *path = [bundle pathForResource:[assetName stringByAppendingString:@"@3x"] ofType:@"png"]
+                      ?: [bundle pathForResource:[assetName stringByAppendingString:@"@2x"] ofType:@"png"];
+        UIImage *image = path ? [UIImage imageWithContentsOfFile:path] : nil;
+        if (image) return [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    }
+
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:17.0 weight:UIImageSymbolWeightSemibold];
+    return [[UIImage systemImageNamed:ytagTwoRowSymbolNameForTabId(tabId) withConfiguration:config] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+}
+
+static UIColor *ytagTwoRowNormalTintColor(void) {
+    UIColor *color = themeColor(@"theme_tabBarIcons");
+    if (!color) color = UIColor.labelColor;
+    return [color colorWithAlphaComponent:0.78];
+}
+
+static UIColor *ytagTwoRowSelectedTintColor(void) {
+    return themeColor(@"theme_tabBarIcons") ?: UIColor.labelColor;
+}
+
+static void ytagConfigureTwoRowOverflowButton(UIButton *button, YTPivotBarView *pivotBar, NSString *tabId) {
+    YTIPivotBarSupportedRenderers *tab = ytagCreatePivotTab(tabId);
+    YTIPivotBarItemRenderer *renderer = [tab pivotBarItemRenderer];
+    objc_setAssociatedObject(button, &kYTAGTwoRowOverflowRendererKey, renderer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(button, &kYTAGTwoRowOverflowTabIdKey, tabId, OBJC_ASSOCIATION_COPY_NONATOMIC);
+
+    button.hidden = NO;
+    button.alpha = 1.0;
+    button.userInteractionEnabled = YES;
+    button.backgroundColor = UIColor.clearColor;
+    button.adjustsImageWhenHighlighted = YES;
+    button.accessibilityLabel = LOC(tabId);
+    button.imageView.contentMode = UIViewContentModeScaleAspectFit;
+    button.imageEdgeInsets = UIEdgeInsetsMake(1.0, 0.0, 1.0, 0.0);
+    [button setImage:ytagTwoRowImageForTabId(tabId, NO) forState:UIControlStateNormal];
+    [button setImage:ytagTwoRowImageForTabId(tabId, YES) forState:UIControlStateSelected];
+    button.tintColor = button.selected ? ytagTwoRowSelectedTintColor() : ytagTwoRowNormalTintColor();
+
+    [button removeTarget:nil action:@selector(ytagDidTapTwoRowOverflowButton:) forControlEvents:UIControlEventTouchUpInside];
+    [button addTarget:pivotBar action:@selector(ytagDidTapTwoRowOverflowButton:) forControlEvents:UIControlEventTouchUpInside];
+}
+
+static NSArray<UIButton *> *ytagTwoRowOverflowViews(YTPivotBarView *pivotBar, NSArray<NSString *> *overflowIds) {
+    NSMutableArray<UIButton *> *views = objc_getAssociatedObject(pivotBar, &kYTAGTwoRowOverflowViewsKey);
+    if (![views isKindOfClass:[NSMutableArray class]]) {
+        views = [NSMutableArray array];
+        objc_setAssociatedObject(pivotBar, &kYTAGTwoRowOverflowViewsKey, views, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    UIView *container = ytagTwoRowOverflowContainer(pivotBar);
+    while (views.count < overflowIds.count) {
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+        button.clipsToBounds = NO;
+        button.userInteractionEnabled = YES;
+        [container addSubview:button];
+        [views addObject:button];
+    }
+
+    for (NSUInteger i = overflowIds.count; i < views.count; i++) {
+        views[i].hidden = YES;
+    }
+
+    return views;
+}
+
+static CGFloat ytagPinNativePivotRowToTop(YTPivotBarView *pivotBar) {
+    CGRect bounds = pivotBar.bounds;
+    CGFloat nativeHeight = MAX(44.0, CGRectGetHeight(bounds) - YTAGTwoRowPivotExtraHeight());
+    CGFloat bottom = nativeHeight;
+
+    UIView *contentView = ytagPivotBarContentView(pivotBar);
+    if (contentView) {
+        CGRect contentFrame = contentView.frame;
+        contentFrame.origin.y = 0.0;
+        contentFrame.size.width = CGRectGetWidth(bounds);
+        contentFrame.size.height = MAX(CGRectGetHeight(contentFrame), nativeHeight);
+        contentView.frame = contentFrame;
+    }
+
+    for (UIView *nativeItemView in ytagNativePivotItemViews(pivotBar)) {
+        CGRect frame = nativeItemView.frame;
+        frame.origin.y = 0.0;
+        if (CGRectGetHeight(frame) > nativeHeight) {
+            frame.size.height = nativeHeight;
+        }
+        nativeItemView.frame = frame;
+        bottom = MAX(bottom, CGRectGetMaxY(frame));
+    }
+
+    return bottom;
+}
+
+static NSString *ytagPivotIdentifierForOverflowView(UIView *itemView) {
+    NSString *tabId = objc_getAssociatedObject(itemView, &kYTAGTwoRowOverflowTabIdKey);
+    if ([tabId isKindOfClass:[NSString class]]) return ytagCanonicalPivotId(tabId);
+
+    @try {
+        id renderer = [itemView valueForKey:@"renderer"];
+        if ([renderer respondsToSelector:@selector(pivotIdentifier)]) {
+            return ytagCanonicalPivotId(((id (*)(id, SEL))objc_msgSend)(renderer, @selector(pivotIdentifier)));
+        }
+        id pivotIdentifier = [renderer valueForKey:@"pivotIdentifier"];
+        return ytagCanonicalPivotId([pivotIdentifier isKindOfClass:[NSString class]] ? pivotIdentifier : nil);
+    } @catch (__unused id exception) {
+        return nil;
+    }
+}
+
+static void ytagSyncTwoRowOverflowSelection(YTPivotBarView *pivotBar, NSString *pivotIdentifier) {
+    NSString *canonicalPivotId = ytagCanonicalPivotId(pivotIdentifier);
+    if (canonicalPivotId.length == 0) return;
+
+    NSArray<UIView *> *views = objc_getAssociatedObject(pivotBar, &kYTAGTwoRowOverflowViewsKey);
+    for (UIView *itemView in views) {
+        if (itemView.hidden) continue;
+        BOOL selected = [ytagPivotIdentifierForOverflowView(itemView) isEqualToString:canonicalPivotId];
+        if ([itemView isKindOfClass:[UIButton class]]) {
+            UIButton *button = (UIButton *)itemView;
+            button.selected = selected;
+            button.tintColor = selected ? ytagTwoRowSelectedTintColor() : ytagTwoRowNormalTintColor();
+        } else if ([itemView respondsToSelector:@selector(setSelected:)]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(itemView, @selector(setSelected:), selected);
+        }
+    }
+}
+
+static void ytagApplyTwoRowPivotLayout(YTPivotBarView *pivotBar) {
+    NSArray<NSString *> *overflowIds = ytagStoredTwoRowOverflowTabIds(pivotBar);
+    UIView *container = ytagTwoRowOverflowContainer(pivotBar);
+    BOOL shouldShow = ytagTwoRowTabBarEnabled() && overflowIds.count > 0 && !pivotBar.hidden;
+    container.hidden = !shouldShow;
+    if (!shouldShow) return;
+
+    CGRect bounds = pivotBar.bounds;
+    CGFloat rowY = ytagPinNativePivotRowToTop(pivotBar);
+    CGFloat availableHeight = CGRectGetHeight(bounds) - rowY;
+    if (availableHeight <= 1.0) {
+        container.hidden = YES;
+        return;
+    }
+    CGFloat rowHeight = MIN(YTAGTwoRowPivotExtraHeight(), availableHeight);
+
+    container.frame = CGRectMake(0.0, rowY, CGRectGetWidth(bounds), rowHeight);
+    [pivotBar bringSubviewToFront:container];
+
+    NSUInteger count = overflowIds.count;
+    CGFloat itemWidth = MIN(64.0, floor(CGRectGetWidth(bounds) / MAX((CGFloat)count + 1.0, 1.0)));
+    itemWidth = MAX(44.0, itemWidth);
+    CGFloat totalWidth = itemWidth * count;
+    CGFloat startX = floor((CGRectGetWidth(bounds) - totalWidth) / 2.0);
+    NSArray<UIButton *> *views = ytagTwoRowOverflowViews(pivotBar, overflowIds);
+    id delegate = ytagPivotBarDelegate(pivotBar);
+
+    for (NSUInteger i = 0; i < count; i++) {
+        UIButton *button = views[i];
+        button.frame = CGRectMake(startX + (itemWidth * i), 0.0, itemWidth, rowHeight);
+        ytagConfigureTwoRowOverflowButton(button, pivotBar, overflowIds[i]);
+    }
+
+    NSString *selectedPivotIdentifier = nil;
+    if ([delegate respondsToSelector:@selector(selectedPivotIdentifier)]) {
+        selectedPivotIdentifier = ((id (*)(id, SEL))objc_msgSend)(delegate, @selector(selectedPivotIdentifier));
+    }
+    if (selectedPivotIdentifier.length > 0) {
+        ytagSyncTwoRowOverflowSelection(pivotBar, selectedPivotIdentifier);
+    }
+}
+
 // Tab Management - Filter and reorder pivot bar items based on activeTabs
 %hook YTPivotBarView
++ (CGFloat)pivotBarHeight {
+    CGFloat height = %orig;
+    return ytagTwoRowShouldReserveHeight() ? height + YTAGTwoRowPivotExtraHeight() : height;
+}
+
+- (CGSize)intrinsicContentSize {
+    CGSize size = %orig;
+    if (ytagTwoRowShouldReserveHeight()) {
+        CGFloat targetHeight = ((CGFloat (*)(id, SEL))objc_msgSend)([self class], @selector(pivotBarHeight));
+        if (size.height < targetHeight) size.height = targetHeight;
+    }
+    return size;
+}
+
+- (void)setFrame:(CGRect)frame {
+    %orig(ytagRaisedTwoRowPivotFrame(self, frame));
+}
+
 - (void)setRenderer:(YTIPivotBarRenderer *)renderer {
     NSMutableArray <YTIPivotBarSupportedRenderers *> *items = [renderer itemsArray];
     NSArray *activeTabs = YTAGLiteModeEnabled() ? YTAGLiteModeActiveTabs() : [[YTAGUserDefaults standardUserDefaults] currentActiveTabs];
     if (!activeTabs) activeTabs = ytagDefaultTabs();
+    NSArray *overflowTabs = ytagTwoRowOverflowTabIds(activeTabs);
+    NSArray *nativeTabs = overflowTabs.count > 0 ? [activeTabs subarrayWithRange:NSMakeRange(0, YTAGTwoRowNativeTabLimit)] : activeTabs;
+    objc_setAssociatedObject(self, &kYTAGTwoRowOverflowIdsKey, overflowTabs, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
     // Remove tabs not in activeTabs
     NSMutableArray *toRemove = [NSMutableArray array];
     for (YTIPivotBarSupportedRenderers *item in items) {
         NSString *pid = ytagCanonicalPivotId(ytagPivotId(item));
-        if (pid && ![activeTabs containsObject:pid]) {
+        if (pid && ![nativeTabs containsObject:pid]) {
             [toRemove addObject:item];
         }
     }
@@ -2149,7 +2614,7 @@ static NSArray *ytagDefaultTabs() {
 
     // Add optional tabs only when YouTube did not supply them natively.
     for (NSString *tabId in @[@"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"]) {
-        if ([activeTabs containsObject:tabId] && !ytagItemsContainTab(items, tabId)) {
+        if ([nativeTabs containsObject:tabId] && !ytagItemsContainTab(items, tabId)) {
             YTIPivotBarSupportedRenderers *tab = ytagCreatePivotTab(tabId);
             if (tab) [items addObject:tab];
         }
@@ -2157,7 +2622,7 @@ static NSArray *ytagDefaultTabs() {
 
     // Reorder items to match activeTabs order
     NSMutableArray *ordered = [NSMutableArray array];
-    for (NSString *tabId in activeTabs) {
+    for (NSString *tabId in nativeTabs) {
         for (YTIPivotBarSupportedRenderers *item in items) {
             NSString *pid = ytagCanonicalPivotId(ytagPivotId(item));
             if ([pid isEqualToString:tabId]) {
@@ -2176,6 +2641,39 @@ static NSArray *ytagDefaultTabs() {
     [items addObjectsFromArray:ordered];
 
     %orig;
+    ytagApplyTwoRowPivotLayout(self);
+}
+
+- (void)layoutSubviews {
+    %orig;
+    ytagApplyTwoRowPivotLayout(self);
+}
+
+- (void)selectItemWithPivotIdentifier:(id)pivotIdentifier {
+    %orig;
+    if ([pivotIdentifier isKindOfClass:[NSString class]]) {
+        ytagSyncTwoRowOverflowSelection(self, pivotIdentifier);
+    }
+}
+
+%new
+- (void)ytagDidTapTwoRowOverflowButton:(UIButton *)sender {
+    id renderer = objc_getAssociatedObject(sender, &kYTAGTwoRowOverflowRendererKey);
+    if (!renderer) return;
+
+    NSString *pivotIdentifier = nil;
+    if ([renderer respondsToSelector:@selector(pivotIdentifier)]) {
+        pivotIdentifier = ((NSString *(*)(id, SEL))objc_msgSend)(renderer, @selector(pivotIdentifier));
+    }
+
+    id delegate = ytagPivotBarDelegate(self);
+    if ([delegate respondsToSelector:@selector(didTapItemWithRenderer:)]) {
+        ((void (*)(id, SEL, id))objc_msgSend)(delegate, @selector(didTapItemWithRenderer:), renderer);
+    }
+
+    if (pivotIdentifier.length > 0) {
+        ytagSyncTwoRowOverflowSelection(self, pivotIdentifier);
+    }
 }
 %end
 
@@ -2268,6 +2766,7 @@ BOOL isTabSelected = NO;
 %hook YTEngagementPanelView
 - (void)layoutSubviews {
     %orig;
+    YTAGLiteModeApplyBackgroundColor((UIView *)self);
 
     if (ytagBool(@"copyVideoInfo") && [self.panelIdentifier.identifierString isEqualToString:@"video-description-ep-identifier"]) {
         YTQTMButton *copyInfoButton = [%c(YTQTMButton) iconButton];

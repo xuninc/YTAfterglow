@@ -46,6 +46,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 - (NSString *)themeHexFromColor:(UIColor *)color;
 - (NSString *)themeColorDetailForKey:(NSString *)key;
 - (NSString *)themeCustomColorsSummary;
+- (NSString *)themeTypographySummary;
 - (NSString *)themeSeekBarSummary;
 - (NSString *)themeGradientSummary;
 - (NSString *)themeAppearanceSummary;
@@ -192,6 +193,10 @@ static char kYTAGPickerHighlightIndexAssociationKey;
 
 static UIColor *YTAGAfterglowTintColor(void) {
     return [UIColor colorWithRed:0.95 green:0.41 blue:0.50 alpha:1.0];
+}
+
+static NSUInteger ytag_maxActiveTabCount(void) {
+    return ytagBool(@"twoRowTabBar") ? 9 : 6;
 }
 
 static UIViewController *ytag_viewControllerForResponder(UIResponder *responder) {
@@ -801,7 +806,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     if (section == 0) {
-        return @"Drag to reorder your active tabs or move them down to disable them. Keep between 2 and 6 active tabs.";
+        return [NSString stringWithFormat:@"Drag to reorder your active tabs or move them down to disable them. Keep between 2 and %lu active tabs.", (unsigned long)ytag_maxActiveTabCount()];
     }
     return @"Drag a tab into Active Tabs to enable it, or tap a row to add it to the end.";
 }
@@ -871,7 +876,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         return sourceIndexPath;
     }
 
-    if (!movingFromActive && movingToActive && self.activeTabs.count >= 6) {
+    if (!movingFromActive && movingToActive && self.activeTabs.count >= ytag_maxActiveTabCount()) {
         return sourceIndexPath;
     }
 
@@ -901,7 +906,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         return;
     }
 
-    if (self.activeTabs.count >= 6) {
+    if (self.activeTabs.count >= ytag_maxActiveTabCount()) {
         [self ytag_showLimitAlertWithMessage:LOC(@"TabsCountRestricted")];
         return;
     }
@@ -1011,7 +1016,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                 [[YTAGDebugHUD sharedHUD] hide];
             }
 
-            NSArray *keys = @[@"removeLabels", @"removeIndicators", @"frostedPivot",
+            NSArray *keys = @[@"removeLabels", @"removeIndicators", @"frostedPivot", @"twoRowTabBar",
                 @"theme_overlayButtons", @"theme_tabBarIcons", @"theme_seekBar",
                 @"theme_background", @"theme_textPrimary", @"theme_textSecondary",
                 @"theme_navBar", @"theme_accent",
@@ -1390,6 +1395,12 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 }
 
 %new
+- (NSString *)themeTypographySummary {
+    NSInteger mode = ytagInt(YTAGThemeFontModeKey);
+    return YTAGThemeFontModeDisplayName(mode);
+}
+
+%new
 - (NSString *)themeSeekBarSummary {
     NSArray *keys = @[@"theme_seekBar", @"theme_seekBarLive",
                       @"theme_seekBarScrubber", @"theme_seekBarScrubberLive",
@@ -1429,8 +1440,10 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     BOOL hasGradientEnd = [[YTAGUserDefaults standardUserDefaults] objectForKey:@"theme_gradientEnd"] != nil;
     BOOL hasGradient = hasGradientStart || hasGradientEnd;
     BOOL hasGlow = ytagBool(@"theme_glowEnabled");
+    BOOL hasFont = ytagInt(YTAGThemeFontModeKey) != 0;
 
-    if (customizedCount == 0 && !hasGradient && !hasGlow) return LOC(@"Default");
+    if (customizedCount == 0 && !hasGradient && !hasGlow && !hasFont) return LOC(@"Default");
+    if (customizedCount == 0 && !hasGradient && !hasGlow && hasFont) return [self themeTypographySummary];
     if (customizedCount == 0 && hasGradient && !hasGlow) return [NSString stringWithFormat:@"Gradient %@", [self themeGradientSummary]];
     if (customizedCount == 0 && hasGlow) return hasGradient ? @"Glow + gradient" : @"Brand glow";
     if (!hasGradient && !hasGlow) return customizedCount == 1 ? @"1 color override" : [NSString stringWithFormat:@"%lu color overrides", (unsigned long)customizedCount];
@@ -1726,6 +1739,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     [entries addObject:[self ytag_searchPageEntryWithTitle:themesTitle description:@"Curated themes, custom colors, gradients, and polish." path:@[themesTitle] aliases:@[@"appearance", @"colors"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:presetsTitle description:@"Complete looks for the whole app, grouped into dark and light palettes." path:@[themesTitle, presetsTitle] aliases:@[@"theme presets", @"afterglow themes"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:customColorsTitle description:@"Fine-tune the exact surfaces and text colors the theme engine touches." path:@[themesTitle, customColorsTitle] aliases:@[@"theme colors", @"color overrides"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:LOC(@"Typography") description:@"Choose the app-wide font face." path:@[themesTitle, LOC(@"Typography")] aliases:@[@"font", @"courier", @"typeface"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:effectsTitle description:@"Glow, ambient mode, seek animation, and gradient toggles." path:@[themesTitle, effectsTitle] aliases:@[@"glow", @"effects"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:gradientTitle description:@"Optional background wash with a dedicated on or off workflow." path:@[themesTitle, gradientTitle] aliases:@[@"background gradient"]]];
 
@@ -1766,7 +1780,9 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         [self ytag_addSearchEntries:entries forSettingKeys:@[@"StickyNavbar", @"NoSubbar", @"NoYTLogo", @"PremiumYTLogo"] path:@[interfaceTitle, navbarTitle] aliasesByKey:nil];
     }
 
-    [self ytag_addSearchEntries:entries forSettingKeys:@[@"OpaqueBar", @"RemoveLabels", @"RemoveIndicators"] path:@[interfaceTitle, tabbarTitle] aliasesByKey:nil];
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"OpaqueBar", @"RemoveLabels", @"RemoveIndicators", @"TwoRowTabBar"] path:@[interfaceTitle, tabbarTitle] aliasesByKey:@{
+        @"TwoRowTabBar": @[@"two row", @"second row", @"all tabs", @"pivot overflow"]
+    }];
     [entries addObject:[self ytag_searchEntryWithTitle:@"Manage Tabs" description:@"Drag tabs between active and inactive sections, or tap a row to toggle it." path:@[interfaceTitle, tabbarTitle] targetTitle:@"Manage Tabs" aliases:@[@"tab editor", @"reorder tabs"]]];
 
     [entries addObject:[self ytag_searchEntryWithTitle:LOC(@"Startup") description:@"Choose which active tab opens first." path:@[interfaceTitle] targetTitle:LOC(@"Startup") aliases:@[@"startup tab", @"launch tab"]]];
@@ -1779,10 +1795,12 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     }
     [entries addObject:[self ytag_searchEntryWithTitle:LOC(@"ResetAllColors") description:@"Clear every theme override and go back to stock colors." path:@[themesTitle] targetTitle:LOC(@"ResetAllColors") aliases:@[@"reset theme", @"default theme"]]];
     [self ytag_addSearchEntries:entries forLiteralTitles:@[
-        @"OLED Dark", @"Midnight Blue", @"Forest Green", @"Afterglow 1", @"Afterglow 2", @"Afterglow 3", @"Afterglow 4",
-        @"Clean White", @"Warm Sand", @"Ocean Breeze", @"Rose Gold", @"Afterglow Light 1", @"Afterglow Light 2", @"Afterglow Light 3", @"Afterglow Light 4"
+        @"OLED Dark", @"Midnight Blue", @"Forest Green", @"Afterglow Gray Dark", @"Afterglow 1", @"Afterglow 2", @"Afterglow 3", @"Afterglow 4",
+        @"Clean White", @"Warm Sand", @"Ocean Breeze", @"Rose Gold", @"Afterglow Gray Light", @"Afterglow Light 1", @"Afterglow Light 2", @"Afterglow Light 3", @"Afterglow Light 4"
     ] path:@[themesTitle, presetsTitle] descriptionsByTitle:nil aliasesByTitle:@{
         @"OLED Dark": @[@"black theme"],
+        @"Afterglow Gray Dark": @[@"lite gray", @"monochrome", @"charcoal"],
+        @"Afterglow Gray Light": @[@"lite gray", @"monochrome", @"pale gray"],
         @"Afterglow 1": @[@"vaporwave"],
         @"Afterglow 4": @[@"green neon"],
         @"Afterglow Light 4": @[@"light sky"]
@@ -1793,6 +1811,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         @"OverlayButtons": @[@"player overlay color"],
         @"SeekBar": @[@"progress bar color"]
     }];
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"AppFont"] path:@[themesTitle, LOC(@"Typography")] aliasesByKey:@{ @"AppFont": @[@"font", @"courier", @"typography"] }];
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"EnableGlow", @"GlowStrength", @"GlowPivot", @"GlowOverlay", @"GlowScrubber", @"GlowSeekBar", @"AnimateSeek", @"DisableAmbientMode", @"SeekBarGradient"] path:@[themesTitle, effectsTitle] aliasesByKey:nil];
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"PersistentProgressBar", @"HideHeatwaves"] path:@[themesTitle, @"Seek Bar"] aliasesByKey:nil];
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"GradientStart", @"GradientEnd"] path:@[themesTitle, gradientTitle] aliasesByKey:nil];
@@ -1877,14 +1896,15 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     YTSettingsSectionItem *space = [%c(YTSettingsSectionItem) itemWithTitle:nil accessibilityIdentifier:@"YTAfterglowSectionItem" detailTextBlock:nil selectBlock:nil];
     NSArray *privacyAdsKeys = @[@"noAds", @"noPromotionCards", @"noSearchHistory", @"noLinkTracking", @"noShareChunk"];
     NSArray *navbarKeys = @[@"noCast", @"noNotifsButton", @"noSearchButton", @"noVoiceSearchButton", @"stickyNavbar", @"noSubbar", @"noYTLogo", @"premiumYTLogo"];
-    NSArray *tabbarKeys = @[@"frostedPivot", @"removeLabels", @"removeIndicators"];
+    NSArray *tabbarKeys = @[@"frostedPivot", @"removeLabels", @"removeIndicators", @"twoRowTabBar"];
     NSArray *legacyKeys = @[@"oldYTUI"];
     NSArray *interfaceKeys = [[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObjectsFromArray:[@[@"disableRTL"] arrayByAddingObjectsFromArray:legacyKeys]];
     NSArray *themeCustomColorKeys = @[@"theme_background", @"theme_navBar", @"theme_tabBarIcons", @"theme_overlayButtons", @"theme_seekBar", @"theme_textPrimary", @"theme_textSecondary", @"theme_accent"];
+    NSArray *themeTypographyKeys = @[YTAGThemeFontModeKey];
     NSArray *themeSeekBarKeys = @[@"theme_seekBar", @"theme_seekBarLive", @"theme_seekBarScrubber", @"theme_seekBarScrubberLive", @"seekBarScrubberImage", @"seekBarScrubberSize", @"persistentProgressBar", @"hideHeatwaves"];
     NSArray *themeEffectKeys = @[@"theme_glowEnabled", @"theme_glowStrength", @"theme_glowStrengthMode", @"theme_glowStrengthCustom", @"theme_glowOpacity", @"theme_glowRadius", @"theme_glowLayers", @"theme_glowColor", @"theme_glowPivot", @"theme_glowOverlay", @"theme_glowScrubber", @"theme_glowSeekBar", @"seekBarAnimated", @"disableAmbientMode", @"seekBarGradient"];
     NSArray *themeGradientKeys = @[@"theme_gradientStart", @"theme_gradientEnd"];
-    NSArray *themeKeys = [[themeCustomColorKeys arrayByAddingObjectsFromArray:themeSeekBarKeys] arrayByAddingObjectsFromArray:[themeEffectKeys arrayByAddingObjectsFromArray:themeGradientKeys]];
+    NSArray *themeKeys = [[[themeCustomColorKeys arrayByAddingObjectsFromArray:themeTypographyKeys] arrayByAddingObjectsFromArray:themeSeekBarKeys] arrayByAddingObjectsFromArray:[themeEffectKeys arrayByAddingObjectsFromArray:themeGradientKeys]];
     NSArray *playerPlaybackKeys = @[@"backgroundPlayback", @"speedIndex", @"autoSpeedIndex", @"wiFiQualityIndex", @"cellQualityIndex", @"disableAutoCaptions", @"rememberCaptionState", @"rememberLoop", @"noContentWarning", @"classicQuality", @"hideEndScreenCards", @"noRelatedVids", @"noContinueWatching", @"noContinueWatchingPrompt", @"noRelatedWatchNexts", @"miniplayer", @"playlistOldMinibar", @"autoplayMode"];
     NSArray *playerControlKeys = @[@"portraitFullscreen", @"tapToSeek", @"dontSnapToChapter", @"noTwoFingerSnapToChapter", @"noFreeZoom", @"autoFullscreen", @"exitFullscreen", @"noDoubleTapToSeek"];
     NSArray *playerOverlayKeys = @[@"muteButton", @"lockButton", @"downloadButton", @"controlsSheetButton", @"overlayDeclutterButton", @"hideSubs", @"noHUDMsgs", @"hidePrevNext", @"replacePrevNext", @"noDarkBg", @"noFullscreenActions", @"pauseOnOverlay", @"stockVolumeHUD", @"noWatermarks", @"videoEndTime", @"24hrFormat"];
@@ -1894,7 +1914,8 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSArray *shortsBehaviorKeys = @[@"shortsOnlyMode", @"autoSkipShorts", @"hideShorts", @"shortsProgress", @"pinchToFullscreenShorts", @"shortsToRegular", @"resumeShorts"];
     NSArray *shortsUIKeys = @[@"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"];
     NSArray *downloadKeys = @[@"downloadPostActionMode", @"downloadRefreshMetadata", @"downloadAudioTrackMode", @"downloadAudioQualityMode", @"downloadPreferStableAudio", @"downloadIncludeAutoCaptions", @"downloadOfferTranslatedCaptions", @"downloadPickerFontScaleMode", @"downloadPickerFontFaceMode"];
-    NSArray *feedKeys = @[@"removePlayNext", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu"];
+    NSArray *feedToggleKeys = @[@"removePlayNext", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu"];
+    NSArray *feedKeys = [@[YTAGLiteModeCompactFeedVideoWidthKey] arrayByAddingObjectsFromArray:feedToggleKeys];
     NSArray *toolKeys = @[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare", @"copyWithTimestamp"];
 
     YTSettingsSectionItem *searchSettings = [self pageItemWithTitle:ytag_localizedStringOrFallback(@"SearchSettings", @"Search Settings")
@@ -1981,6 +2002,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     [tabRows addObject:[self switchWithTitle:@"OpaqueBar" key:@"frostedPivot"]];
                     [tabRows addObject:[self switchWithTitle:@"RemoveLabels" key:@"removeLabels"]];
                     [tabRows addObject:[self switchWithTitle:@"RemoveIndicators" key:@"removeIndicators"]];
+                    [tabRows addObject:[self switchWithTitle:@"TwoRowTabBar" key:@"twoRowTabBar"]];
 	                    [tabRows addObject:[self pageItemWithTitle:@"Manage Tabs"
 	                        titleDescription:@"Drag tabs between active and inactive sections, or tap a row to toggle it."
                         summary:^NSString *() {
@@ -2047,7 +2069,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
             [appearanceRows addObject:[self pageItemWithTitle:LOC(@"Presets")
                 titleDescription:@"Complete looks for the whole app, grouped into dark and light palettes."
                 summary:^NSString *() {
-                    return @"17 curated";
+                    return @"19 curated";
                 }
                 selectBlock:^BOOL(YTSettingsCell *presetCell, NSUInteger presetArg1) {
                     NSMutableArray <YTSettingsSectionItem *> *presetRows = [NSMutableArray array];
@@ -2057,6 +2079,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     [self themeAddPresetRowWithName:@"Solarized Dark" titleDescription:@"Muted solarized tones with teal and gold." overlay:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0] tabIcons:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0] seekBar:[UIColor colorWithRed:0.52 green:0.60 blue:0.0 alpha:1.0] bg:[UIColor colorWithRed:0.0 green:0.17 blue:0.21 alpha:1.0] textP:[UIColor colorWithRed:0.93 green:0.91 blue:0.84 alpha:1.0] textS:[UIColor colorWithRed:0.51 green:0.58 blue:0.59 alpha:1.0] nav:[UIColor colorWithRed:0.03 green:0.21 blue:0.26 alpha:1.0] accent:[UIColor colorWithRed:0.15 green:0.55 blue:0.82 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Monokai" titleDescription:@"High-contrast editor greens and pinks." overlay:[UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0] tabIcons:[UIColor colorWithRed:0.65 green:0.89 blue:0.18 alpha:1.0] seekBar:[UIColor colorWithRed:0.98 green:0.15 blue:0.45 alpha:1.0] bg:[UIColor colorWithRed:0.15 green:0.16 blue:0.13 alpha:1.0] textP:[UIColor colorWithRed:0.97 green:0.97 blue:0.95 alpha:1.0] textS:[UIColor colorWithRed:0.46 green:0.44 blue:0.37 alpha:1.0] nav:[UIColor colorWithRed:0.2 green:0.2 blue:0.17 alpha:1.0] accent:[UIColor colorWithRed:0.40 green:0.85 blue:0.94 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Forest" titleDescription:@"Deep green with a calm natural feel." overlay:[UIColor colorWithRed:0.8 green:0.93 blue:0.8 alpha:1.0] tabIcons:[UIColor colorWithRed:0.4 green:0.75 blue:0.4 alpha:1.0] seekBar:[UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0] bg:[UIColor colorWithRed:0.06 green:0.1 blue:0.06 alpha:1.0] textP:[UIColor colorWithRed:0.85 green:0.95 blue:0.85 alpha:1.0] textS:[UIColor colorWithRed:0.5 green:0.65 blue:0.5 alpha:1.0] nav:[UIColor colorWithRed:0.08 green:0.14 blue:0.08 alpha:1.0] accent:[UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
+                    [self themeAddPresetRowWithName:@"Afterglow Gray Dark" titleDescription:@"Lite-inspired charcoal monochrome with soft white controls." overlay:[UIColor colorWithWhite:0.98 alpha:1.0] tabIcons:[UIColor colorWithWhite:0.96 alpha:1.0] seekBar:[UIColor colorWithWhite:0.92 alpha:1.0] bg:[UIColor colorWithWhite:0.18 alpha:1.0] textP:[UIColor colorWithWhite:0.96 alpha:1.0] textS:[UIColor colorWithWhite:0.78 alpha:1.0] nav:[UIColor colorWithWhite:0.24 alpha:1.0] accent:[UIColor colorWithWhite:1.0 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Afterglow 1" titleDescription:@"Hot magenta and cyan vaporwave with loud neon bloom." overlay:[UIColor colorWithRed:1.00 green:0.72 blue:0.90 alpha:1.0] tabIcons:[UIColor colorWithRed:0.28 green:0.95 blue:1.00 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.27 blue:0.75 alpha:1.0] bg:[UIColor colorWithRed:0.09 green:0.03 blue:0.16 alpha:1.0] textP:[UIColor colorWithRed:0.98 green:0.90 blue:0.99 alpha:1.0] textS:[UIColor colorWithRed:0.72 green:0.61 blue:0.82 alpha:1.0] nav:[UIColor colorWithRed:0.13 green:0.05 blue:0.20 alpha:1.0] accent:[UIColor colorWithRed:0.30 green:0.91 blue:1.00 alpha:1.0] gradientStart:[UIColor colorWithRed:0.18 green:0.03 blue:0.29 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.94 green:0.27 blue:0.58 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Afterglow 2" titleDescription:@"Sunset vapor tones with peach fire over electric violet." overlay:[UIColor colorWithRed:1.00 green:0.82 blue:0.71 alpha:1.0] tabIcons:[UIColor colorWithRed:1.00 green:0.55 blue:0.42 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.48 blue:0.66 alpha:1.0] bg:[UIColor colorWithRed:0.11 green:0.05 blue:0.13 alpha:1.0] textP:[UIColor colorWithRed:1.00 green:0.94 blue:0.90 alpha:1.0] textS:[UIColor colorWithRed:0.79 green:0.67 blue:0.72 alpha:1.0] nav:[UIColor colorWithRed:0.17 green:0.08 blue:0.19 alpha:1.0] accent:[UIColor colorWithRed:0.41 green:0.89 blue:1.00 alpha:1.0] gradientStart:[UIColor colorWithRed:0.24 green:0.06 blue:0.24 alpha:1.0] gradientEnd:[UIColor colorWithRed:1.00 green:0.46 blue:0.28 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Afterglow 3" titleDescription:@"Cyber dusk with deep indigo, laser cyan, and glossy pink chrome." overlay:[UIColor colorWithRed:0.89 green:0.79 blue:1.00 alpha:1.0] tabIcons:[UIColor colorWithRed:0.34 green:0.90 blue:1.00 alpha:1.0] seekBar:[UIColor colorWithRed:0.92 green:0.31 blue:1.00 alpha:1.0] bg:[UIColor colorWithRed:0.04 green:0.06 blue:0.16 alpha:1.0] textP:[UIColor colorWithRed:0.93 green:0.95 blue:1.00 alpha:1.0] textS:[UIColor colorWithRed:0.62 green:0.70 blue:0.89 alpha:1.0] nav:[UIColor colorWithRed:0.07 green:0.09 blue:0.20 alpha:1.0] accent:[UIColor colorWithRed:1.00 green:0.54 blue:0.72 alpha:1.0] gradientStart:[UIColor colorWithRed:0.07 green:0.08 blue:0.25 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.62 green:0.12 blue:0.64 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
@@ -2067,6 +2090,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     [self themeAddPresetRowWithName:@"Warm Sand" titleDescription:@"Cream tones with soft amber highlights." overlay:[UIColor colorWithRed:0.45 green:0.35 blue:0.25 alpha:1.0] tabIcons:[UIColor colorWithRed:0.5 green:0.38 blue:0.25 alpha:1.0] seekBar:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0] bg:[UIColor colorWithRed:0.98 green:0.96 blue:0.91 alpha:1.0] textP:[UIColor colorWithRed:0.2 green:0.15 blue:0.1 alpha:1.0] textS:[UIColor colorWithRed:0.5 green:0.42 blue:0.35 alpha:1.0] nav:[UIColor colorWithRed:0.95 green:0.92 blue:0.85 alpha:1.0] accent:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Ocean Breeze" titleDescription:@"Light blue surfaces with teal energy." overlay:[UIColor colorWithRed:0.15 green:0.4 blue:0.55 alpha:1.0] tabIcons:[UIColor colorWithRed:0.1 green:0.45 blue:0.6 alpha:1.0] seekBar:[UIColor colorWithRed:0.0 green:0.6 blue:0.7 alpha:1.0] bg:[UIColor colorWithRed:0.94 green:0.97 blue:1.0 alpha:1.0] textP:[UIColor colorWithRed:0.1 green:0.15 blue:0.2 alpha:1.0] textS:[UIColor colorWithRed:0.35 green:0.45 blue:0.55 alpha:1.0] nav:[UIColor colorWithRed:0.9 green:0.94 blue:0.98 alpha:1.0] accent:[UIColor colorWithRed:0.0 green:0.55 blue:0.65 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Rose Gold" titleDescription:@"Soft blush tones with warm chrome." overlay:[UIColor colorWithRed:0.6 green:0.35 blue:0.35 alpha:1.0] tabIcons:[UIColor colorWithRed:0.7 green:0.4 blue:0.4 alpha:1.0] seekBar:[UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0] bg:[UIColor colorWithRed:1.0 green:0.95 blue:0.93 alpha:1.0] textP:[UIColor colorWithRed:0.25 green:0.15 blue:0.15 alpha:1.0] textS:[UIColor colorWithRed:0.55 green:0.4 blue:0.4 alpha:1.0] nav:[UIColor colorWithRed:0.95 green:0.88 blue:0.86 alpha:1.0] accent:[UIColor colorWithRed:0.85 green:0.45 blue:0.5 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
+                    [self themeAddPresetRowWithName:@"Afterglow Gray Light" titleDescription:@"Lite-inspired pale monochrome with crisp dark controls." overlay:[UIColor colorWithWhite:0.12 alpha:1.0] tabIcons:[UIColor colorWithWhite:0.16 alpha:1.0] seekBar:[UIColor colorWithWhite:0.28 alpha:1.0] bg:[UIColor colorWithWhite:0.90 alpha:1.0] textP:[UIColor colorWithWhite:0.10 alpha:1.0] textS:[UIColor colorWithWhite:0.40 alpha:1.0] nav:[UIColor colorWithWhite:0.96 alpha:1.0] accent:[UIColor colorWithWhite:0.20 alpha:1.0] gradientStart:nil gradientEnd:nil toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Afterglow Light 1" titleDescription:@"Candyglass daylight with a real lilac body color and aqua chrome." overlay:[UIColor colorWithRed:0.55 green:0.19 blue:0.54 alpha:1.0] tabIcons:[UIColor colorWithRed:0.03 green:0.72 blue:0.82 alpha:1.0] seekBar:[UIColor colorWithRed:0.98 green:0.33 blue:0.69 alpha:1.0] bg:[UIColor colorWithRed:0.97 green:0.84 blue:1.00 alpha:1.0] textP:[UIColor colorWithRed:0.24 green:0.08 blue:0.33 alpha:1.0] textS:[UIColor colorWithRed:0.46 green:0.27 blue:0.58 alpha:1.0] nav:[UIColor colorWithRed:0.93 green:0.76 blue:1.00 alpha:1.0] accent:[UIColor colorWithRed:0.08 green:0.80 blue:0.84 alpha:1.0] gradientStart:[UIColor colorWithRed:1.00 green:0.84 blue:0.93 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.73 green:0.95 blue:1.00 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Afterglow Light 2" titleDescription:@"Apricot sunset with coral punch, hot pink sparks, and blue contrast." overlay:[UIColor colorWithRed:0.60 green:0.24 blue:0.14 alpha:1.0] tabIcons:[UIColor colorWithRed:0.97 green:0.44 blue:0.12 alpha:1.0] seekBar:[UIColor colorWithRed:1.00 green:0.31 blue:0.44 alpha:1.0] bg:[UIColor colorWithRed:1.00 green:0.86 blue:0.72 alpha:1.0] textP:[UIColor colorWithRed:0.30 green:0.12 blue:0.09 alpha:1.0] textS:[UIColor colorWithRed:0.58 green:0.30 blue:0.28 alpha:1.0] nav:[UIColor colorWithRed:1.00 green:0.79 blue:0.64 alpha:1.0] accent:[UIColor colorWithRed:0.28 green:0.67 blue:1.00 alpha:1.0] gradientStart:[UIColor colorWithRed:1.00 green:0.90 blue:0.69 alpha:1.0] gradientEnd:[UIColor colorWithRed:1.00 green:0.68 blue:0.73 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
                     [self themeAddPresetRowWithName:@"Afterglow Light 3" titleDescription:@"Mint arcade glass with louder teal, berry pink, and violet energy." overlay:[UIColor colorWithRed:0.13 green:0.40 blue:0.40 alpha:1.0] tabIcons:[UIColor colorWithRed:0.00 green:0.68 blue:0.61 alpha:1.0] seekBar:[UIColor colorWithRed:0.98 green:0.37 blue:0.58 alpha:1.0] bg:[UIColor colorWithRed:0.80 green:1.00 blue:0.91 alpha:1.0] textP:[UIColor colorWithRed:0.08 green:0.22 blue:0.24 alpha:1.0] textS:[UIColor colorWithRed:0.28 green:0.47 blue:0.49 alpha:1.0] nav:[UIColor colorWithRed:0.72 green:0.98 blue:0.89 alpha:1.0] accent:[UIColor colorWithRed:0.41 green:0.30 blue:0.95 alpha:1.0] gradientStart:[UIColor colorWithRed:0.82 green:1.00 blue:0.94 alpha:1.0] gradientEnd:[UIColor colorWithRed:0.93 green:0.84 blue:1.00 alpha:1.0] toRows:presetRows settingsVC:settingsViewController];
@@ -2100,6 +2124,26 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
 	                    YTSettingsPickerViewController *colorPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"CustomColors") pickerSectionTitle:nil rows:colorRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:colorPicker];
+                    return YES;
+                }]];
+
+            [appearanceRows addObject:[self pageItemWithTitle:LOC(@"Typography")
+                titleDescription:@"Choose the font Afterglow applies to YouTube text."
+                summary:^NSString *() {
+                    return [self themeTypographySummary];
+                }
+                selectBlock:^BOOL(YTSettingsCell *typographyCell, NSUInteger typographyArg1) {
+                    NSMutableArray <YTSettingsSectionItem *> *typographyRows = [NSMutableArray array];
+                    [typographyRows addObject:[self themeSectionHeaderWithTitle:LOC(@"Typography") description:@"Auto uses Courier New while Lite Mode is enabled and stock system text otherwise."]];
+                    [typographyRows addObject:[self ytagPickerItemWithTitle:LOC(@"AppFont")
+                                                               description:LOC(@"AppFontDesc")
+                                                                       key:YTAGThemeFontModeKey
+                                                                    labels:YTAGThemeFontModeDisplayNames()
+                                                                settingsVC:settingsViewController]];
+                    [self addResetDefaultsItemForKeys:themeTypographyKeys toRows:typographyRows settingsVC:settingsViewController];
+
+                    YTSettingsPickerViewController *typographyPicker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Typography") pickerSectionTitle:nil rows:typographyRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:typographyPicker];
                     return YES;
                 }]];
 
@@ -2606,10 +2650,13 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     YTSettingsSectionItem *feed = [self pageItemWithTitle:@"Feed"
         titleDescription:@"Clean up the home feed and menu items."
         summary:^NSString *() {
-            return [self enabledSummaryForKeys:feedKeys];
+            return [self enabledSummaryForKeys:feedToggleKeys];
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
 	            NSMutableArray <YTSettingsSectionItem *> *feedRows = [@[
+	                [self themeSectionHeaderWithTitle:@"Lite Mode" description:@"Layout options that only apply while Lite Mode is enabled."],
+	                [self themeGlowNumberItemWithTitle:LOC(@"LiteCompactFeedVideoWidth") titleDescription:LOC(@"LiteCompactFeedVideoWidthDesc") key:YTAGLiteModeCompactFeedVideoWidthKey min:25 max:100 fallback:33 suffix:@"%" settingsVC:settingsViewController],
+	                space,
 	                [self switchWithTitle:@"RemovePlayNext" key:@"removePlayNext"],
 	                [self switchWithTitle:@"RemoveWatchLaterMenu" key:@"removeWatchLaterMenu"],
 	                [self switchWithTitle:@"RemoveSaveToPlaylistMenu" key:@"removeSaveToPlaylistMenu"],

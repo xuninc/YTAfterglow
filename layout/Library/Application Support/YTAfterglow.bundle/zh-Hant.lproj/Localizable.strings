@@ -551,7 +551,7 @@
 "FollowMe" = "在X上跟隨我";
 "SupportDevelopment" = "支持開發";
 "DonateDesc" = "您的支持對我來說意義非凡";
-"SupportDevelopmentDesc" = "如果您喜歡YTPlus並且願意支持開發，可以使用以下任何方便的方式支持。\n感謝❤";
+"SupportDevelopmentDesc" = "如果您喜歡YouTube Afterglow並且願意支持開發，可以使用以下任何方便的方式支持。\n感謝❤";
 "VisitGithub" = "Github儲存庫";
 "VisitGithubDesc" = "為儲存庫標記星號，提出功能請求或回報問題。";
 "VisitTelegram" = "我的Telegram頻道";
@@ -586,8 +586,8 @@
 "ImportPreferences" = "匯入偏好設定";
 "PreImportMessage" = "此項操作會將目前的偏好設定，替換為所選檔案中的偏好設定。\n\n確定要繼續嗎?";
 "ExportPreferences" = "匯出偏好設定";
-"ResetSettings" = "重置YTPlus設定";
-"ResetMessage" = "這個選項會將YTPlus重置為預設值，並關閉Youtube\n\n您確定要繼續嗎?";
+"ResetSettings" = "重置YouTube Afterglow設定";
+"ResetMessage" = "這個選項會將YouTube Afterglow重置為預設值，並關閉Youtube\n\n您確定要繼續嗎?";
 
 "ManageCache" = "快取管理";
 "ClearCacheAtStart" = "啟動時清除快取";

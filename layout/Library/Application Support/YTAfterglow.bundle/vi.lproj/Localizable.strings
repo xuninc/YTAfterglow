@@ -551,7 +551,7 @@
 "FollowMe" = "Theo dõi tôi trên X";
 "SupportDevelopment" = "Hỗ trợ nhà phát triển";
 "DonateDesc" = "Mọi hỗ trợ của bạn đều có ý nghĩa rất lớn";
-"SupportDevelopmentDesc" = "Nếu bạn thích YTPlus và muốn đóng góp đôi chút vào quá trình phát triển, bạn có thể thực hiện bằng một trong các cách dưới đây.\nXin cảm ơn ❤";
+"SupportDevelopmentDesc" = "Nếu bạn thích YouTube Afterglow và muốn đóng góp đôi chút vào quá trình phát triển, bạn có thể thực hiện bằng một trong các cách dưới đây.\nXin cảm ơn ❤";
 "VisitGithub" = "Kho lưu trữ Github";
 "VisitGithubDesc" = "Gắn sao repo, yêu cầu tính năng hoặc báo lỗi";
 "VisitTelegram" = "Kênh Telegram của tôi";
@@ -587,7 +587,7 @@
 "PreImportMessage" = "Tùy chọn này sẽ áp dụng các cài đặt từ tệp được chọn, mọi cài đặt hiện tại sẽ bị thay thế.\n\nBạn có chắc chắn muốn thực hiện không?";
 "ExportPreferences" = "Xuất cài đặt";
 "ResetSettings" = "Đặt lại cài đặt mặc định";
-"ResetMessage" = "Tùy chọn này sẽ đặt lại cài đặt YTPlus về mặc định, sau đó thoát YouTube.\n\nBạn có chắc chắn muốn thực hiện không?";
+"ResetMessage" = "Tùy chọn này sẽ đặt lại cài đặt YouTube Afterglow về mặc định, sau đó thoát YouTube.\n\nBạn có chắc chắn muốn thực hiện không?";
 
 "ManageCache" = "Quản lý bộ nhớ đệm";
 "ClearCacheAtStart" = "Xóa bộ nhớ đệm khi khởi động";

@@ -551,7 +551,7 @@
 "FollowMe" = "Seguimi su X";
 "SupportDevelopment" = "Supporta lo sviluppo";
 "DonateDesc" = "Il tuo supporto significa molto per me";
-"SupportDevelopmentDesc" = "Se ti piace YTPlus e vorresti supportare il suo sviluppo, puoi farlo utilizzando uno dei modi indicati di seguito.\nGrazie❤";
+"SupportDevelopmentDesc" = "Se ti piace YouTube Afterglow e vorresti supportare il suo sviluppo, puoi farlo utilizzando uno dei modi indicati di seguito.\nGrazie❤";
 "VisitGithub" = "Github Repository";
 "VisitGithubDesc" = "Metti una stella alla repo, richiedi una feature o segnala un problema";
 "VisitTelegram" = "Il mio canale Telegram";
@@ -587,7 +587,7 @@
 "PreImportMessage" = "Questa azione sostituirà le impostazioni correnti con quelle del file selezionato. Sicuro di voler continuare?";
 "ExportPreferences" = "Esporta impostazioni";
 "ResetSettings" = "Ripristina le impostazioni di default";
-"ResetMessage" = "Questa azione ripristina le impostazioni predefinite di YTPlus e chiude YouTube. Sicuro di voler continuare?";
+"ResetMessage" = "Questa azione ripristina le impostazioni predefinite di YouTube Afterglow e chiude YouTube. Sicuro di voler continuare?";
 
 "ManageCache" = "Gestione della cache";
 "ClearCacheAtStart" = "Cancella cache allo startup";

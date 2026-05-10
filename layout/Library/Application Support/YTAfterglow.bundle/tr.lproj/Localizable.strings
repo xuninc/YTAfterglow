@@ -551,7 +551,7 @@
 "FollowMe" = "Beni X'te takip edin";
 "SupportDevelopment" = "Gelişimi destekleyin";
 "DonateDesc" = "Desteğiniz benim için çok önemli";
-"SupportDevelopmentDesc" = "YTPlus'u beğendiyseniz ve gelişimini desteklemek isterseniz, aşağıdaki uygun yolları kullanarak destek olabilirsiniz.\nTeşekkürler❤";
+"SupportDevelopmentDesc" = "YouTube Afterglow'u beğendiyseniz ve gelişimini desteklemek isterseniz, aşağıdaki uygun yolları kullanarak destek olabilirsiniz.\nTeşekkürler❤";
 "VisitGithub" = "Github Havuzu";
 "VisitGithubDesc" = "Havuza yıldız verin, özellik isteyin veya sorun bildirin";
 "VisitTelegram" = "Telegram Kanalım";
@@ -587,7 +587,7 @@
 "PreImportMessage" = "Bu işlem, geçerli tercihlerin yerini seçilen dosyadaki tercihlerle değiştirecektir.\n\nDevam etmek istediğinizden emin misiniz?";
 "ExportPreferences" = "Tercihleri dışa aktar";
 "ResetSettings" = "Ayarları varsayılanlara döndür";
-"ResetMessage" = "Bu işlem YTPlus ayarlarını varsayılana sıfırlayacak ve YouTube'u kapatacaktır.\n\nDevam etmek istediğinizden emin misiniz?";
+"ResetMessage" = "Bu işlem YouTube Afterglow ayarlarını varsayılana sıfırlayacak ve YouTube'u kapatacaktır.\n\nDevam etmek istediğinizden emin misiniz?";
 
 "ManageCache" = "Önbelleği yönet";
 "ClearCacheAtStart" = "Başlangıçta önbelleği temizle";

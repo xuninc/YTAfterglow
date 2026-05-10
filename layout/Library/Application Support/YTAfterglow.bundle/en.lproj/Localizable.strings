@@ -8,12 +8,17 @@
 "SearchSettingsNoResults" = "No matching settings";
 "SearchSettingsNoResultsDesc" = "Try a broader word like player, overlay, or comments.";
 "SearchSettingsOpenFailed" = "That setting could not be opened right now.";
+"Typography" = "Typography";
+"AppFont" = "App font";
+"AppFontDesc" = "Applies the selected font across YouTube text. Auto keeps stock fonts unless Lite Mode is on.";
 "LiteMode" = "Lite Mode";
 "LiteModeDesc" = "Strips YouTube down to a calmer, subscription-first, bare-bones experience.";
 "LiteModeEnabledToast" = "Lite Mode On";
 "LiteModeDisabledToast" = "Lite Mode Off";
 "LiteModeSummaryOn" = "Minimal mode on";
 "LiteModeSummaryOff" = "Normal YouTube";
+"LiteCompactFeedVideoWidth" = "Lite feed video width";
+"LiteCompactFeedVideoWidthDesc" = "Scales Home and Subscriptions feed thumbnails from 25% to 100% width so the gray Lite background shows around them.";
 "Privacy" = "Privacy";
 
 /* Downloading options */
@@ -481,6 +486,8 @@
 "RemoveLabelsDesc" = "Removes text labels from the Tab bar buttons.";
 "RemoveIndicators" = "Remove tab indicators";
 "RemoveIndicatorsDesc" = "Removes notification indicators from the Tab bar.";
+"TwoRowTabBar" = "Two-row tab bar";
+"TwoRowTabBarDesc" = "Centers overflow tabs in a compact second row when more than five tabs are active.";
 "ReExplore" = "Restore Hype tab";
 "ReExploreDesc" = "Replaces the Shorts tab with the Hype tab.";
 "AddExplore" = "Add Hype tab";
@@ -499,7 +506,7 @@
 "HideLibraryFooter" = "Tab settings are also accessible by long-pressing the first tab in the tab bar.";
 "Warning" = "Warning";
 "AtLeastOneTab" = "At least two tabs must remain active";
-"TabsCountRestricted" = "Only up to six active tabs are allowed";
+"TabsCountRestricted" = "The active tab limit has been reached";
 
 /* Interface options */
 "Interface" = "Interface";
@@ -687,7 +694,7 @@
 "FollowMe" = "Follow me on X";
 "SupportDevelopment" = "Support development";
 "DonateDesc" = "Your support means a lot to me";
-"SupportDevelopmentDesc" = "If you like YTPlus and would like to support its development, you can do it using any of convenient ways below.\nThanks❤";
+"SupportDevelopmentDesc" = "If you like YouTube Afterglow and would like to support its development, you can do it using any of convenient ways below.\nThanks❤";
 "VisitGithub" = "Github repository";
 "VisitGithubDesc" = "Star the repo, request a feature or report issues";
 "VisitTelegram" = "My Telegram channel";
@@ -732,7 +739,7 @@
 "EnableAdvancedMode" = "Enable Advanced Mode";
 "KeepStandardMode" = "Keep Standard Mode";
 "ResetSettings" = "Restore default settings";
-"ResetMessage" = "This action will reset YTPlus settings to default and close YouTube.\n\nAre you sure you want to continue?";
+"ResetMessage" = "This action will reset YouTube Afterglow's settings to default and close YouTube.\n\nAre you sure you want to continue?";
 
 "ManageCache" = "Cache management";
 "ClearCacheAtStart" = "Clear cache on startup";
