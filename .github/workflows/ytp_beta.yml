@@ -107,12 +107,11 @@ jobs:
           done
           cyan -i youtube.ipa -o YTAfterglow_Beta.ipa -uwef $tweaks -n "${{ github.event.inputs.display_name }}" -b ${{ github.event.inputs.bundle_id }}
 
-      - name: Scrub, fix load paths, and sign FFmpegKit frameworks
+      - name: Fix load paths and sign FFmpegKit frameworks
         run: |
           mkdir -p ipa_contents
           unzip -q YTAfterglow_Beta.ipa -d ipa_contents
           APP_DIR=$(find ipa_contents/Payload -maxdepth 1 -name "*.app" -type d | head -1)
-          bash scripts/scrub_signing_artifacts.sh "$APP_DIR"
           bash scripts/fix_appex_bundle_ids.sh "$APP_DIR" "${{ github.event.inputs.bundle_id }}"
           bash scripts/fix_substrate_load_paths.sh "$APP_DIR"
           for fw in ffmpegkit libavcodec libavformat libavutil libavdevice libavfilter libswresample libswscale; do

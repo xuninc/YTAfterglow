@@ -26,8 +26,8 @@ Afterglow preferences live inside the YouTube app's own Settings screen.
 ## Project Maintenance
 
 - Run `scripts/maintenance_audit.sh` before releases to catch stale metadata and potential dead modules.
-- Run `scripts/scrub_signing_artifacts.sh <path-to-app>` to strip stale code signatures before re-signing.
 - Run `scripts/fix_substrate_load_paths.sh <path-to-app>` to normalize Substrate load paths for sideloaded builds.
+- Do not manually strip files after Cyan. Cyan handles the IPA injection/signing layout; extra file removal was legacy troubleshooting noise and is not part of the build process.
 
 ---
 
