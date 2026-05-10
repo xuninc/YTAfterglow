@@ -1915,7 +1915,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSArray *shortsUIKeys = @[@"hideShortsLogo", @"hideShortsSearch", @"hideShortsCamera", @"hideShortsMore", @"hideShortsSubscriptions", @"hideShortsLike", @"hideShortsDislike", @"hideShortsComments", @"hideShortsRemix", @"hideShortsShare", @"hideShortsAvatars", @"hideShortsThanks", @"hideShortsSource", @"hideShortsChannelName", @"hideShortsDescription", @"hideShortsAudioTrack", @"hideShortsPromoCards"];
     NSArray *downloadKeys = @[@"downloadPostActionMode", @"downloadRefreshMetadata", @"downloadAudioTrackMode", @"downloadAudioQualityMode", @"downloadPreferStableAudio", @"downloadIncludeAutoCaptions", @"downloadOfferTranslatedCaptions", @"downloadPickerFontScaleMode", @"downloadPickerFontFaceMode"];
     NSArray *feedToggleKeys = @[@"removePlayNext", @"removeWatchLaterMenu", @"removeSaveToPlaylistMenu", @"removeNotInterestedMenu", @"removeDontRecommendMenu", @"removeReportMenu"];
-    NSArray *feedKeys = [@[YTAGLiteModeCompactFeedVideoWidthKey] arrayByAddingObjectsFromArray:feedToggleKeys];
+    NSArray *feedKeys = feedToggleKeys;
     NSArray *toolKeys = @[@"copyVideoInfo", @"postManager", @"saveProfilePhoto", @"commentManager", @"fixAlbums", @"nativeShare", @"copyWithTimestamp"];
 
     YTSettingsSectionItem *searchSettings = [self pageItemWithTitle:ytag_localizedStringOrFallback(@"SearchSettings", @"Search Settings")
@@ -2654,9 +2654,6 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         }
         selectBlock:^BOOL (YTSettingsCell *cell, NSUInteger arg1) {
 	            NSMutableArray <YTSettingsSectionItem *> *feedRows = [@[
-	                [self themeSectionHeaderWithTitle:@"Lite Mode" description:@"Layout options that only apply while Lite Mode is enabled."],
-	                [self themeGlowNumberItemWithTitle:LOC(@"LiteCompactFeedVideoWidth") titleDescription:LOC(@"LiteCompactFeedVideoWidthDesc") key:YTAGLiteModeCompactFeedVideoWidthKey min:25 max:100 fallback:33 suffix:@"%" settingsVC:settingsViewController],
-	                space,
 	                [self switchWithTitle:@"RemovePlayNext" key:@"removePlayNext"],
 	                [self switchWithTitle:@"RemoveWatchLaterMenu" key:@"removeWatchLaterMenu"],
 	                [self switchWithTitle:@"RemoveSaveToPlaylistMenu" key:@"removeSaveToPlaylistMenu"],

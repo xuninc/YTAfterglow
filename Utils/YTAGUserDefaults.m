@@ -303,7 +303,6 @@ static NSUInteger YTAGMaximumActiveTabsCount(NSUserDefaults *defaults) {
         YTAGLiteModeEnabledKey: @NO,
         YTAGLiteModeDefaultThemeAppliedKey: @NO,
         YTAGLiteModeDefaultThemeVersionKey: @0,
-        YTAGLiteModeCompactFeedVideoWidthKey: @33,
         @"commentsHeaderMode": @0,
         @"muteButton": @YES,
         @"lockButton": @YES,

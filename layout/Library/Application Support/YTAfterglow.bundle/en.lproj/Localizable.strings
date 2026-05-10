@@ -17,8 +17,6 @@
 "LiteModeDisabledToast" = "Lite Mode Off";
 "LiteModeSummaryOn" = "Minimal mode on";
 "LiteModeSummaryOff" = "Normal YouTube";
-"LiteCompactFeedVideoWidth" = "Lite feed video width";
-"LiteCompactFeedVideoWidthDesc" = "Scales Home and Subscriptions feed thumbnails from 25% to 100% width so the gray Lite background shows around them.";
 "Privacy" = "Privacy";
 
 /* Downloading options */

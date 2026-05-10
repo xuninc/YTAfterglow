@@ -1589,7 +1589,6 @@ static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
     BOOL isCommentSurface = YTAGLiteModeShouldStyleCommentView(cell);
     if (!isCommentSurface) {
         YTAGLiteModeApplyBackgroundColor(cell);
-        YTAGLiteModeApplyCompactFeedLayout(cell);
         YTAGLiteModeApplyViewCleanup(cell);
     }
     if (isCommentSurface) {
@@ -1646,57 +1645,6 @@ static void ytagLiteModeCleanupCollectionCell(UICollectionViewCell *cell) {
             [self deleteItemsAtIndexPaths:@[indexPath]];
         } completion:nil];
     });
-}
-%end
-
-%hook YTElementsInlineMutedPlaybackView
-- (void)layoutSubviews {
-    %orig;
-    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
-}
-
-- (void)setInlineMutedPlaybackEnabled:(BOOL)enabled {
-    %orig;
-    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
-}
-
-- (void)setPlayerViewContainer:(id)container {
-    %orig;
-    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
-}
-%end
-
-%hook YTInlineMutedPlaybackWatchView
-- (void)setPlayerView:(id)playerView {
-    %orig;
-    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
-}
-
-- (void)restoreActivePlayerView:(id)playerView {
-    %orig;
-    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
-}
-
-- (void)setPlayerVisible:(BOOL)visible animated:(BOOL)animated {
-    %orig;
-    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
-}
-%end
-
-%hook YTInlineMutedPlaybackPlayerOverlayView
-- (void)layoutSubviews {
-    %orig;
-    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
-}
-
-- (void)playbackWillStart {
-    %orig;
-    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
-}
-
-- (void)playbackDidStart {
-    %orig;
-    YTAGLiteModeApplyCompactFeedPlaybackLayout((UIView *)self);
 }
 %end
 

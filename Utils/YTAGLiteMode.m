@@ -8,20 +8,15 @@ extern UIColor *themeColor(NSString *key);
 NSString *const YTAGLiteModeEnabledKey = @"liteModeEnabled";
 NSString *const YTAGLiteModeDefaultThemeAppliedKey = @"liteModeDefaultThemeApplied";
 NSString *const YTAGLiteModeDefaultThemeVersionKey = @"liteModeDefaultThemeVersion";
-NSString *const YTAGLiteModeCompactFeedVideoWidthKey = @"liteCompactFeedVideoWidth";
 NSString *const YTAGThemeFontModeKey = @"theme_fontMode";
+static NSString *const YTAGLiteThemeBackupValuesKey = @"liteModeThemeBackupValues";
+static NSString *const YTAGLiteThemeBackupMissingKeysKey = @"liteModeThemeBackupMissingKeys";
 static const NSInteger YTAGLiteModeCurrentThemeVersion = 2;
-static const NSInteger YTAGLiteDefaultCompactFeedVideoWidth = 33;
-static const NSInteger YTAGLiteMinimumCompactFeedVideoWidth = 25;
-static const NSInteger YTAGLiteMaximumCompactFeedVideoWidth = 100;
-static const void *YTAGLiteOriginalTransformKey = &YTAGLiteOriginalTransformKey;
 static const void *YTAGLiteCommentSurfaceTokenKey = &YTAGLiteCommentSurfaceTokenKey;
 static const void *YTAGLiteCommentSurfaceResultKey = &YTAGLiteCommentSurfaceResultKey;
 static const void *YTAGLiteCommentChromeTokenKey = &YTAGLiteCommentChromeTokenKey;
 static const void *YTAGLiteCollectionCleanResultKey = &YTAGLiteCollectionCleanResultKey;
 static const void *YTAGLiteViewCleanupTokenKey = &YTAGLiteViewCleanupTokenKey;
-static const void *YTAGLiteCompactFeedLayoutTokenKey = &YTAGLiteCompactFeedLayoutTokenKey;
-static const void *YTAGLiteCompactFeedPlaybackTokenKey = &YTAGLiteCompactFeedPlaybackTokenKey;
 static const void *YTAGLiteLabelStyleTokenKey = &YTAGLiteLabelStyleTokenKey;
 
 typedef NS_ENUM(NSInteger, YTAGThemeFontMode) {
@@ -69,6 +64,72 @@ static BOOL YTAGLiteThemeLooksLikeV1BlackPreset(YTAGUserDefaults *defaults) {
         YTAGLiteStoredColorMatches(defaults, @"theme_background", [UIColor colorWithWhite:0.015 alpha:1.0]) &&
         YTAGLiteStoredColorMatches(defaults, @"theme_navBar", [UIColor colorWithWhite:0.055 alpha:1.0]) &&
         YTAGLiteStoredColorMatches(defaults, @"theme_accent", [UIColor colorWithWhite:1.0 alpha:1.0]);
+}
+
+static NSArray<NSString *> *YTAGLiteThemeKeys(void) {
+    return @[
+        @"theme_overlayButtons", @"theme_tabBarIcons",
+        @"theme_seekBar", @"theme_seekBarLive",
+        @"theme_seekBarScrubber", @"theme_seekBarScrubberLive",
+        @"theme_background", @"theme_textPrimary", @"theme_textSecondary",
+        @"theme_navBar", @"theme_accent",
+        @"theme_gradientStart", @"theme_gradientEnd",
+        @"theme_glowEnabled", @"theme_glowPivot", @"theme_glowOverlay",
+        @"theme_glowScrubber", @"theme_glowSeekBar",
+        @"theme_glowStrength", @"theme_glowStrengthMode",
+        @"theme_glowStrengthCustom", @"theme_glowOpacity",
+        @"theme_glowRadius", @"theme_glowLayers", @"theme_glowColor",
+        @"seekBarGradient", YTAGThemeFontModeKey
+    ];
+}
+
+static void YTAGLiteModeSaveThemeBackupIfNeeded(YTAGUserDefaults *defaults) {
+    if ([defaults objectForKey:YTAGLiteThemeBackupValuesKey] ||
+        [defaults objectForKey:YTAGLiteThemeBackupMissingKeysKey]) {
+        return;
+    }
+
+    NSMutableDictionary<NSString *, id> *values = [NSMutableDictionary dictionary];
+    NSMutableArray<NSString *> *missingKeys = [NSMutableArray array];
+
+    for (NSString *key in YTAGLiteThemeKeys()) {
+        id value = [defaults objectForKey:key];
+        if (value) {
+            values[key] = value;
+        } else {
+            [missingKeys addObject:key];
+        }
+    }
+
+    [defaults setObject:values forKey:YTAGLiteThemeBackupValuesKey];
+    [defaults setObject:missingKeys forKey:YTAGLiteThemeBackupMissingKeysKey];
+}
+
+static void YTAGLiteModeRestoreThemeBackupIfNeeded(YTAGUserDefaults *defaults) {
+    NSDictionary<NSString *, id> *values = [defaults objectForKey:YTAGLiteThemeBackupValuesKey];
+    NSArray<NSString *> *missingKeys = [defaults objectForKey:YTAGLiteThemeBackupMissingKeysKey];
+    if (![values isKindOfClass:[NSDictionary class]] && ![missingKeys isKindOfClass:[NSArray class]]) return;
+
+    for (NSString *key in YTAGLiteThemeKeys()) {
+        [defaults removeObjectForKey:key];
+    }
+
+    if ([missingKeys isKindOfClass:[NSArray class]]) {
+        for (NSString *key in missingKeys) {
+            if ([key isKindOfClass:[NSString class]]) [defaults removeObjectForKey:key];
+        }
+    }
+
+    if ([values isKindOfClass:[NSDictionary class]]) {
+        [values enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL *stop) {
+            if ([key isKindOfClass:[NSString class]] && value) [defaults setObject:value forKey:key];
+        }];
+    }
+
+    [defaults removeObjectForKey:YTAGLiteThemeBackupValuesKey];
+    [defaults removeObjectForKey:YTAGLiteThemeBackupMissingKeysKey];
+    [defaults removeObjectForKey:YTAGLiteModeDefaultThemeAppliedKey];
+    [defaults removeObjectForKey:YTAGLiteModeDefaultThemeVersionKey];
 }
 
 static NSSet<NSString *> *YTAGLiteForcedTrueKeys(void) {
@@ -161,8 +222,22 @@ void YTAGLiteModeApplyDefaultThemeIfNeeded(void) {
 
 void YTAGSetLiteModeEnabled(BOOL enabled) {
     YTAGUserDefaults *defaults = [YTAGUserDefaults standardUserDefaults];
+    BOOL wasEnabled = [defaults boolForKey:YTAGLiteModeEnabledKey];
+
+    if (enabled && !wasEnabled) {
+        YTAGLiteModeSaveThemeBackupIfNeeded(defaults);
+        [defaults removeObjectForKey:YTAGLiteModeDefaultThemeAppliedKey];
+        [defaults removeObjectForKey:YTAGLiteModeDefaultThemeVersionKey];
+    }
+
     [defaults setBool:enabled forKey:YTAGLiteModeEnabledKey];
-    if (enabled) YTAGLiteModeApplyDefaultThemeIfNeeded();
+
+    if (enabled) {
+        YTAGLiteModeApplyDefaultThemeIfNeeded();
+    } else if (wasEnabled) {
+        YTAGLiteModeRestoreThemeBackupIfNeeded(defaults);
+    }
+
     [defaults synchronize];
 }
 
@@ -172,13 +247,6 @@ NSArray<NSString *> *YTAGLiteModeActiveTabs(void) {
 
 NSString *YTAGLiteModeStartupTab(void) {
     return @"FEwhat_to_watch";
-}
-
-CGFloat YTAGLiteModeCompactFeedVideoScale(void) {
-    if (!YTAGLiteModeEnabled()) return 1.0;
-    NSInteger width = [[YTAGUserDefaults standardUserDefaults] integerForKey:YTAGLiteModeCompactFeedVideoWidthKey];
-    width = MIN(MAX(width > 0 ? width : YTAGLiteDefaultCompactFeedVideoWidth, YTAGLiteMinimumCompactFeedVideoWidth), YTAGLiteMaximumCompactFeedVideoWidth);
-    return (CGFloat)width / 100.0;
 }
 
 static UIFontWeight YTAGLiteModeWeightForFont(UIFont *font) {
@@ -529,7 +597,10 @@ BOOL YTAGLiteModeShouldPruneFeedObject(id object) {
         @"shorts", @"reel", @"emlshortsgrid", @"emlshortsshelf", @"shortsshelf",
         @"promoted", @"promotion", @"sponsor", @"sponsored", @"commerce", @"shoppingrenderer",
         @"shoppingpanel", @"productcarousel", @"productengagementpanel", @"productitem",
-        @"merch", @"brandpromo", @"feedad", @"adrenderer", @"adslot",
+        @"productlist", @"productshelf", @"productsinvideo", @"shoppingitem", @"shoppingitemlist",
+        @"shoppingcompanion", @"shoppingdrawer", @"merch", @"merchandise", @"merchandiseshelf",
+        @"merchandiseitem", @"channelstore", @"shoppingstore", @"storefront", @"storeshelf",
+        @"storebutton", @"storeitem", @"brandpromo", @"feedad", @"adrenderer", @"adslot",
         @"community", @"backstage", @"backstagepost", @"postrenderer", @"pollrenderer", @"storyrenderer",
         @"breakingnews", @"breakingnewsshelf", @"newsshelf", @"trendingrenderer", @"hype",
         @"suggestedvideo", @"watchnext", @"upnext", @"autoplayrenderer", @"relatedvideo",
@@ -546,6 +617,9 @@ BOOL YTAGLiteModeShouldRemoveFeedView(UIView *view) {
         @"shorts", @"reel", @"promoted", @"adrenderer", @"advert",
         @"backstagepost", @"postrenderer", @"community", @"pollrenderer", @"storyrenderer",
         @"chipcloud", @"filterchip", @"productcarousel", @"shoppingrenderer",
+        @"shoppingitem", @"shoppingitemlist", @"shoppingcompanion", @"shoppingdrawer",
+        @"merchandise", @"merchandiseshelf", @"merchandiseitem", @"channelstore",
+        @"shoppingstore", @"storefront", @"storeshelf", @"storebutton", @"storeitem",
         @"breakingnews", @"trendingrenderer", @"mixplaylist", @"radio"
     ]);
 }
@@ -628,168 +702,6 @@ void YTAGLiteModeApplyBackgroundColor(UIView *view) {
     }
 }
 
-static CGFloat YTAGLiteCompactFeedCandidateScore(UIView *view, CGFloat rootWidth, NSUInteger depth) {
-    if (!view || view.hidden || view.alpha < 0.05 || rootWidth < 240.0) return 0.0;
-    if ([view isKindOfClass:[UILabel class]] ||
-        [view isKindOfClass:[UIButton class]] ||
-        [view isKindOfClass:[UIScrollView class]] ||
-        [view isKindOfClass:[UICollectionViewCell class]]) {
-        return 0.0;
-    }
-
-    CGRect frame = view.frame;
-    CGRect bounds = view.bounds;
-    CGFloat width = MAX(CGRectGetWidth(frame), CGRectGetWidth(bounds));
-    CGFloat height = MAX(CGRectGetHeight(frame), CGRectGetHeight(bounds));
-    if (width < rootWidth * 0.50 || height < 56.0 || height <= 0.0) return 0.0;
-    if (CGRectGetMinY(frame) > 230.0) return 0.0;
-
-    CGFloat aspect = width / height;
-    if (aspect < 1.05 || aspect > 2.80) return 0.0;
-
-    NSString *signature = YTAGLiteViewSignature(view);
-    if (YTAGLiteSignatureContainsAny(signature, @[
-        @"avatar", @"profile", @"channel", @"button", @"icon", @"badge", @"menu",
-        @"comment", @"comments", @"reply", @"composer", @"textfield", @"textview"
-    ])) {
-        return 0.0;
-    }
-
-    NSString *className = NSStringFromClass(view.class).lowercaseString;
-    BOOL hasStrongMarker = YTAGLiteSignatureContainsAny(signature, @[@"thumbnail", @"media", @"player", @"image"]) ||
-        [className containsString:@"image"] ||
-        [className containsString:@"thumbnail"] ||
-        [className containsString:@"media"] ||
-        [className containsString:@"player"] ||
-        [className containsString:@"inlineplayback"] ||
-        [className containsString:@"inlinemutedplayback"];
-    if (!hasStrongMarker) return 0.0;
-
-    CGFloat score = width * height;
-    score *= 1.35;
-    score -= CGRectGetMinY(frame) * rootWidth;
-    score += depth * 20.0;
-    return MAX(score, 1.0);
-}
-
-static void YTAGLiteApplyCompactTransform(UIView *view, CGFloat scale) {
-    NSValue *storedTransform = objc_getAssociatedObject(view, YTAGLiteOriginalTransformKey);
-    if (!storedTransform) {
-        storedTransform = [NSValue valueWithCGAffineTransform:view.transform];
-        objc_setAssociatedObject(view, YTAGLiteOriginalTransformKey, storedTransform, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-
-    CGAffineTransform original = storedTransform.CGAffineTransformValue;
-    if (scale >= 0.995) {
-        view.transform = original;
-        view.layer.cornerRadius = 0.0;
-        view.clipsToBounds = NO;
-        return;
-    }
-
-    view.transform = CGAffineTransformScale(original, scale, scale);
-    view.layer.cornerRadius = 6.0;
-    view.clipsToBounds = YES;
-}
-
-static UIView *YTAGLiteBestCompactFeedThumbnailCandidate(UIView *view, CGFloat rootWidth, NSUInteger depth, CGFloat *bestScore) {
-    if (!view || depth == 0) return nil;
-
-    UIView *bestView = nil;
-    CGFloat score = YTAGLiteCompactFeedCandidateScore(view, rootWidth, depth);
-    if (score > *bestScore) {
-        *bestScore = score;
-        bestView = view;
-    }
-
-    for (UIView *subview in [view.subviews copy]) {
-        UIView *candidate = YTAGLiteBestCompactFeedThumbnailCandidate(subview, rootWidth, depth - 1, bestScore);
-        if (candidate) bestView = candidate;
-    }
-    return bestView;
-}
-
-static BOOL YTAGLiteApplyCompactFeedLayoutInTree(UIView *view, CGFloat rootWidth, NSUInteger depth) {
-    CGFloat bestScore = 0.0;
-    UIView *thumbnail = YTAGLiteBestCompactFeedThumbnailCandidate(view, rootWidth, depth, &bestScore);
-    if (!thumbnail) return NO;
-
-    YTAGLiteApplyCompactTransform(thumbnail, YTAGLiteModeCompactFeedVideoScale());
-    return YES;
-}
-
-void YTAGLiteModeApplyCompactFeedLayout(UIView *root) {
-    if (!YTAGLiteModeEnabled() || !root) return;
-    CGFloat scale = YTAGLiteModeCompactFeedVideoScale();
-    NSString *token = [NSString stringWithFormat:@"%@|%.3f", YTAGLiteViewStructureToken(root), scale];
-    NSString *cachedToken = objc_getAssociatedObject(root, YTAGLiteCompactFeedLayoutTokenKey);
-    if ([cachedToken isEqualToString:token]) return;
-
-    if (YTAGLiteModeShouldStyleCommentView(root)) {
-        objc_setAssociatedObject(root, YTAGLiteCompactFeedLayoutTokenKey, token, OBJC_ASSOCIATION_COPY_NONATOMIC);
-        return;
-    }
-
-    CGFloat rootWidth = CGRectGetWidth(root.bounds);
-    if (rootWidth <= 0.0) rootWidth = UIScreen.mainScreen.bounds.size.width;
-    YTAGLiteApplyCompactFeedLayoutInTree(root, rootWidth, 7);
-    objc_setAssociatedObject(root, YTAGLiteCompactFeedLayoutTokenKey, [NSString stringWithFormat:@"%@|%.3f", YTAGLiteViewStructureToken(root), scale], OBJC_ASSOCIATION_COPY_NONATOMIC);
-}
-
-static BOOL YTAGLiteViewIsInlinePlaybackSurface(UIView *view) {
-    if (!view) return NO;
-    NSString *className = YTAGLiteNormalizedString(NSStringFromClass(view.class));
-    return YTAGLiteSignatureContainsAny(className, @[
-        @"YTElementsInlineMutedPlaybackView",
-        @"YTInlineMutedPlaybackWatchView",
-        @"YTInlineMutedPlaybackPlayerOverlayView",
-        @"YTGLMediaPlayerView"
-    ]);
-}
-
-static UIView *YTAGLiteCollectionViewForDescendant(UIView *view) {
-    for (UIView *candidate = view; candidate; candidate = candidate.superview) {
-        if ([candidate isKindOfClass:[UICollectionView class]]) return candidate;
-    }
-    return nil;
-}
-
-static UIView *YTAGLiteCollectionCellForDescendant(UIView *view) {
-    for (UIView *candidate = view; candidate; candidate = candidate.superview) {
-        if ([candidate isKindOfClass:[UICollectionViewCell class]]) return candidate;
-        NSString *className = YTAGLiteNormalizedString(NSStringFromClass(candidate.class));
-        if ([className containsString:@"collectionviewcell"] ||
-            [className containsString:@"ascollectionviewcell"]) {
-            return candidate;
-        }
-    }
-    return nil;
-}
-
-void YTAGLiteModeApplyCompactFeedPlaybackLayout(UIView *view) {
-    if (!YTAGLiteModeEnabled() || !YTAGLiteViewIsInlinePlaybackSurface(view)) return;
-
-    UIView *cell = YTAGLiteCollectionCellForDescendant(view);
-    if (!cell || YTAGLiteModeShouldStyleCommentView(cell)) return;
-
-    UIView *collectionView = YTAGLiteCollectionViewForDescendant(view);
-    if (collectionView && !YTAGLiteModeShouldCleanCollectionView(collectionView)) return;
-
-    CGFloat scale = YTAGLiteModeCompactFeedVideoScale();
-    NSString *token = [NSString stringWithFormat:@"%@|%.0fx%.0f|%.3f",
-                       YTAGLiteViewStructureToken(view),
-                       round(CGRectGetWidth(view.bounds)),
-                       round(CGRectGetHeight(view.bounds)),
-                       scale];
-    NSString *cachedToken = objc_getAssociatedObject(view, YTAGLiteCompactFeedPlaybackTokenKey);
-    if ([cachedToken isEqualToString:token]) return;
-
-    YTAGLiteApplyCompactTransform(view, scale);
-    YTAGLiteModeApplyBackgroundColor(cell);
-    YTAGLiteModeApplyCompactFeedLayout(cell);
-    objc_setAssociatedObject(view, YTAGLiteCompactFeedPlaybackTokenKey, token, OBJC_ASSOCIATION_COPY_NONATOMIC);
-}
-
 static BOOL YTAGLiteShouldHideSubview(UIView *view) {
     NSString *signature = YTAGLiteViewSignature(view);
     if (signature.length == 0) return NO;
@@ -801,7 +713,10 @@ static BOOL YTAGLiteShouldHideSubview(UIView *view) {
     return YTAGLiteSignatureContainsAny(signature, @[
         @"like", @"dislike", @"share", @"save", @"remix", @"clip",
         @"badge", @"menu", @"more", @"overflow",
-        @"chip", @"richshelf", @"shortsshelf", @"promo", @"productcarousel", @"shoppingrenderer"
+        @"chip", @"richshelf", @"shortsshelf", @"promo", @"productcarousel", @"shoppingrenderer",
+        @"shoppingitem", @"shoppingitemlist", @"shoppingcompanion", @"shoppingdrawer",
+        @"merchandise", @"merchandiseshelf", @"merchandiseitem", @"channelstore",
+        @"shoppingstore", @"storefront", @"storeshelf", @"storebutton", @"storeitem"
     ]);
 }
 
