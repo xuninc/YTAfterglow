@@ -428,7 +428,7 @@
 "HideShortsAudioTrackDesc" = "Hides the audio track info from Shorts.";
 
 /* Tab bar options */
-"Tabbar" = "Tab bar";
+"Tabbar" = "Tabs";
 "Startup" = "Startup page";
 "FEwhat_to_watch" = "Home";
 "FEexplore" = "Explore";
@@ -484,8 +484,8 @@
 "RemoveLabelsDesc" = "Removes text labels from the Tab bar buttons.";
 "RemoveIndicators" = "Remove tab indicators";
 "RemoveIndicatorsDesc" = "Removes notification indicators from the Tab bar.";
-"TwoRowTabBar" = "Two-row tab bar";
-"TwoRowTabBarDesc" = "Centers overflow tabs in a compact second row when more than five tabs are active.";
+"TwoRowTabBar" = "Bonus tab row";
+"TwoRowTabBarDesc" = "Shows extra active tabs in a compact second row beneath the main bar.";
 "ReExplore" = "Restore Hype tab";
 "ReExploreDesc" = "Replaces the Shorts tab with the Hype tab.";
 "AddExplore" = "Add Hype tab";
@@ -499,12 +499,12 @@
 "HideLibraryTab" = "Hide Library tab";
 "HideLibraryTabDesc" = "Hides the Library tab from the Tab bar.";
 
-"ActiveTabs" = "Active tabs";
-"InactiveTabs" = "Inactive tabs";
-"HideLibraryFooter" = "Tab settings are also accessible by long-pressing the first tab in the tab bar.";
+"ActiveTabs" = "Shown tabs";
+"InactiveTabs" = "Hidden tabs";
+"HideLibraryFooter" = "Tip: long-press the tab bar to open Afterglow settings.";
 "Warning" = "Warning";
-"AtLeastOneTab" = "At least two tabs must remain active";
-"TabsCountRestricted" = "The active tab limit has been reached";
+"AtLeastOneTab" = "At least two tabs must stay shown";
+"TabsCountRestricted" = "The shown tab limit has been reached";
 
 /* Interface options */
 "Interface" = "Interface";

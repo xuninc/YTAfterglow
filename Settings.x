@@ -205,7 +205,7 @@ static UIColor *YTAGAfterglowTintColor(void) {
 }
 
 static NSUInteger ytag_maxActiveTabCount(void) {
-    return ytagBool(@"twoRowTabBar") ? 10 : 6;
+    return ytagBool(@"twoRowTabBar") ? [YTAGUserDefaults defaultActiveTabs].count : 6;
 }
 
 static UIViewController *ytag_viewControllerForResponder(UIResponder *responder) {
@@ -832,9 +832,9 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     if (section == 0) {
-        return [NSString stringWithFormat:@"Drag to reorder your active tabs or move them down to disable them. Keep between 2 and %lu active tabs.", (unsigned long)ytag_maxActiveTabCount()];
+        return [NSString stringWithFormat:@"Drag to reorder. Move a tab to Hidden Tabs to remove it from the bar. Keep 2 to %lu tabs shown.", (unsigned long)ytag_maxActiveTabCount()];
     }
-    return @"Drag a tab into Active Tabs to enable it, or tap a row to add it to the end.";
+    return @"Drag a tab into Shown Tabs, or tap it to add it to the end.";
 }
 
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -954,7 +954,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSString *tabId = indexPath.section == 0 ? self.activeTabs[indexPath.row] : self.inactiveTabs[indexPath.row];
     cell.textLabel.text = self.tabNames[tabId] ?: tabId;
     cell.textLabel.textColor = [UIColor labelColor];
-    cell.detailTextLabel.text = indexPath.section == 0 ? @"Visible in the pivot bar" : @"Drag into Active Tabs to enable";
+    cell.detailTextLabel.text = indexPath.section == 0 ? @"Shown in the tab bar" : @"Hidden from the tab bar";
     cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
     cell.imageView.image = [self ytag_imageForTabId:tabId];
     cell.imageView.tintColor = YTAGAfterglowTintColor();
@@ -1807,9 +1807,9 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     }
 
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"OpaqueBar", @"RemoveLabels", @"RemoveIndicators", @"TwoRowTabBar"] path:@[interfaceTitle, tabbarTitle] aliasesByKey:@{
-        @"TwoRowTabBar": @[@"two row", @"second row", @"all tabs", @"pivot overflow"]
+        @"TwoRowTabBar": @[@"bonus row", @"two row", @"second row", @"all tabs", @"pivot overflow"]
     }];
-    [entries addObject:[self ytag_searchEntryWithTitle:@"Manage Tabs" description:@"Drag tabs between active and inactive sections, or tap a row to toggle it." path:@[interfaceTitle, tabbarTitle] targetTitle:@"Manage Tabs" aliases:@[@"tab editor", @"reorder tabs"]]];
+    [entries addObject:[self ytag_searchEntryWithTitle:@"Customize Tabs" description:@"Choose which tabs are shown and drag them into the order you want." path:@[interfaceTitle, tabbarTitle] targetTitle:@"Customize Tabs" aliases:@[@"manage tabs", @"tab editor", @"reorder tabs"]]];
 
     [entries addObject:[self ytag_searchEntryWithTitle:LOC(@"Startup") description:@"Choose which active tab opens first." path:@[interfaceTitle] targetTitle:LOC(@"Startup") aliases:@[@"startup tab", @"launch tab"]]];
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"StartupAnimation", @"FloatingKeyboard"] path:@[interfaceTitle] aliasesByKey:@{
@@ -2019,7 +2019,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                 }]];
 
             [rows addObject:[self pageItemWithTitle:LOC(@"Tabbar")
-                titleDescription:@"Visible tabs, labels, indicators, and bar styling."
+                titleDescription:@"Choose your tabs and tune how the bottom bar looks."
                 summary:^NSString *() {
                     return [NSString stringWithFormat:@"%lu tabs", (unsigned long)[[YTAGUserDefaults standardUserDefaults] currentActiveTabs].count];
                 }
@@ -2029,10 +2029,10 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                     [tabRows addObject:[self switchWithTitle:@"RemoveLabels" key:@"removeLabels"]];
                     [tabRows addObject:[self switchWithTitle:@"RemoveIndicators" key:@"removeIndicators"]];
                     [tabRows addObject:[self switchWithTitle:@"TwoRowTabBar" key:@"twoRowTabBar"]];
-	                    [tabRows addObject:[self pageItemWithTitle:@"Manage Tabs"
-	                        titleDescription:@"Drag tabs between active and inactive sections, or tap a row to toggle it."
+	                    [tabRows addObject:[self pageItemWithTitle:@"Customize Tabs"
+                        titleDescription:@"Choose which tabs are shown and drag them into the order you want."
                         summary:^NSString *() {
-                            return [NSString stringWithFormat:@"%lu active", (unsigned long)[[YTAGUserDefaults standardUserDefaults] currentActiveTabs].count];
+                            return [NSString stringWithFormat:@"%lu shown", (unsigned long)[[YTAGUserDefaults standardUserDefaults] currentActiveTabs].count];
                         }
                         selectBlock:^BOOL (YTSettingsCell *manageCell, NSUInteger manageArg1) {
                             YTAGTabBarEditorController *editor = [[YTAGTabBarEditorController alloc] initWithSettingsViewController:settingsViewController
