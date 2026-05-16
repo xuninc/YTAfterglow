@@ -7,7 +7,6 @@
 static NSString *const kDefaultsSuiteName = @"afterglow.vault";
 static NSString *const kActiveTabsKey = @"activeTabs";
 static NSString *const kStartupTabKey = @"startupTab";
-static NSString *const kAfterglowFeedDensityKey = @"afterglowFeedDensity";
 static NSString *const kThemeMigrationVersionKey = @"themePresetMigrationVersion";
 static NSString *const kSettingsMigrationVersionKey = @"settingsMigrationVersion";
 static NSString *const kPreferencesExportFormat = @"YTAfterglowPreferences";
@@ -141,7 +140,7 @@ static NSString *YTAGCanonicalTabId(NSString *tabId) {
 }
 
 static NSArray<NSString *> *YTAGAllowedTabs(void) {
-    return @[@"FEwhat_to_watch", @"FEafterglow", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
+    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
 }
 
 static NSUInteger YTAGMaximumActiveTabsCount(NSUserDefaults *defaults) {
@@ -249,15 +248,6 @@ static void YTAGResetBundledStandardUserDefaults(void) {
     return startupTab;
 }
 
-- (YTAGAfterglowFeedDensity)currentAfterglowFeedDensity {
-    NSInteger value = [self integerForKey:kAfterglowFeedDensityKey];
-    if (value != YTAGAfterglowFeedDensityCompact && value != YTAGAfterglowFeedDensityMini) {
-        value = YTAGAfterglowFeedDensityCompact;
-        [super setInteger:value forKey:kAfterglowFeedDensityKey];
-    }
-    return (YTAGAfterglowFeedDensity)value;
-}
-
 - (void)reset {
     [self removePersistentDomainForName:kDefaultsSuiteName];
     [self registerDefaults];
@@ -325,7 +315,6 @@ static void YTAGResetBundledStandardUserDefaults(void) {
         @"cellQualityIndex": @0,
         kActiveTabsKey: [YTAGUserDefaults defaultActiveTabs],
         kStartupTabKey: @"FEwhat_to_watch",
-        kAfterglowFeedDensityKey: @(YTAGAfterglowFeedDensityCompact),
         @"frostedPivot": @YES,
         @"twoRowTabBar": @YES,
         @"theme_glowPivot": @YES,
@@ -453,21 +442,11 @@ static void YTAGResetBundledStandardUserDefaults(void) {
         }
     }
 
-    if (recordedVersion < 6) {
-        NSMutableArray<NSString *> *tabs = [[self currentActiveTabs] mutableCopy];
-        if (![tabs containsObject:@"FEafterglow"] && tabs.count < YTAGMaximumActiveTabsCount(self)) {
-            NSUInteger insertIndex = [tabs containsObject:@"FEwhat_to_watch"] ? [tabs indexOfObject:@"FEwhat_to_watch"] + 1 : 1;
-            if (insertIndex > tabs.count) insertIndex = tabs.count;
-            [tabs insertObject:@"FEafterglow" atIndex:insertIndex];
-            [self setActiveTabs:tabs];
-        }
-    }
-
     [self setInteger:kCurrentSettingsMigrationVersion forKey:kSettingsMigrationVersionKey];
 }
 
 + (NSArray<NSString *> *)defaultActiveTabs {
-    return @[@"FEwhat_to_watch", @"FEafterglow", @"FEshorts", @"FEsubscriptions", @"FElibrary"];
+    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary"];
 }
 
 + (void)resetUserDefaults {

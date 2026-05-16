@@ -431,7 +431,6 @@
 "Tabbar" = "Tab bar";
 "Startup" = "Startup page";
 "FEwhat_to_watch" = "Home";
-"FEafterglow" = "Afterglow";
 "FEexplore" = "Explore";
 "FEshorts" = "Shorts";
 "FEsubscriptions" = "Subscriptions";
@@ -502,12 +501,6 @@
 
 "ActiveTabs" = "Active tabs";
 "InactiveTabs" = "Inactive tabs";
-"AfterglowFeed" = "Afterglow Feed";
-"AfterglowFeedDesc" = "Tune the compact all-in-one feed behind the Afterglow tab.";
-"AfterglowFeedDensity" = "Afterglow Feed Density";
-"AfterglowFeedDensityDesc" = "Compact is readable. Mini fits more videos per row.";
-"AfterglowFeedDensityCompact" = "Compact";
-"AfterglowFeedDensityMini" = "Mini";
 "HideLibraryFooter" = "Tab settings are also accessible by long-pressing the first tab in the tab bar.";
 "Warning" = "Warning";
 "AtLeastOneTab" = "At least two tabs must remain active";

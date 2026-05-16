@@ -1,5 +1,4 @@
 #import <Foundation/Foundation.h>
-#import "../UI/YTAGAfterglowFeedModels.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -10,7 +9,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSString *> *)currentActiveTabs;
 - (void)setActiveTabs:(NSArray<NSString *> *)tabs;
 - (NSString *)currentStartupTab;
-- (YTAGAfterglowFeedDensity)currentAfterglowFeedDensity;
 
 - (void)reset;
 - (nullable NSData *)exportPreferencesDataWithError:(NSError **)error;

@@ -1,6 +1,4 @@
 #import "YTAfterglow.h"
-#import "UI/YTAGAfterglowFeedStore.h"
-#import "UI/YTAGAfterglowFeedViewController.h"
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -18,37 +16,6 @@ static const void *kYTAGShortsOriginalAlphaKey = &kYTAGShortsOriginalAlphaKey;
 static const void *kYTAGShortsOriginalInteractionKey = &kYTAGShortsOriginalInteractionKey;
 static BOOL ytagDidScheduleAdvancedModePrompt = NO;
 static id ytagAdvancedModePromptObserver = nil;
-static NSString *sYTAGAfterglowFeedSourceIdentifier = @"home";
-static BOOL sYTAGAfterglowFeedPrimeInProgress = NO;
-static __weak YTPivotBarViewController *sYTAGLivePivotBarController = nil;
-static NSMutableSet<NSString *> *sYTAGSourcesInFlight = nil;
-
-static BOOL ytagIsAfterglowPivotIdentifier(NSString *pivotIdentifier) {
-    return [pivotIdentifier isKindOfClass:[NSString class]] && [pivotIdentifier isEqualToString:@"FEafterglow"];
-}
-
-static void ytagRememberAfterglowFeedSourceForPivot(NSString *pivotIdentifier) {
-    if (![pivotIdentifier isKindOfClass:[NSString class]] || pivotIdentifier.length == 0) return;
-    if (ytagIsAfterglowPivotIdentifier(pivotIdentifier)) return;
-    if ([pivotIdentifier isEqualToString:@"FEsubscriptions"]) {
-        sYTAGAfterglowFeedSourceIdentifier = @"subscriptions";
-    } else if ([pivotIdentifier isEqualToString:@"FEshorts"]) {
-        sYTAGAfterglowFeedSourceIdentifier = @"shorts";
-    } else if ([pivotIdentifier isEqualToString:@"FEhistory"]) {
-        sYTAGAfterglowFeedSourceIdentifier = @"history";
-    } else if ([pivotIdentifier isEqualToString:@"FEwhat_to_watch"]) {
-        sYTAGAfterglowFeedSourceIdentifier = @"home";
-    }
-}
-
-static NSString *YTAGAfterglowPrimeSourcePivotId(NSString *sourceIdentifier) {
-    if ([sourceIdentifier isEqualToString:@"subscriptions"]) return @"FEsubscriptions";
-    if ([sourceIdentifier isEqualToString:@"shorts"]) return @"FEshorts";
-    if ([sourceIdentifier isEqualToString:@"history"]) return @"FEhistory";
-    // FEhype_leaderboard kept as fallback mapping for legacy callers.
-    if ([sourceIdentifier isEqualToString:@"hype"]) return @"FEhype_leaderboard";
-    return @"FEwhat_to_watch";
-}
 
 static NSString *ytagNormalizedShortsString(NSString *string) {
     if (string.length == 0) return @"";
@@ -510,8 +477,6 @@ static BOOL canRememberLoopMode = NO;
         }];
         [contentsArray removeObjectsAtIndexes:removeIndexes];
     }
-
-    [[YTAGAfterglowFeedStore sharedStore] recordSectionListModel:model sourceIdentifier:sYTAGAfterglowFeedSourceIdentifier];
 
     %orig;
 }
@@ -2330,9 +2295,6 @@ static NSString *ytagPivotId(YTIPivotBarSupportedRenderers *r) {
 }
 
 static NSString *ytagBrowseIdForTabId(NSString *tabId) {
-    if ([tabId isEqualToString:@"FEafterglow"]) {
-        return @"FEwhat_to_watch";
-    }
     if ([tabId isEqualToString:@"FEtrending"] || [tabId isEqualToString:@"FEexplore"]) {
         return @"FEhype_leaderboard";
     }
@@ -2374,7 +2336,6 @@ static NSString *ytagPivotIdentifierForRendererObject(id renderer) {
 }
 
 static int ytagIconTypeForTabId(NSString *tabId) {
-    if ([tabId isEqualToString:@"FEafterglow"]) return 65;
     if ([tabId isEqualToString:@"FEhype_leaderboard"]) return 67;
     if ([tabId isEqualToString:@"FEhistory"]) return 876;
     if ([tabId isEqualToString:@"VLWL"]) return 877;
@@ -2618,7 +2579,6 @@ static CGRect ytagRaisedTwoRowPivotFrame(YTPivotBarView *pivotBar, CGRect frame)
 static NSString *ytagTwoRowSymbolNameForTabId(NSString *tabId) {
     if (ytagTwoRowIsSettingsButton(tabId)) return @"gearshape.fill";
     if ([tabId isEqualToString:@"FEwhat_to_watch"]) return @"house.fill";
-    if ([tabId isEqualToString:@"FEafterglow"]) return @"square.grid.2x2.fill";
     if ([tabId isEqualToString:@"FEshorts"]) return @"play.square.fill";
     if ([tabId isEqualToString:@"FEsubscriptions"]) return @"play.rectangle.on.rectangle.fill";
     if ([tabId isEqualToString:@"FElibrary"]) return @"books.vertical.fill";
@@ -2648,59 +2608,14 @@ static UIImage *ytagTwoRowImageForTabId(NSString *tabId, BOOL selected) {
     return [[UIImage systemImageNamed:ytagTwoRowSymbolNameForTabId(tabId) withConfiguration:config] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
 }
 
-static UIButton *ytagNativePivotNavigationButton(UIView *itemView) {
-    if (!itemView) return nil;
-    @try {
-        if ([itemView respondsToSelector:@selector(navigationButton)]) {
-            id button = ((id (*)(id, SEL))objc_msgSend)(itemView, @selector(navigationButton));
-            return [button isKindOfClass:[UIButton class]] ? button : nil;
-        }
-        id button = [itemView valueForKey:@"navigationButton"];
-        return [button isKindOfClass:[UIButton class]] ? button : nil;
-    } @catch (__unused id exception) {
-        return nil;
-    }
+static UIColor *ytagTwoRowNormalTintColor(void) {
+    UIColor *color = themeColor(@"theme_tabBarIcons");
+    if (!color) color = UIColor.labelColor;
+    return [color colorWithAlphaComponent:0.78];
 }
 
-static BOOL ytagNativePivotItemSelected(UIView *itemView) {
-    if (!itemView) return NO;
-    @try {
-        if ([itemView respondsToSelector:@selector(isSelected)]) {
-            return ((BOOL (*)(id, SEL))objc_msgSend)(itemView, @selector(isSelected));
-        }
-        if ([itemView respondsToSelector:@selector(selected)]) {
-            return ((BOOL (*)(id, SEL))objc_msgSend)(itemView, @selector(selected));
-        }
-        UIButton *button = ytagNativePivotNavigationButton(itemView);
-        return button.selected;
-    } @catch (__unused id exception) {
-        return NO;
-    }
-}
-
-static UIColor *ytagNativePivotItemTintColor(UIView *itemView, BOOL selected) {
-    UIButton *button = ytagNativePivotNavigationButton(itemView);
-    if (button) {
-        UIColor *titleColor = [button titleColorForState:selected ? UIControlStateSelected : UIControlStateNormal];
-        if (titleColor) return titleColor;
-        if (button.tintColor) return button.tintColor;
-    }
-    return itemView.tintColor;
-}
-
-static UIColor *ytagTwoRowTintColor(YTPivotBarView *pivotBar, BOOL selected) {
-    for (UIView *itemView in ytagNativePivotItemViews(pivotBar)) {
-        if (ytagNativePivotItemSelected(itemView) != selected) continue;
-        UIColor *nativeColor = ytagNativePivotItemTintColor(itemView, selected);
-        if (nativeColor) return nativeColor;
-    }
-
-    if (selected) {
-        return themeColor(@"theme_tabBarIcons") ?: themeColor(@"theme_accent") ?: UIColor.labelColor;
-    }
-
-    UIColor *normal = themeColor(@"theme_textPrimary") ?: UIColor.labelColor;
-    return [normal colorWithAlphaComponent:0.78];
+static UIColor *ytagTwoRowSelectedTintColor(void) {
+    return themeColor(@"theme_tabBarIcons") ?: UIColor.labelColor;
 }
 
 static NSString *ytagTwoRowTitleForTabId(NSString *tabId) {
@@ -2708,7 +2623,6 @@ static NSString *ytagTwoRowTitleForTabId(NSString *tabId) {
     NSString *title = LOC(tabId);
     if (title.length > 0 && ![title isEqualToString:tabId]) return title;
     if ([tabId isEqualToString:@"FEwhat_to_watch"]) return @"Home";
-    if ([tabId isEqualToString:@"FEafterglow"]) return @"Afterglow";
     if ([tabId isEqualToString:@"FEshorts"]) return @"Shorts";
     if ([tabId isEqualToString:@"FEsubscriptions"]) return @"Subscriptions";
     if ([tabId isEqualToString:@"FElibrary"]) return @"You";
@@ -2749,8 +2663,9 @@ static UIView *ytagTwoRowOverflowIndicatorView(UIButton *button) {
 }
 
 static void ytagConfigureTwoRowOverflowSelectionChrome(UIButton *button, YTPivotBarView *pivotBar, BOOL selected) {
-    UIColor *selectedColor = ytagTwoRowTintColor(pivotBar, YES);
-    UIColor *normalColor = ytagTwoRowTintColor(pivotBar, NO);
+    (void)pivotBar;
+    UIColor *selectedColor = ytagTwoRowSelectedTintColor();
+    UIColor *normalColor = ytagTwoRowNormalTintColor();
     button.tintColor = selected ? selectedColor : normalColor;
 
     UILabel *label = ytagTwoRowOverflowTitleLabel(button);
@@ -2956,91 +2871,6 @@ static void ytagApplyTwoRowPivotLayout(YTPivotBarView *pivotBar) {
     }
 }
 
-static void ytagSelectPivotForAfterglowPrime(YTPivotBarViewController *controller, NSString *pivotIdentifier) {
-    if (!controller || pivotIdentifier.length == 0) return;
-    if (![controller respondsToSelector:@selector(selectItemWithPivotIdentifier:)]) return;
-    ytagRememberAfterglowFeedSourceForPivot(pivotIdentifier);
-    ((void (*)(id, SEL, id))objc_msgSend)(controller, @selector(selectItemWithPivotIdentifier:), pivotIdentifier);
-}
-
-// Legacy auto-prime entrypoint — kept as a symbol but intentionally a no-op now.
-// Compact-feed sections load on user tap via YTAGRequestLoadOfSource instead.
-// See [[project-ytafterglow-compact-feed-loading]] in memory for design.
-__attribute__((unused))
-static void ytagPrimeAfterglowFeedSourcesFromController(YTPivotBarViewController *controller) {
-    (void)controller;
-    (void)sYTAGAfterglowFeedPrimeInProgress;
-    (void)ytagSelectPivotForAfterglowPrime;
-}
-
-// User-initiated load: briefly navigate the pivot to fetch the section list
-// for `source`, then restore back to FEafterglow. Reports state to the store
-// via setLoadState: so the sheet VC can render its spinner.
-void YTAGRequestLoadOfSource(NSString *source) {
-    if (![source isKindOfClass:[NSString class]] || source.length == 0) return;
-
-    YTPivotBarViewController *controller = sYTAGLivePivotBarController;
-    if (!controller || ![controller respondsToSelector:@selector(selectItemWithPivotIdentifier:)]) {
-        [[YTAGAfterglowFeedStore sharedStore] setLoadState:YTAGAfterglowSourceLoadStateFailed forSource:source];
-        return;
-    }
-
-    NSString *targetPivotId = YTAGAfterglowPrimeSourcePivotId(source);
-    if (targetPivotId.length == 0) {
-        [[YTAGAfterglowFeedStore sharedStore] setLoadState:YTAGAfterglowSourceLoadStateFailed forSource:source];
-        return;
-    }
-
-    @synchronized (YTAGAfterglowFeedStore.sharedStore) {
-        if (!sYTAGSourcesInFlight) sYTAGSourcesInFlight = [NSMutableSet set];
-        if ([sYTAGSourcesInFlight containsObject:source]) return;
-        [sYTAGSourcesInFlight addObject:source];
-    }
-
-    [[YTAGAfterglowFeedStore sharedStore] setLoadState:YTAGAfterglowSourceLoadStateLoading forSource:source];
-
-    __block id observer = nil;
-    __block dispatch_block_t timeoutBlock = nil;
-
-    void (^restore)(BOOL) = ^(BOOL succeeded) {
-        if (observer) {
-            [[NSNotificationCenter defaultCenter] removeObserver:observer];
-            observer = nil;
-        }
-        if (timeoutBlock) {
-            dispatch_block_cancel(timeoutBlock);
-            timeoutBlock = nil;
-        }
-        @synchronized (YTAGAfterglowFeedStore.sharedStore) {
-            [sYTAGSourcesInFlight removeObject:source];
-        }
-        if (!succeeded) {
-            [[YTAGAfterglowFeedStore sharedStore] setLoadState:YTAGAfterglowSourceLoadStateFailed forSource:source];
-        }
-        YTPivotBarViewController *restoreController = sYTAGLivePivotBarController;
-        if (restoreController && [restoreController respondsToSelector:@selector(selectItemWithPivotIdentifier:)]) {
-            ((void (*)(id, SEL, id))objc_msgSend)(restoreController, @selector(selectItemWithPivotIdentifier:), @"FEafterglow");
-        }
-    };
-
-    observer = [[NSNotificationCenter defaultCenter] addObserverForName:YTAGAfterglowFeedStoreDidUpdateNotification
-                                                                 object:nil
-                                                                  queue:[NSOperationQueue mainQueue]
-                                                             usingBlock:^(NSNotification *note) {
-        NSString *updatedSource = note.userInfo[YTAGAfterglowFeedStoreSourceUserInfoKey];
-        if (![updatedSource isEqualToString:source]) return;
-        restore(YES);
-    }];
-
-    timeoutBlock = dispatch_block_create(0, ^{
-        restore(NO);
-    });
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), timeoutBlock);
-
-    ytagRememberAfterglowFeedSourceForPivot(targetPivotId);
-    ((void (*)(id, SEL, id))objc_msgSend)(controller, @selector(selectItemWithPivotIdentifier:), targetPivotId);
-}
-
 // Tab Management - Filter and reorder pivot bar items based on activeTabs
 %hook YTPivotBarView
 + (CGFloat)pivotBarHeight {
@@ -3081,7 +2911,7 @@ void YTAGRequestLoadOfSource(NSString *source) {
     [items removeObjectsInArray:toRemove];
 
     // Add optional tabs only when YouTube did not supply them natively.
-    for (NSString *tabId in @[@"FEafterglow", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home"]) {
+    for (NSString *tabId in @[@"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home"]) {
         if (ytagCanSynthesizePivotTab(tabId) && [nativeTabs containsObject:tabId] && !ytagItemsContainTab(items, tabId)) {
             YTIPivotBarSupportedRenderers *tab = ytagCreatePivotTab(tabId);
             if (tab) [items addObject:tab];
@@ -3118,16 +2948,6 @@ void YTAGRequestLoadOfSource(NSString *source) {
 }
 
 - (void)selectItemWithPivotIdentifier:(id)pivotIdentifier {
-    id delegate = ytagPivotBarDelegate(self);
-    if ([delegate isKindOfClass:%c(YTPivotBarViewController)]) {
-        sYTAGLivePivotBarController = (YTPivotBarViewController *)delegate;
-    }
-    if (ytagIsAfterglowPivotIdentifier(pivotIdentifier)) {
-        YTAGOpenAfterglowFeedFromView(self);
-        ytagSyncTwoRowOverflowSelection(self, pivotIdentifier);
-        return;
-    }
-    ytagRememberAfterglowFeedSourceForPivot(pivotIdentifier);
     %orig;
     if ([pivotIdentifier isKindOfClass:[NSString class]]) {
         ytagSyncTwoRowOverflowSelection(self, pivotIdentifier);
@@ -3139,15 +2959,6 @@ void YTAGRequestLoadOfSource(NSString *source) {
     NSString *tabId = objc_getAssociatedObject(sender, &kYTAGTwoRowOverflowTabIdKey);
     if (ytagTwoRowIsSettingsButton(tabId)) {
         YTAGOpenAfterglowSettingsFromView(sender);
-        return;
-    }
-    if (ytagIsAfterglowPivotIdentifier(tabId)) {
-        YTAGOpenAfterglowFeedFromView(sender);
-        id delegate = ytagPivotBarDelegate(self);
-        if ([delegate isKindOfClass:%c(YTPivotBarViewController)]) {
-            sYTAGLivePivotBarController = (YTPivotBarViewController *)delegate;
-        }
-        ytagSyncTwoRowOverflowSelection(self, tabId);
         return;
     }
 
@@ -3222,13 +3033,6 @@ void YTAGRequestLoadOfSource(NSString *source) {
 BOOL isTabSelected = NO;
 %hook YTPivotBarViewController
 - (void)selectItemWithPivotIdentifier:(id)pivotIdentifier {
-    sYTAGLivePivotBarController = self;
-    if (ytagIsAfterglowPivotIdentifier(pivotIdentifier)) {
-        YTAGOpenAfterglowFeedFromView(self.pivotBarView ?: self.view);
-        ytagSyncTwoRowOverflowSelection(self.pivotBarView, pivotIdentifier);
-        return;
-    }
-    ytagRememberAfterglowFeedSourceForPivot(pivotIdentifier);
     %orig;
     if ([pivotIdentifier isKindOfClass:[NSString class]]) {
         ytagSyncTwoRowOverflowSelection(self.pivotBarView, pivotIdentifier);
@@ -3236,34 +3040,19 @@ BOOL isTabSelected = NO;
 }
 
 - (void)didTapItemWithRenderer:(id)renderer {
-    sYTAGLivePivotBarController = self;
     NSString *pivotIdentifier = ytagPivotIdentifierForRendererObject(renderer);
-    if (ytagIsAfterglowPivotIdentifier(pivotIdentifier)) {
-        YTAGOpenAfterglowFeedFromView(self.pivotBarView ?: self.view);
-        ytagSyncTwoRowOverflowSelection(self.pivotBarView, pivotIdentifier);
-        return;
-    }
-    ytagRememberAfterglowFeedSourceForPivot(pivotIdentifier);
     %orig;
     if (pivotIdentifier.length > 0) ytagSyncTwoRowOverflowSelection(self.pivotBarView, pivotIdentifier);
 }
 
 - (void)didTapItemWithIconOnlyItemRenderer:(id)renderer {
-    sYTAGLivePivotBarController = self;
     NSString *pivotIdentifier = ytagPivotIdentifierForRendererObject(renderer);
-    if (ytagIsAfterglowPivotIdentifier(pivotIdentifier)) {
-        YTAGOpenAfterglowFeedFromView(self.pivotBarView ?: self.view);
-        ytagSyncTwoRowOverflowSelection(self.pivotBarView, pivotIdentifier);
-        return;
-    }
-    ytagRememberAfterglowFeedSourceForPivot(pivotIdentifier);
     %orig;
     if (pivotIdentifier.length > 0) ytagSyncTwoRowOverflowSelection(self.pivotBarView, pivotIdentifier);
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     %orig;
-    sYTAGLivePivotBarController = self;
 
     if (!isTabSelected && !ytagBool(@"shortsOnlyMode")) {
         NSString *startupTab = YTAGLiteModeEnabled() ? YTAGLiteModeStartupTab() : [[YTAGUserDefaults standardUserDefaults] currentStartupTab];
