@@ -428,7 +428,7 @@
 "HideShortsAudioTrackDesc" = "Hides the audio track info from Shorts.";
 
 /* Tab bar options */
-"Tabbar" = "Tabs";
+"Tabbar" = "Tab bar";
 "Startup" = "Startup page";
 "FEwhat_to_watch" = "Home";
 "FEexplore" = "Explore";

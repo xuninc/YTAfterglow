@@ -204,8 +204,12 @@ static UIColor *YTAGAfterglowTintColor(void) {
     return [UIColor colorWithRed:0.95 green:0.41 blue:0.50 alpha:1.0];
 }
 
+static NSArray<NSString *> *ytag_allTabIds(void) {
+    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
+}
+
 static NSUInteger ytag_maxActiveTabCount(void) {
-    return ytagBool(@"twoRowTabBar") ? [YTAGUserDefaults defaultActiveTabs].count : 6;
+    return ytagBool(@"twoRowTabBar") ? ytag_allTabIds().count : 6;
 }
 
 static UIViewController *ytag_viewControllerForResponder(UIResponder *responder) {
@@ -1378,7 +1382,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
 %new
 - (NSArray<NSString *> *)ytag_allTabs {
-    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
+    return ytag_allTabIds();
 }
 
 %new
