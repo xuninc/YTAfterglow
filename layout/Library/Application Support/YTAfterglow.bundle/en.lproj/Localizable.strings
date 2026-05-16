@@ -10,7 +10,7 @@
 "SearchSettingsOpenFailed" = "That setting could not be opened right now.";
 "Typography" = "Typography";
 "AppFont" = "App font";
-"AppFontDesc" = "Applies the selected font across YouTube text. Auto keeps stock fonts unless Lite Mode is on.";
+"AppFontDesc" = "Applies the selected font across YouTube text. Auto keeps stock fonts unless Lite Mode is on. If font changes look off at first, restart the app.";
 "TabLabelSize" = "Tab label size";
 "TabLabelSizeDesc" = "Shrinks tab labels when wider fonts would wrap names like Subscriptions.";
 "LiteMode" = "Lite Mode";
