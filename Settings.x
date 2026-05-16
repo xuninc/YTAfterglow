@@ -1427,7 +1427,10 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 %new
 - (NSString *)themeTypographySummary {
     NSInteger mode = ytagInt(YTAGThemeFontModeKey);
-    return YTAGThemeFontModeDisplayName(mode);
+    NSInteger tabLabelSizeMode = ytagInt(YTAGThemeTabLabelSizeModeKey);
+    NSString *fontName = YTAGThemeFontModeDisplayName(mode);
+    if (tabLabelSizeMode == 0) return fontName;
+    return [NSString stringWithFormat:@"%@, %@ tab labels", fontName, YTAGThemeTabLabelSizeModeDisplayName(tabLabelSizeMode).lowercaseString];
 }
 
 %new
@@ -1769,7 +1772,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     [entries addObject:[self ytag_searchPageEntryWithTitle:themesTitle description:@"Curated themes, custom colors, gradients, and polish." path:@[themesTitle] aliases:@[@"appearance", @"colors"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:presetsTitle description:@"Complete looks for the whole app, grouped into dark and light palettes." path:@[themesTitle, presetsTitle] aliases:@[@"theme presets", @"afterglow themes"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:customColorsTitle description:@"Fine-tune the exact surfaces and text colors the theme engine touches." path:@[themesTitle, customColorsTitle] aliases:@[@"theme colors", @"color overrides"]]];
-    [entries addObject:[self ytag_searchPageEntryWithTitle:LOC(@"Typography") description:@"Choose the app-wide font face." path:@[themesTitle, LOC(@"Typography")] aliases:@[@"font", @"courier", @"typeface"]]];
+    [entries addObject:[self ytag_searchPageEntryWithTitle:LOC(@"Typography") description:@"Choose the app-wide font face and tab label fit." path:@[themesTitle, LOC(@"Typography")] aliases:@[@"font", @"courier", @"typeface", @"tab label size"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:effectsTitle description:@"Glow, ambient mode, seek animation, and gradient toggles." path:@[themesTitle, effectsTitle] aliases:@[@"glow", @"effects"]]];
     [entries addObject:[self ytag_searchPageEntryWithTitle:gradientTitle description:@"Optional background wash with a dedicated on or off workflow." path:@[themesTitle, gradientTitle] aliases:@[@"background gradient"]]];
 
@@ -1841,7 +1844,10 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
         @"OverlayButtons": @[@"player overlay color"],
         @"SeekBar": @[@"progress bar color"]
     }];
-    [self ytag_addSearchEntries:entries forSettingKeys:@[@"AppFont"] path:@[themesTitle, LOC(@"Typography")] aliasesByKey:@{ @"AppFont": @[@"font", @"courier", @"typography"] }];
+    [self ytag_addSearchEntries:entries forSettingKeys:@[@"AppFont", @"TabLabelSize"] path:@[themesTitle, LOC(@"Typography")] aliasesByKey:@{
+        @"AppFont": @[@"font", @"courier", @"typography"],
+        @"TabLabelSize": @[@"tab font size", @"tab label", @"subscriptions wrapping"]
+    }];
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"EnableGlow", @"GlowStrength", @"GlowPivot", @"GlowOverlay", @"GlowScrubber", @"GlowSeekBar", @"AnimateSeek", @"DisableAmbientMode", @"SeekBarGradient"] path:@[themesTitle, effectsTitle] aliasesByKey:nil];
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"PersistentProgressBar", @"HideHeatwaves"] path:@[themesTitle, @"Seek Bar"] aliasesByKey:nil];
     [self ytag_addSearchEntries:entries forSettingKeys:@[@"GradientStart", @"GradientEnd"] path:@[themesTitle, gradientTitle] aliasesByKey:nil];
@@ -1930,7 +1936,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSArray *legacyKeys = @[@"oldYTUI"];
     NSArray *interfaceKeys = [[[tabbarKeys arrayByAddingObject:@"startupAnimation"] arrayByAddingObject:@"floatingKeyboard"] arrayByAddingObjectsFromArray:[@[@"disableRTL"] arrayByAddingObjectsFromArray:legacyKeys]];
     NSArray *themeCustomColorKeys = @[@"theme_background", @"theme_navBar", @"theme_tabBarIcons", @"theme_overlayButtons", @"theme_seekBar", @"theme_textPrimary", @"theme_textSecondary", @"theme_accent"];
-    NSArray *themeTypographyKeys = @[YTAGThemeFontModeKey];
+    NSArray *themeTypographyKeys = @[YTAGThemeFontModeKey, YTAGThemeTabLabelSizeModeKey];
     NSArray *themeSeekBarKeys = @[@"theme_seekBar", @"theme_seekBarLive", @"theme_seekBarScrubber", @"theme_seekBarScrubberLive", @"seekBarScrubberImage", @"seekBarScrubberSize", @"persistentProgressBar", @"hideHeatwaves"];
     NSArray *themeEffectKeys = @[@"theme_glowEnabled", @"theme_glowStrength", @"theme_glowStrengthMode", @"theme_glowStrengthCustom", @"theme_glowOpacity", @"theme_glowRadius", @"theme_glowLayers", @"theme_glowColor", @"theme_glowPivot", @"theme_glowOverlay", @"theme_glowScrubber", @"theme_glowSeekBar", @"seekBarAnimated", @"disableAmbientMode", @"seekBarGradient"];
     NSArray *themeGradientKeys = @[@"theme_gradientStart", @"theme_gradientEnd"];
@@ -2158,17 +2164,22 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
                 }]];
 
             [appearanceRows addObject:[self pageItemWithTitle:LOC(@"Typography")
-                titleDescription:@"Choose the font Afterglow applies to YouTube text."
+                titleDescription:@"Choose the font Afterglow applies to YouTube text and tab labels."
                 summary:^NSString *() {
                     return [self themeTypographySummary];
                 }
                 selectBlock:^BOOL(YTSettingsCell *typographyCell, NSUInteger typographyArg1) {
                     NSMutableArray <YTSettingsSectionItem *> *typographyRows = [NSMutableArray array];
-                    [typographyRows addObject:[self themeSectionHeaderWithTitle:LOC(@"Typography") description:@"Auto uses Courier New while Lite Mode is enabled and stock system text otherwise."]];
+                    [typographyRows addObject:[self themeSectionHeaderWithTitle:LOC(@"Typography") description:@"Auto uses Courier New while Lite Mode is enabled and stock system text otherwise. Tab labels stay on one line and shrink when needed."]];
                     [typographyRows addObject:[self ytagPickerItemWithTitle:LOC(@"AppFont")
                                                                description:LOC(@"AppFontDesc")
                                                                        key:YTAGThemeFontModeKey
                                                                     labels:YTAGThemeFontModeDisplayNames()
+                                                                settingsVC:settingsViewController]];
+                    [typographyRows addObject:[self ytagPickerItemWithTitle:LOC(@"TabLabelSize")
+                                                               description:LOC(@"TabLabelSizeDesc")
+                                                                       key:YTAGThemeTabLabelSizeModeKey
+                                                                    labels:YTAGThemeTabLabelSizeModeDisplayNames()
                                                                 settingsVC:settingsViewController]];
                     [self addResetDefaultsItemForKeys:themeTypographyKeys toRows:typographyRows settingsVC:settingsViewController];
 

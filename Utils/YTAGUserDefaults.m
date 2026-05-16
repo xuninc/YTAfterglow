@@ -317,6 +317,7 @@ static void YTAGResetBundledStandardUserDefaults(void) {
         kStartupTabKey: @"FEwhat_to_watch",
         @"frostedPivot": @YES,
         @"twoRowTabBar": @YES,
+        YTAGThemeTabLabelSizeModeKey: @0,
         @"theme_glowPivot": @YES,
         @"theme_glowOverlay": @YES,
         @"theme_glowScrubber": @YES,

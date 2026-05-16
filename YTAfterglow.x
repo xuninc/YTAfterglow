@@ -2289,8 +2289,11 @@ static void genImageFromLayer(CALayer *layer, UIColor *backgroundColor, void (^c
 
 // Tab Management - Helper to get pivot identifier from a renderer
 static NSString *ytagPivotId(YTIPivotBarSupportedRenderers *r) {
+    NSString *iconOnlyPid = [[r pivotBarIconOnlyItemRenderer] pivotIdentifier];
+    if ([iconOnlyPid isEqualToString:@"FEuploads"]) return iconOnlyPid;
+
     NSString *pid = [[r pivotBarItemRenderer] pivotIdentifier];
-    if (!pid) pid = [[r pivotBarIconOnlyItemRenderer] pivotIdentifier];
+    if (!pid) pid = iconOnlyPid;
     return pid;
 }
 
@@ -2374,7 +2377,8 @@ static YTIPivotBarSupportedRenderers *ytagCreatePivotTab(NSString *tabId) {
 }
 
 static BOOL ytagCanSynthesizePivotTab(NSString *tabId) {
-    return [tabId isKindOfClass:[NSString class]] && tabId.length > 0;
+    if (![tabId isKindOfClass:[NSString class]] || tabId.length == 0) return NO;
+    return ![tabId isEqualToString:@"FEuploads"];
 }
 
 static BOOL ytagItemsContainTab(NSArray<YTIPivotBarSupportedRenderers *> *items, NSString *tabId) {
@@ -2385,8 +2389,8 @@ static BOOL ytagItemsContainTab(NSArray<YTIPivotBarSupportedRenderers *> *items,
     return NO;
 }
 
-static NSDictionary<NSString *, YTIPivotBarSupportedRenderers *> *ytagNativeRendererMapForItems(NSArray<YTIPivotBarSupportedRenderers *> *items) {
-    NSMutableDictionary<NSString *, YTIPivotBarSupportedRenderers *> *map = [NSMutableDictionary dictionary];
+static NSDictionary<NSString *, YTIPivotBarSupportedRenderers *> *ytagNativeRendererMapForItems(NSArray<YTIPivotBarSupportedRenderers *> *items, NSDictionary<NSString *, YTIPivotBarSupportedRenderers *> *existingMap) {
+    NSMutableDictionary<NSString *, YTIPivotBarSupportedRenderers *> *map = [existingMap isKindOfClass:[NSDictionary class]] ? [existingMap mutableCopy] : [NSMutableDictionary dictionary];
     for (YTIPivotBarSupportedRenderers *item in items) {
         NSString *pid = ytagCanonicalPivotId(ytagPivotId(item));
         if (pid.length > 0 && !map[pid]) {
@@ -2411,6 +2415,8 @@ static char kYTAGTwoRowOverflowRendererKey;
 static char kYTAGTwoRowOverflowIconOnlyRendererKey;
 static char kYTAGTwoRowOverflowTabIdKey;
 static char kYTAGTabBarLongPressShortcutKey;
+static char kYTAGNativeTabLabelBaseFontKey;
+static char kYTAGNativeTabLabelAppliedFontKey;
 static const NSInteger YTAGTwoRowOverflowTitleLabelTag = 740101;
 static const NSInteger YTAGTwoRowOverflowIndicatorTag = 740102;
 
@@ -2631,14 +2637,15 @@ static UILabel *ytagTwoRowOverflowTitleLabel(UIButton *button) {
     if (![label isKindOfClass:[UILabel class]]) {
         label = [[UILabel alloc] initWithFrame:CGRectZero];
         label.tag = YTAGTwoRowOverflowTitleLabelTag;
-        label.textAlignment = NSTextAlignmentCenter;
-        label.lineBreakMode = NSLineBreakByTruncatingTail;
-        label.adjustsFontSizeToFitWidth = YES;
-        label.minimumScaleFactor = 0.72;
-        label.font = [UIFont systemFontOfSize:8.5 weight:UIFontWeightMedium];
         label.userInteractionEnabled = NO;
         [button addSubview:label];
     }
+
+    label.textAlignment = NSTextAlignmentCenter;
+    label.numberOfLines = 1;
+    label.lineBreakMode = NSLineBreakByTruncatingTail;
+    label.adjustsFontSizeToFitWidth = YES;
+    label.minimumScaleFactor = 0.58;
     return label;
 }
 
@@ -2662,7 +2669,8 @@ static void ytagConfigureTwoRowOverflowSelectionChrome(UIButton *button, YTPivot
 
     UILabel *label = ytagTwoRowOverflowTitleLabel(button);
     label.textColor = selected ? selectedColor : normalColor;
-    label.font = [UIFont systemFontOfSize:8.5 weight:selected ? UIFontWeightSemibold : UIFontWeightMedium];
+    UIFont *baseFont = [UIFont systemFontOfSize:8.5 weight:selected ? UIFontWeightSemibold : UIFontWeightMedium];
+    label.font = YTAGThemeTabLabelFontMatchingFont(baseFont) ?: baseFont;
 
     UIView *indicator = ytagTwoRowOverflowIndicatorView(button);
     indicator.backgroundColor = selectedColor;
@@ -2894,7 +2902,8 @@ static void ytagApplyTwoRowPivotLayout(YTPivotBarView *pivotBar) {
 
 - (void)setRenderer:(YTIPivotBarRenderer *)renderer {
     NSMutableArray <YTIPivotBarSupportedRenderers *> *items = [renderer itemsArray];
-    objc_setAssociatedObject(self, &kYTAGTwoRowNativeRendererMapKey, ytagNativeRendererMapForItems(items), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSDictionary *existingNativeRendererMap = objc_getAssociatedObject(self, &kYTAGTwoRowNativeRendererMapKey);
+    objc_setAssociatedObject(self, &kYTAGTwoRowNativeRendererMapKey, ytagNativeRendererMapForItems(items, existingNativeRendererMap), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     NSArray *activeTabs = YTAGLiteModeEnabled() ? YTAGLiteModeActiveTabs() : [[YTAGUserDefaults standardUserDefaults] currentActiveTabs];
     if (!activeTabs) activeTabs = ytagDefaultTabs();
     NSArray *overflowTabs = ytagTwoRowOverflowTabIds(activeTabs);
@@ -2912,7 +2921,7 @@ static void ytagApplyTwoRowPivotLayout(YTPivotBarView *pivotBar) {
     [items removeObjectsInArray:toRemove];
 
     // Add optional tabs only when YouTube did not supply them natively.
-    for (NSString *tabId in @[@"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"]) {
+    for (NSString *tabId in @[@"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home"]) {
         if (ytagCanSynthesizePivotTab(tabId) && [nativeTabs containsObject:tabId] && !ytagItemsContainTab(items, tabId)) {
             YTIPivotBarSupportedRenderers *tab = ytagCreatePivotTab(tabId);
             if (tab) [items addObject:tab];
@@ -2994,6 +3003,37 @@ static void ytagApplyTwoRowPivotLayout(YTPivotBarView *pivotBar) {
 - (void)setBorderColor:(id)arg1 { %orig(ytagBool(@"removeIndicators") ? [UIColor clearColor] : arg1); }
 %end
 
+static void ytagApplyNativeTabLabelTypography(YTPivotBarItemView *itemView) {
+    YTQTMButton *button = itemView.navigationButton;
+    if (!button || ![button respondsToSelector:@selector(titleLabel)]) return;
+
+    UILabel *label = button.titleLabel;
+    if (![label isKindOfClass:[UILabel class]]) return;
+
+    label.numberOfLines = 1;
+    label.lineBreakMode = NSLineBreakByTruncatingTail;
+    label.adjustsFontSizeToFitWidth = YES;
+    label.minimumScaleFactor = 0.58;
+    label.baselineAdjustment = UIBaselineAdjustmentAlignCenters;
+
+    UIFont *currentFont = label.font;
+    if (currentFont) {
+        UIFont *appliedFont = objc_getAssociatedObject(label, &kYTAGNativeTabLabelAppliedFontKey);
+        UIFont *baseFont = objc_getAssociatedObject(label, &kYTAGNativeTabLabelBaseFontKey);
+        BOOL currentIsAfterglowAppliedFont = appliedFont && [currentFont isEqual:appliedFont];
+        if (!baseFont || !currentIsAfterglowAppliedFont) {
+            baseFont = currentFont;
+            objc_setAssociatedObject(label, &kYTAGNativeTabLabelBaseFontKey, baseFont, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+
+        UIFont *font = YTAGThemeTabLabelFontMatchingFont(baseFont);
+        if (font) {
+            label.font = font;
+            objc_setAssociatedObject(label, &kYTAGNativeTabLabelAppliedFontKey, font, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
+}
+
 // Hide Tab Labels + Custom Tab Icons
 %hook YTPivotBarItemView
 - (void)setRenderer:(YTIPivotBarRenderer *)renderer {
@@ -3003,6 +3043,8 @@ static void ytagApplyTwoRowPivotLayout(YTPivotBarView *pivotBar) {
         [self.navigationButton setTitle:@"" forState:UIControlStateNormal];
         [self.navigationButton setSizeWithPaddingAndInsets:NO];
     }
+
+    ytagApplyNativeTabLabelTypography(self);
 
     // Load custom tab icons from bundle
     NSInteger iconType = self.renderer.icon.iconType;
@@ -3028,6 +3070,11 @@ static void ytagApplyTwoRowPivotLayout(YTPivotBarView *pivotBar) {
         if (selected) [button setImage:selected forState:UIControlStateSelected];
     }
 
+}
+
+- (void)layoutSubviews {
+    %orig;
+    ytagApplyNativeTabLabelTypography(self);
 }
 %end
 

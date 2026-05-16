@@ -9,6 +9,7 @@ NSString *const YTAGLiteModeEnabledKey = @"liteModeEnabled";
 NSString *const YTAGLiteModeDefaultThemeAppliedKey = @"liteModeDefaultThemeApplied";
 NSString *const YTAGLiteModeDefaultThemeVersionKey = @"liteModeDefaultThemeVersion";
 NSString *const YTAGThemeFontModeKey = @"theme_fontMode";
+NSString *const YTAGThemeTabLabelSizeModeKey = @"theme_tabLabelSizeMode";
 static NSString *const YTAGLiteThemeBackupValuesKey = @"liteModeThemeBackupValues";
 static NSString *const YTAGLiteThemeBackupMissingKeysKey = @"liteModeThemeBackupMissingKeys";
 static const NSInteger YTAGLiteModeCurrentThemeVersion = 2;
@@ -42,6 +43,12 @@ typedef NS_ENUM(NSInteger, YTAGThemeFontMode) {
     YTAGThemeFontModeFutura,
     YTAGThemeFontModeMarkerFelt,
     YTAGThemeFontModeNoteworthy,
+};
+
+typedef NS_ENUM(NSInteger, YTAGThemeTabLabelSizeMode) {
+    YTAGThemeTabLabelSizeModeAuto = 0,
+    YTAGThemeTabLabelSizeModeCompact,
+    YTAGThemeTabLabelSizeModeTiny,
 };
 
 static NSData *YTAGLiteArchiveColor(UIColor *color) {
@@ -79,7 +86,7 @@ static NSArray<NSString *> *YTAGLiteThemeKeys(void) {
         @"theme_glowStrength", @"theme_glowStrengthMode",
         @"theme_glowStrengthCustom", @"theme_glowOpacity",
         @"theme_glowRadius", @"theme_glowLayers", @"theme_glowColor",
-        @"seekBarGradient", YTAGThemeFontModeKey
+        @"seekBarGradient", YTAGThemeFontModeKey, YTAGThemeTabLabelSizeModeKey
     ];
 }
 
@@ -301,6 +308,16 @@ NSString *YTAGThemeFontModeDisplayName(NSInteger mode) {
     return names[index];
 }
 
+NSArray<NSString *> *YTAGThemeTabLabelSizeModeDisplayNames(void) {
+    return @[@"Auto", @"Compact", @"Tiny"];
+}
+
+NSString *YTAGThemeTabLabelSizeModeDisplayName(NSInteger mode) {
+    NSArray<NSString *> *names = YTAGThemeTabLabelSizeModeDisplayNames();
+    NSInteger index = MIN(MAX(mode, 0), (NSInteger)names.count - 1);
+    return names[index];
+}
+
 static NSInteger YTAGThemeRequestedFontMode(void) {
     NSInteger mode = [[YTAGUserDefaults standardUserDefaults] integerForKey:YTAGThemeFontModeKey];
     NSInteger maxMode = (NSInteger)YTAGThemeFontModeDisplayNames().count - 1;
@@ -315,6 +332,12 @@ static NSInteger YTAGThemeEffectiveFontMode(void) {
 
 BOOL YTAGThemeFontOverrideEnabled(void) {
     return YTAGThemeEffectiveFontMode() != YTAGThemeFontModeAuto;
+}
+
+static NSInteger YTAGThemeTabLabelSizeModeValue(void) {
+    NSInteger mode = [[YTAGUserDefaults standardUserDefaults] integerForKey:YTAGThemeTabLabelSizeModeKey];
+    NSInteger maxMode = (NSInteger)YTAGThemeTabLabelSizeModeDisplayNames().count - 1;
+    return MIN(MAX(mode, 0), maxMode);
 }
 
 static UIFont *YTAGFontWithNames(NSArray<NSString *> *regularNames, NSArray<NSString *> *boldNames, CGFloat size, UIFontWeight weight) {
@@ -395,6 +418,21 @@ UIFont *YTAGLiteModeFont(CGFloat size, UIFontWeight weight) {
 UIFont *YTAGLiteModeFontMatchingFont(UIFont *font) {
     CGFloat pointSize = font.pointSize > 0 ? font.pointSize : 13.0;
     return YTAGLiteModeFont(pointSize, YTAGLiteModeWeightForFont(font));
+}
+
+UIFont *YTAGThemeTabLabelFontMatchingFont(UIFont *font) {
+    if (!font) return nil;
+
+    CGFloat pointSize = font.pointSize > 0 ? font.pointSize : 10.0;
+    NSInteger sizeMode = YTAGThemeTabLabelSizeModeValue();
+    if (sizeMode == YTAGThemeTabLabelSizeModeCompact) pointSize -= 1.0;
+    else if (sizeMode == YTAGThemeTabLabelSizeModeTiny) pointSize -= 2.0;
+    pointSize = MAX(7.0, pointSize);
+
+    if (YTAGThemeFontOverrideEnabled()) {
+        return YTAGLiteModeFont(pointSize, YTAGLiteModeWeightForFont(font));
+    }
+    return [font fontWithSize:pointSize];
 }
 
 static BOOL YTAGLiteFontsMatch(UIFont *lhs, UIFont *rhs) {
