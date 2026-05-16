@@ -50,6 +50,7 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
     YTAGDLStateDownloadingVideo,
     YTAGDLStateDownloadingAudio,
     YTAGDLStateMuxing,
+    YTAGDLStateTranscodingHEVC,
     YTAGDLStateDelivering,
     YTAGDLStateFinished,
     YTAGDLStateError,
@@ -84,6 +85,7 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 @property (nonatomic, assign) YTAGDLState state;
 @property (nonatomic, assign) BOOL completionFired;
 @property (nonatomic, assign) BOOL cancelRequested;
+@property (nonatomic, assign) BOOL shareCompletionHandled;
 @end
 
 @implementation YTAGDLSession
@@ -93,6 +95,13 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 
 @interface YTAGDownloadManager ()
 @property (nonatomic, strong) YTAGDLSession *activeSession; // MVP: one at a time
+- (BOOL)needsHEVCTranscodeForSession:(YTAGDLSession *)session;
+- (void)beginHEVCTranscodeForSession:(YTAGDLSession *)session;
+- (void)presentPhotosSaveFailureForSession:(YTAGDLSession *)session error:(NSError *)error;
+- (void)finalizeShareDeliveryForSession:(YTAGDLSession *)session reason:(NSString *)reason;
+- (void)watchShareDismissalForSession:(YTAGDLSession *)session
+               activityViewController:(UIActivityViewController *)activityViewController
+                              attempt:(NSUInteger)attempt;
 @end
 
 @implementation YTAGDownloadManager
@@ -127,10 +136,17 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 
     // MVP: reject concurrent downloads.
     if (self.activeSession != nil) {
+        YTAGDLSession *active = self.activeSession;
         NSError *err = [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
                                            code:-1
                                        userInfo:@{NSLocalizedDescriptionKey: @"Another download is in progress"}];
-        YTAGLog(@"dl-mgr", @"[%@] rejected: another download in progress", request.videoID);
+        YTAGLog(@"dl-mgr", @"[%@] rejected: another download in progress (active=%@ state=%ld completionFired=%d shareCompletionHandled=%d final=%@)",
+                request.videoID,
+                active.request.videoID ?: @"<nil>",
+                (long)active.state,
+                active.completionFired,
+                active.shareCompletionHandled,
+                active.finalOutputURL.lastPathComponent ?: @"<nil>");
         dispatch_async(dispatch_get_main_queue(), ^{
             if (completion) completion(nil, err);
         });
@@ -546,6 +562,108 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
         }
         s.muxedOutputURL = outputURL;
         YTAGLog(@"dl-mgr", @"[%@] mux done → %@", s.request.videoID, outputURL.lastPathComponent);
+        if ([strongSelf needsHEVCTranscodeForSession:s]) {
+            [strongSelf beginHEVCTranscodeForSession:s];
+        } else {
+            [strongSelf renameAndDeliverForSession:s];
+        }
+    }];
+}
+
+#pragma mark - HEVC conversion
+
+- (BOOL)needsHEVCTranscodeForSession:(YTAGDLSession *)session {
+    if (!session || !session.muxedOutputURL || session.completionFired || session.cancelRequested) return NO;
+
+    YTAGFormat *video = session.pair.videoFormat;
+    if (!video) return NO; // audio-only is already handled by the delivery path.
+
+    NSString *codec = video.codec.lowercaseString ?: @"";
+    NSString *container = video.container.lowercaseString ?: @"";
+    NSString *mimeType = video.mimeType.lowercaseString ?: @"";
+
+    if ([codec hasPrefix:@"avc1."] || [codec hasPrefix:@"hvc1"] || [codec hasPrefix:@"hev1"]) {
+        return NO;
+    }
+
+    BOOL isVP9 = [codec isEqualToString:@"vp9"] || [codec hasPrefix:@"vp09."];
+    BOOL isAV1 = [codec hasPrefix:@"av01."];
+    BOOL isWebM = [container isEqualToString:@"webm"] || [mimeType containsString:@"video/webm"];
+    BOOL shouldTranscode = isVP9 || isAV1 || isWebM;
+
+    if (shouldTranscode) {
+        YTAGLog(@"dl-mgr", @"[%@] HEVC needed for iOS delivery (codec=%@ container=%@ mime=%@)",
+                session.request.videoID,
+                codec.length > 0 ? codec : @"<nil>",
+                container.length > 0 ? container : @"<nil>",
+                mimeType.length > 0 ? mimeType : @"<nil>");
+    }
+    return shouldTranscode;
+}
+
+- (void)beginHEVCTranscodeForSession:(YTAGDLSession *)session {
+    if (session.cancelRequested || session.completionFired) return;
+
+    NSURL *sourceURL = session.muxedOutputURL;
+    if (!sourceURL) {
+        [self failSession:session withError:[NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
+                                                                code:-8
+                                                            userInfo:@{NSLocalizedDescriptionKey: @"HEVC conversion could not start because the muxed video was missing."}]];
+        return;
+    }
+
+    session.state = YTAGDLStateTranscodingHEVC;
+    session.progressVC.phase = YTAGDownloadPhaseMuxing;
+    session.progressVC.progressFraction = 0.0;
+    session.progressVC.subtitleText = @"Converting to HEVC…";
+
+    YTAGFormat *video = session.pair.videoFormat;
+    NSTimeInterval durationSeconds = session.extractionResult.duration;
+    if (durationSeconds <= 0 && video.duration > 0) {
+        durationSeconds = video.duration;
+    }
+
+    NSInteger videoBitrate = video.bitrate;
+    if (videoBitrate <= 0 && video.contentLength > 0 && durationSeconds > 0) {
+        videoBitrate = (NSInteger)((double)video.contentLength * 8.0 / durationSeconds);
+    }
+
+    NSURL *hevcURL = [session.tmpDir URLByAppendingPathComponent:@"output_hevc.mp4"];
+    YTAGLog(@"dl-mgr", @"[%@] state → hevc (codec=%@ container=%@ mime=%@ bitrate=%ld)",
+            session.request.videoID,
+            video.codec ?: @"<nil>",
+            video.container ?: @"<nil>",
+            video.mimeType ?: @"<nil>",
+            (long)videoBitrate);
+
+    __weak typeof(self) weakSelf = self;
+    [[FFMpegHelper sharedManager] transcodeVideoToHEVCForPhotos:sourceURL
+                                                      outputURL:hevcURL
+                                                       duration:(NSInteger)durationSeconds
+                                                   videoBitrate:videoBitrate
+                                                     completion:^(NSURL * _Nullable outputURL, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        YTAGDLSession *s = session;
+        if (!s || s.completionFired) return;
+        if (s.cancelRequested) {
+            [strongSelf finalizeCancelForSession:s];
+            return;
+        }
+        if (error || !outputURL) {
+            YTAGLog(@"dl-mgr", @"[%@] HEVC transcode failed: %@", s.request.videoID, error.localizedDescription);
+            [strongSelf failSession:s withError:error ?: [NSError errorWithDomain:kYTAGDownloadManagerErrorDomain
+                                                                              code:-9
+                                                                          userInfo:@{NSLocalizedDescriptionKey: @"HEVC conversion failed."}]];
+            return;
+        }
+
+        s.muxedOutputURL = outputURL;
+        if (!YTAGDownloadSameFileURL(sourceURL, outputURL)) {
+            [strongSelf removeURLIfExists:sourceURL];
+        }
+        YTAGLog(@"dl-mgr", @"[%@] HEVC transcode done → %@", s.request.videoID, outputURL.lastPathComponent);
         [strongSelf renameAndDeliverForSession:s];
     }];
 }
@@ -707,15 +825,14 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
                             s.request.videoID, err.localizedDescription);
                     // Common failure mode: Photos refuses non-H.264 video (VP9 in
                     // MP4 container gives PHPhotosErrorDomain error 3302). The
-                    // file itself is on disk and valid — just not importable into
-                    // Photos. Fall back to Share so the user can save it to Files
-                    // / AirDrop / Voice Memos / wherever they want it.
+                    // file itself is on disk and valid, but users need to be told
+                    // Photos rejected the format before we offer a Share fallback.
                     if (s.progressVC.presentingViewController != nil) {
                         [strongSelf dismissProgressForSession:s then:^{
-                            [strongSelf shareForSession:s];
+                            [strongSelf presentPhotosSaveFailureForSession:s error:err];
                         }];
                     } else {
-                        [strongSelf shareForSession:s];
+                        [strongSelf presentPhotosSaveFailureForSession:s error:err];
                     }
                     return;
                 }
@@ -789,6 +906,60 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
     }
 }
 
+- (void)presentPhotosSaveFailureForSession:(YTAGDLSession *)session error:(NSError *)error {
+    if (!session || session.completionFired || session.cancelRequested) return;
+
+    UIViewController *host = YTAGDownloadTopPresenter(session.presentingVC);
+    if (!host || !host.view) {
+        YTAGLog(@"dl-mgr", @"[%@] Photos rejection alert had no host — opening Share sheet",
+                session.request.videoID);
+        [self shareForSession:session];
+        return;
+    }
+
+    NSString *detail = error.localizedDescription.length > 0
+        ? [NSString stringWithFormat:@"\n\nPhotos error: %@", error.localizedDescription]
+        : @"";
+    NSString *message = [NSString stringWithFormat:
+        @"Photos couldn't save this video. If this was a VP9/AV1 source, Afterglow already tried converting it to HEVC. You can still share/export the file elsewhere.%@",
+        detail];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Save to Photos failed"
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+
+    __weak typeof(self) weakSelf = self;
+    __weak YTAGDLSession *weakSession = session;
+    [alert addAction:[UIAlertAction actionWithTitle:@"Share File"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        YTAGDLSession *s = weakSession;
+        if (!strongSelf || !s) return;
+        [strongSelf shareForSession:s];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Dismiss"
+                                              style:UIAlertActionStyleCancel
+                                            handler:^(__unused UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        YTAGDLSession *s = weakSession;
+        if (!strongSelf || !s) return;
+        [strongSelf finalizeSuccessForSession:s];
+    }]];
+
+    UIPopoverPresentationController *pop = alert.popoverPresentationController;
+    if (pop) {
+        pop.sourceView = host.view;
+        pop.sourceRect = CGRectMake(CGRectGetMidX(host.view.bounds),
+                                    CGRectGetMidY(host.view.bounds),
+                                    0, 0);
+        pop.permittedArrowDirections = 0;
+    }
+
+    YTAGLog(@"dl-mgr", @"[%@] presenting Photos save failure alert", session.request.videoID);
+    [host presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)shareForSession:(YTAGDLSession *)session {
     NSURL *fileURL = session.finalOutputURL;
     __weak typeof(self) weakSelf = self;
@@ -811,6 +982,7 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
             return;
         }
 
+        s.shareCompletionHandled = NO;
         UIActivityViewController *av = [[UIActivityViewController alloc] initWithActivityItems:@[fileURL]
                                                                          applicationActivities:nil];
         av.completionWithItemsHandler = ^(UIActivityType  _Nullable activityType, BOOL completed, NSArray * _Nullable returnedItems, NSError * _Nullable err) {
@@ -818,8 +990,9 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
                 __strong typeof(weakSelf) innerSelf = weakSelf;
                 YTAGDLSession *innerSession = weakSession;
                 if (!innerSelf || !innerSession) return;
-                YTAGLog(@"dl-mgr", @"[bc] share completion: activity=%@ completed=%d", activityType, completed);
-                [innerSelf finalizeSuccessForSession:innerSession];
+                YTAGLog(@"dl-mgr", @"[bc] share completion: activity=%@ completed=%d error=%@",
+                        activityType, completed, err.localizedDescription ?: @"<nil>");
+                [innerSelf finalizeShareDeliveryForSession:innerSession reason:@"share completion"];
             });
         };
 
@@ -835,6 +1008,7 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
         [host presentViewController:av animated:YES completion:^{
             YTAGLog(@"dl-mgr", @"[bc] shareForSession: present completion fired");
         }];
+        [strongSelf watchShareDismissalForSession:s activityViewController:av attempt:0];
     };
 
     // Find a stable host. session.presentingVC may be tied to player chrome and
@@ -853,6 +1027,44 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
     } else {
         presentShare(findStableHost());
     }
+}
+
+- (void)finalizeShareDeliveryForSession:(YTAGDLSession *)session reason:(NSString *)reason {
+    if (!session || session.completionFired || session.shareCompletionHandled) return;
+    session.shareCompletionHandled = YES;
+    YTAGLog(@"dl-mgr", @"[%@] share delivery finished: %@", session.request.videoID, reason ?: @"<nil>");
+    [self finalizeSuccessForSession:session];
+}
+
+- (void)watchShareDismissalForSession:(YTAGDLSession *)session
+               activityViewController:(UIActivityViewController *)activityViewController
+                              attempt:(NSUInteger)attempt {
+    if (!session || session.completionFired || session.shareCompletionHandled) return;
+
+    __weak typeof(self) weakSelf = self;
+    __weak YTAGDLSession *weakSession = session;
+    __weak UIActivityViewController *weakActivityVC = activityViewController;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        YTAGDLSession *s = weakSession;
+        UIActivityViewController *av = weakActivityVC;
+        if (!strongSelf || !s || s.completionFired || s.shareCompletionHandled) return;
+
+        BOOL dismissed = (av == nil ||
+                          (av.presentingViewController == nil &&
+                           av.view.window == nil &&
+                           !av.isBeingPresented));
+        if (dismissed) {
+            YTAGLog(@"dl-mgr", @"[%@] share dismissal observed without completion (attempt=%lu)",
+                    s.request.videoID, (unsigned long)attempt);
+            [strongSelf finalizeShareDeliveryForSession:s reason:@"share dismissal observed without completion"];
+            return;
+        }
+
+        [strongSelf watchShareDismissalForSession:s
+                          activityViewController:av
+                                         attempt:attempt + 1];
+    });
 }
 
 #pragma mark - Terminal states
@@ -920,9 +1132,9 @@ typedef NS_ENUM(NSInteger, YTAGDLState) {
 
     // 2. Mux cancellation: FFMpegHelper doesn't expose a cancel entry point; if mux is in
     //    flight we let it run (it's <1s for copy-mux), then finalize cancel in its completion.
-    if (session.state == YTAGDLStateMuxing) {
-        YTAGLog(@"dl-mgr", @"[%@] cancel while muxing — waiting for ffmpeg to finish", session.request.videoID);
-        return; // finalizeCancelForSession runs from the mux completion.
+    if (session.state == YTAGDLStateMuxing || session.state == YTAGDLStateTranscodingHEVC) {
+        YTAGLog(@"dl-mgr", @"[%@] cancel while ffmpeg is active — waiting for ffmpeg to finish", session.request.videoID);
+        return; // finalizeCancelForSession runs from the ffmpeg completion.
     }
 
     [self finalizeCancelForSession:session];

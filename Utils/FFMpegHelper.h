@@ -49,6 +49,15 @@ typedef void (^FFMpegHelperCompletion)(NSURL * _Nullable outputURL, NSError * _N
         duration:(NSInteger)durationSeconds
       completion:(FFMpegHelperCompletion)completion;
 
+/// Transcodes an already-muxed video into a Photos-compatible HEVC/H.265 MP4.
+/// Intended for VP9/AV1 files that download and mux correctly but are rejected
+/// by `PHPhotoLibrary` with PHPhotosErrorDomain 3302.
+- (void)transcodeVideoToHEVCForPhotos:(NSURL *)inputURL
+                             outputURL:(NSURL *)outputURL
+                              duration:(NSInteger)durationSeconds
+                          videoBitrate:(NSInteger)videoBitrate
+                            completion:(FFMpegHelperCompletion)completion;
+
 #pragma mark - Siblings (declared only; implementations TODO)
 
 /// Build the ffmpeg command string from the four optional inputs. Four variants selected by

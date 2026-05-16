@@ -11,6 +11,7 @@
 #import "FFMpegHelper.h"
 #import "YTAGLog.h"
 #import <UIKit/UIKit.h>
+#import <math.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
 
@@ -192,6 +193,134 @@ static NSString *FFMpegSessionLogs(FFmpegSession *session) {
                              duration:durationSeconds
                            waitToast:toast
                           completion:completion];
+    });
+}
+
+- (void)transcodeVideoToHEVCForPhotos:(NSURL *)inputURL
+                             outputURL:(NSURL *)outputURL
+                              duration:(NSInteger)durationSeconds
+                          videoBitrate:(NSInteger)videoBitrate
+                            completion:(FFMpegHelperCompletion)completion
+{
+    YTAGLog(@"ffmpeg", @"[bc] transcodeVideoToHEVCForPhotos: ENTER input=%@ output=%@ dur=%lds bitrate=%ld",
+            inputURL.lastPathComponent,
+            outputURL.lastPathComponent,
+            (long)durationSeconds,
+            (long)videoBitrate);
+    if (!completion) return;
+    if (!inputURL || !outputURL) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(nil, FFMpegNSError(@"HEVC conversion could not start because the input or output file was unavailable."));
+        });
+        return;
+    }
+
+    unsigned long long inputBytes = 0;
+    if (!FFMpegFileExistsAndHasBytes(inputURL, &inputBytes)) {
+        NSString *message = [NSString stringWithFormat:@"HEVC conversion could not start because the input file was empty or missing (%@).", inputURL.lastPathComponent ?: @"video"];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(nil, FFMpegNSError(message));
+        });
+        return;
+    }
+
+    id<FFMpegToastSurface> toast = [FFMpegToastStub new];
+    if (_isProcessing) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [toast showToast:FFLocalizedString(@"WaitsForConversion")];
+        });
+    }
+
+    dispatch_async(_ffmpegQueue, ^{
+        self->_isProcessing = YES;
+        self->_duration = durationSeconds;
+        self.statistics = nil;
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self setActive];
+            [toast hide];
+            id<FFMpegToastSurface> progress = [FFMpegToastStub new];
+            self.progressToast = progress;
+            [progress showProgressWithText:@"Converting to HEVC…"
+                                  progress:1.0
+                                  withStop:^{ [FFmpegKit cancel]; }
+                            stopCompletion:0.0];
+        });
+
+        [[NSFileManager defaultManager] removeItemAtURL:outputURL error:nil];
+
+        NSString *durationArg = durationSeconds > 0
+            ? [NSString stringWithFormat:@"-to %ld ", (long)durationSeconds]
+            : @"";
+        NSInteger bitrateKbps = 0;
+        if (videoBitrate > 0) {
+            bitrateKbps = (NSInteger)llround((double)videoBitrate / 1000.0);
+        } else if (durationSeconds > 0 && inputBytes > 0) {
+            bitrateKbps = (NSInteger)llround(((double)inputBytes * 8.0 / (double)durationSeconds) / 1000.0);
+        }
+        if (bitrateKbps < 1000) bitrateKbps = 1000;
+        if (bitrateKbps > 25000) bitrateKbps = 25000;
+
+        NSString *command = [NSString stringWithFormat:
+            @"-hide_banner -y -loglevel error -i \"%@\" %@"
+            @"-map 0:v:0 -map 0:a? "
+            @"-c:v hevc_videotoolbox -tag:v hvc1 -b:v %ldk -allow_sw 1 "
+            @"-c:a copy -movflags +faststart \"%@\"",
+            inputURL.path,
+            durationArg,
+            (long)bitrateKbps,
+            outputURL.path];
+
+        YTAGLog(@"ffmpeg", @"[bc] HEVC photos command=%@", command);
+        FFmpegSession *session = [FFmpegKit execute:command];
+        YTAGLog(@"ffmpeg", @"[bc] HEVC photos execute: returned session=%@", session);
+
+        long rc = -1;
+        @try {
+            id rcObj = ((id (*)(id, SEL))objc_msgSend)(session, @selector(getReturnCode));
+            if (rcObj == nil) {
+                rc = -1;
+            } else if ([rcObj respondsToSelector:@selector(getValue)]) {
+                rc = (long)((int (*)(id, SEL))objc_msgSend)(rcObj, @selector(getValue));
+            } else if ([rcObj isKindOfClass:[NSNumber class]]) {
+                rc = [(NSNumber *)rcObj longValue];
+            } else {
+                YTAGLog(@"ffmpeg", @"unexpected HEVC getReturnCode shape: %@", NSStringFromClass([rcObj class]));
+                rc = -1;
+            }
+        } @catch (id ex) {
+            YTAGLog(@"ffmpeg", @"HEVC getReturnCode threw: %@", ex);
+            rc = -1;
+        }
+        YTAGLog(@"ffmpeg", @"HEVC photos rc=%ld", rc);
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.progressToast hide];
+            self->_isProcessing = NO;
+
+            if (rc == kFFReturnOK) {
+                unsigned long long outBytes = 0;
+                if (FFMpegFileExistsAndHasBytes(outputURL, &outBytes)) {
+                    YTAGLog(@"ffmpeg", @"HEVC photos output ok: %@ (%llu bytes)", outputURL.lastPathComponent, outBytes);
+                    completion(outputURL, nil);
+                    return;
+                }
+
+                NSString *lastOut = FFMpegSessionLogs(session);
+                [self getCleanLog:lastOut];
+                completion(nil, FFMpegNSError(@"HEVC conversion finished but did not produce a usable output file."));
+                return;
+            }
+
+            NSString *desc = rc == kFFReturnCancelled
+                ? FFLocalizedString(@"Cancelled")
+                : @"HEVC conversion failed. Details copied to the clipboard.";
+            if (rc != kFFReturnCancelled) {
+                NSString *lastOut = FFMpegSessionLogs(session);
+                [self getCleanLog:lastOut];
+            }
+            completion(nil, FFMpegNSError(desc));
+        });
     });
 }
 

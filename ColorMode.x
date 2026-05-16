@@ -1,6 +1,7 @@
 #import "YTAfterglow.h"
 #import <QuartzCore/QuartzCore.h>
 #import <math.h>
+#import <objc/message.h>
 
 // Theme color keys
 static NSString *const kThemeOverlayButtons = @"theme_overlayButtons";
@@ -478,17 +479,22 @@ static void ytag_applyGradient(UIView *view) {
 - (void)layoutSubviews {
     %orig;
 
-    UIColor *iconColor = themeColor(kThemeTabBarIcons);
-    if (iconColor) {
+    UIColor *selectedIconColor = themeColor(kThemeTabBarIcons);
+    if (selectedIconColor) {
         // YT's pivot button icons are template-rendered UIImage assets; tintColor
         // on the button itself (and the host view) paints them in the theme hue.
         // Without this, the YTCommonColorPalette hooks only reach the settings
         // icons — the bottom pivot bar stays in YT's default white/gray.
-        self.tintColor = iconColor;
+        UIColor *normalIconColor = themeColor(kThemeTextPrimary) ?: [selectedIconColor colorWithAlphaComponent:0.55];
+        BOOL selected = self.navigationButton.selected;
+        if ([self respondsToSelector:@selector(isSelected)]) {
+            selected = ((BOOL (*)(id, SEL))objc_msgSend)(self, @selector(isSelected));
+        }
+        self.tintColor = selected ? selectedIconColor : normalIconColor;
         if (self.navigationButton) {
-            self.navigationButton.tintColor = iconColor;
-            [self.navigationButton setTitleColor:iconColor forState:UIControlStateNormal];
-            [self.navigationButton setTitleColor:iconColor forState:UIControlStateSelected];
+            self.navigationButton.tintColor = selected ? selectedIconColor : normalIconColor;
+            [self.navigationButton setTitleColor:normalIconColor forState:UIControlStateNormal];
+            [self.navigationButton setTitleColor:selectedIconColor forState:UIControlStateSelected];
         }
     }
 
