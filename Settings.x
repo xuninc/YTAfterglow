@@ -2,6 +2,15 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 
+@interface YTAGAfterglowSettingsDismisser : NSObject
+@property (nonatomic, weak) UINavigationController *nav;
+- (void)closeTap;
+@end
+
+@implementation YTAGAfterglowSettingsDismisser
+- (void)closeTap { [self.nav dismissViewControllerAnimated:YES completion:nil]; }
+@end
+
 extern void ytag_clearThemeCache(void);
 void YTAGOpenAfterglowSettingsFromView(UIView *sourceView);
 static UIViewController *ytag_viewControllerForResponder(UIResponder *responder);
@@ -35,6 +44,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 - (void)presentDebugLogShareFromCell:(YTSettingsCell *)cell body:(NSString *)body settingsVC:(YTSettingsViewController *)settingsViewController;
 - (NSString *)enabledSummaryForKeys:(NSArray<NSString *> *)keys;
 - (NSString *)customizationSummaryForKeys:(NSArray<NSString *> *)keys;
+- (NSString *)afterglowFeedDensitySummary;
 - (NSArray<NSString *> *)ytag_allTabs;
 - (NSDictionary<NSString *, NSString *> *)ytag_tabNames;
 - (NSString *)themeCustomizationSummary;
@@ -196,7 +206,7 @@ static UIColor *YTAGAfterglowTintColor(void) {
 }
 
 static NSUInteger ytag_maxActiveTabCount(void) {
-    return ytagBool(@"twoRowTabBar") ? 9 : 6;
+    return ytagBool(@"twoRowTabBar") ? 10 : 6;
 }
 
 static UIViewController *ytag_viewControllerForResponder(UIResponder *responder) {
@@ -406,6 +416,23 @@ void YTAGOpenAfterglowSettingsFromView(UIView *sourceView) {
 
             UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:settingsVC];
             nav.modalPresentationStyle = UIModalPresentationFullScreen;
+
+            // The settings VC is the root of this modal nav stack — there's
+            // no back arrow because there's nothing to go back to. Without an
+            // explicit close button the user has no way out (full-screen
+            // modals don't get swipe-to-dismiss either).
+            if (!settingsVC.navigationItem.leftBarButtonItem) {
+                YTAGAfterglowSettingsDismisser *dismisser = [YTAGAfterglowSettingsDismisser new];
+                dismisser.nav = nav;
+                // Keep the helper alive for the lifetime of the nav controller.
+                static const void *kYTAGSettingsDismisserKey = &kYTAGSettingsDismisserKey;
+                objc_setAssociatedObject(nav, kYTAGSettingsDismisserKey, dismisser, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                UIBarButtonItem *closeButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose
+                                                                                             target:dismisser
+                                                                                             action:@selector(closeTap)];
+                settingsVC.navigationItem.leftBarButtonItem = closeButton;
+            }
+
             [presenter presentViewController:nav animated:YES completion:nil];
         } @catch (NSException *exception) {
             YTAGLog(@"overlay", @"Afterglow Settings open failed: %@ %@", exception.name ?: @"<unknown>", exception.reason ?: @"<none>");
@@ -827,6 +854,7 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
     NSString *symbolName = nil;
 
     if ([tabId isEqualToString:@"FEwhat_to_watch"]) symbolName = @"house.fill";
+    else if ([tabId isEqualToString:@"FEafterglow"]) symbolName = @"square.grid.2x2.fill";
     else if ([tabId isEqualToString:@"FEshorts"]) symbolName = @"play.square.fill";
     else if ([tabId isEqualToString:@"FEsubscriptions"]) symbolName = @"play.rectangle.on.rectangle.fill";
     else if ([tabId isEqualToString:@"FElibrary"]) symbolName = @"books.vertical.fill";
@@ -1352,13 +1380,14 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 
 %new
 - (NSArray<NSString *> *)ytag_allTabs {
-    return @[@"FEwhat_to_watch", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
+    return @[@"FEwhat_to_watch", @"FEafterglow", @"FEshorts", @"FEsubscriptions", @"FElibrary", @"FEhype_leaderboard", @"FEhistory", @"VLWL", @"FEpost_home", @"FEuploads"];
 }
 
 %new
 - (NSDictionary<NSString *, NSString *> *)ytag_tabNames {
     return @{
         @"FEwhat_to_watch": LOC(@"FEwhat_to_watch"),
+        @"FEafterglow": LOC(@"FEafterglow"),
         @"FEshorts": LOC(@"FEshorts"),
         @"FEsubscriptions": LOC(@"FEsubscriptions"),
         @"FElibrary": LOC(@"FElibrary"),
@@ -1371,6 +1400,11 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 }
 
 #pragma mark - Theme Helpers
+
+%new
+- (NSString *)afterglowFeedDensitySummary {
+    return YTAGAfterglowFeedDensityName([[YTAGUserDefaults standardUserDefaults] currentAfterglowFeedDensity]);
+}
 
 %new
 - (NSString *)themeHexFromColor:(UIColor *)color {
@@ -1988,6 +2022,24 @@ static BOOL ytag_openSettingsSearchEntry(YTSettingsViewController *settingsViewC
 	                    [self addResetDefaultsItemForKeys:visibleNavbarKeys toRows:navbarRows settingsVC:settingsViewController];
 
 	                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"Navbar") pickerSectionTitle:nil rows:navbarRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
+                    [settingsViewController pushViewController:picker];
+                    return YES;
+                }]];
+
+            [rows addObject:[self pageItemWithTitle:LOC(@"AfterglowFeed")
+                titleDescription:LOC(@"AfterglowFeedDesc")
+                summary:^NSString *() {
+                    return [self afterglowFeedDensitySummary];
+                }
+                selectBlock:^BOOL (YTSettingsCell *feedCell, NSUInteger feedArg1) {
+                    NSMutableArray <YTSettingsSectionItem *> *feedRows = [NSMutableArray array];
+                    [feedRows addObject:[self ytagPickerItemWithTitle:LOC(@"AfterglowFeedDensity")
+                                                          description:LOC(@"AfterglowFeedDensityDesc")
+                                                                  key:@"afterglowFeedDensity"
+                                                               labels:@[LOC(@"AfterglowFeedDensityCompact"), LOC(@"AfterglowFeedDensityMini")]
+                                                           settingsVC:settingsViewController]];
+                    [self addResetDefaultsItemForKeys:@[@"afterglowFeedDensity"] toRows:feedRows settingsVC:settingsViewController];
+                    YTSettingsPickerViewController *picker = [[%c(YTSettingsPickerViewController) alloc] initWithNavTitle:LOC(@"AfterglowFeed") pickerSectionTitle:nil rows:feedRows selectedItemIndex:NSNotFound parentResponder:[self parentResponder]];
                     [settingsViewController pushViewController:picker];
                     return YES;
                 }]];
